@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ulink Assist - Claim Workspace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#d8dadd",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#643f00",
+                        "secondary": "#1f686a",
+                        "error": "#ba1a1a",
+                        "primary": "#00375e",
+                        "status-approved": "#2D8A4E",
+                        "primary-fixed": "#d1e4ff",
+                        "status-ai": "#1F4E79",
+                        "on-surface-variant": "#42474f",
+                        "inverse-primary": "#a0cafc",
+                        "surface-variant": "#e0e3e6",
+                        "inverse-on-surface": "#eff1f4",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed-dim": "#8fd2d4",
+                        "on-tertiary-container": "#e9b268",
+                        "secondary-fixed": "#abeef0",
+                        "tertiary-fixed-dim": "#f5bc72",
+                        "on-primary-fixed-variant": "#184974",
+                        "surface-container-lowest": "#ffffff",
+                        "status-pending": "#D97706",
+                        "primary-fixed-dim": "#a0cafc",
+                        "on-surface": "#191c1e",
+                        "on-primary": "#ffffff",
+                        "tertiary-container": "#6a4300",
+                        "inverse-surface": "#2d3133",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#001d35",
+                        "on-secondary-fixed": "#002021",
+                        "on-secondary-fixed-variant": "#004f51",
+                        "secondary-container": "#a8eced",
+                        "on-primary-container": "#95bff1",
+                        "surface-container-high": "#e6e8eb",
+                        "surface": "#f7f9fc",
+                        "primary-container": "#1f4e79",
+                        "on-secondary": "#ffffff",
+                        "status-rejected": "#DC2626",
+                        "background": "#f7f9fc",
+                        "surface-bright": "#f7f9fc",
+                        "outline-variant": "#c2c7d0",
+                        "surface-container": "#eceef1",
+                        "brand-accent": "#ED5500",
+                        "surface-container-highest": "#e0e3e6",
+                        "on-secondary-container": "#256c6f",
+                        "surface-container-low": "#f2f4f7",
+                        "on-background": "#191c1e",
+                        "on-tertiary-fixed": "#2a1800",
+                        "tertiary-fixed": "#ffddb5",
+                        "outline": "#72777f",
+                        "text-main": "#485867",
+                        "surface-tint": "#35618d",
+                        "tertiary": "#4c2e00",
+                        "error-container": "#ffdad6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "inspector-width": "380px",
+                        "container-padding": "24px",
+                        "pane-gap": "16px",
+                        "base": "4px",
+                        "sidebar-width": "260px"
+                    },
+                    "fontFamily": {
+                        "title-lg": ["Inter"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "label-md": ["Inter"],
+                        "display-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "label-sm": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-md-mobile": ["Hanken Grotesk"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "title-lg": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "display-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "headline-md-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fc; color: #191c1e; overflow: hidden; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .filled-icon { font-variation-settings: 'FILL' 1; }
+        
+        /* Smooth scrolling for internal panes */
+        .scrollable-pane { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #c2c7d0 transparent; }
+        .scrollable-pane::-webkit-scrollbar { width: 6px; }
+        .scrollable-pane::-webkit-scrollbar-track { background: transparent; }
+        .scrollable-pane::-webkit-scrollbar-thumb { background-color: #c2c7d0; border-radius: 20px; }
+        
+        /* Subtle glow for AI active states */
+        .ai-glow { box-shadow: 0 0 8px rgba(31, 78, 121, 0.2); border-color: #1f4e79; }
+    </style>
+</head>
+<body class="flex h-screen bg-background">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 w-full z-50 bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline flex justify-between items-center h-16 px-container-padding ml-[260px] w-[calc(100%-260px)]">
+<div class="flex items-center gap-4">
+<span class="font-title-lg text-title-lg text-primary dark:text-primary-fixed">Claims Console</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-outline">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container rounded-full border-none focus:ring-2 focus:ring-primary text-body-sm w-64 text-on-surface" placeholder="Search claims, members, policies..." type="text"/>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant">
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined">notifications</span></button>
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined">help_outline</span></button>
+<div class="flex items-center gap-2 border-l border-outline-variant pl-4">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-label-md">JD</div>
+<span class="font-label-sm text-label-sm hidden md:block">JD1 Administrator</span>
+</div>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full w-sidebar-width bg-surface-container dark:bg-surface-container-high border-r border-outline-variant dark:border-outline flex flex-col h-screen w-[260px] p-4 z-40">
+<div class="flex items-center gap-3 mb-8 px-2 mt-2">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined filled-icon">health_and_safety</span>
+</div>
+<div>
+<div class="font-headline-sm text-headline-sm text-primary dark:text-primary-fixed font-bold leading-tight">Ulink Assist</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Omnichannel Workspace</div>
+</div>
+</div>
+<button class="w-full bg-primary text-on-primary rounded-lg py-2.5 mb-6 font-label-md flex items-center justify-center gap-2 hover:bg-surface-tint transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+            New Claim
+        </button>
+<ul class="flex-1 space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-secondary-container dark:bg-primary-container text-on-secondary-container dark:text-on-primary-container font-semibold transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined filled-icon">assignment</span>
+<span class="font-label-md text-label-md">Claims Queue</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="font-label-md text-label-md">Workflows</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-secondary">auto_awesome</span>
+<span class="font-label-md text-label-md">AI Insights</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-label-md text-label-md">Documents</span>
+</a>
+</li>
+<li class="mt-auto pt-4">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</li>
+</ul>
+</nav>
+<!-- Main Workspace (Three Pane Layout) -->
+<main class="ml-[260px] mt-16 flex-1 flex h-[calc(100vh-64px)] w-[calc(100%-260px)] gap-pane-gap p-pane-gap box-border">
+<!-- Left Pane: Document Viewer (approx 30%) -->
+<section class="flex flex-col w-[30%] bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden flex-shrink-0">
+<div class="h-12 border-b border-outline-variant bg-surface flex items-center justify-between px-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant">description</span>
+<h2 class="font-label-md text-label-md text-on-surface">Source Document</h2>
+</div>
+<div class="flex gap-2">
+<button class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-[18px]">zoom_out</span></button>
+<button class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-[18px]">zoom_in</span></button>
+<button class="text-on-surface-variant hover:text-primary ml-2"><span class="material-symbols-outlined text-[18px]">open_in_new</span></button>
+</div>
+</div>
+<div class="flex-1 flex overflow-hidden bg-surface-container-low">
+<!-- Thumbnails -->
+<div class="w-16 border-r border-outline-variant flex flex-col items-center py-2 gap-2 scrollable-pane bg-surface">
+<div class="w-12 h-16 bg-surface-container-lowest border-2 border-primary rounded cursor-pointer relative">
+<span class="absolute bottom-1 right-1 font-label-sm text-[8px] bg-surface-container px-1 rounded">1</span>
+</div>
+<div class="w-12 h-16 bg-surface-container-lowest border border-outline-variant rounded cursor-pointer relative opacity-60 hover:opacity-100 transition-opacity">
+<span class="absolute bottom-1 right-1 font-label-sm text-[8px] bg-surface-container px-1 rounded">2</span>
+</div>
+<div class="w-12 h-16 bg-surface-container-lowest border border-outline-variant rounded cursor-pointer relative opacity-60 hover:opacity-100 transition-opacity">
+<span class="absolute bottom-1 right-1 font-label-sm text-[8px] bg-surface-container px-1 rounded">3</span>
+</div>
+</div>
+<!-- Main PDF Preview Area -->
+<div class="flex-1 scrollable-pane p-4 flex justify-center">
+<div class="w-full max-w-[400px] h-[600px] bg-white shadow-sm border border-outline-variant p-6 relative">
+<!-- Mock Document Content -->
+<div class="border-b-2 border-primary pb-4 mb-4">
+<h1 class="font-headline-sm text-primary mb-1">Global Health Provider</h1>
+<p class="font-label-sm text-on-surface-variant">Invoice #INV-2023-9912</p>
+</div>
+<div class="space-y-4 font-body-sm text-on-surface">
+<div class="flex justify-between">
+<span class="font-semibold text-on-surface-variant">Patient Name:</span>
+<span>Sarah Jenkins</span>
+</div>
+<div class="flex justify-between">
+<span class="font-semibold text-on-surface-variant">Policy Number:</span>
+<span>POL-987654321</span>
+</div>
+<div class="flex justify-between">
+<span class="font-semibold text-on-surface-variant">Date of Service:</span>
+<span>Oct 12, 2023</span>
+</div>
+<!-- Highlighted area corresponding to low confidence field -->
+<div class="mt-8 relative">
+<div class="absolute -inset-1 bg-error-container/30 border border-error/50 rounded pointer-events-none"></div>
+<div class="flex justify-between font-semibold border-b border-outline-variant pb-1">
+<span>Diagnosis Code</span>
+<span>Amount</span>
+</div>
+<div class="flex justify-between py-2">
+<span>J01.90 (Acute sinusitis)</span>
+<span>$450.00</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Center Pane: Data Extraction & Pipeline (Fluid) -->
+<section class="flex-1 flex flex-col gap-pane-gap min-w-[400px]">
+<!-- AI Pipeline Stepper -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 shadow-[0px_4px_12px_rgba(31,78,121,0.04)]">
+<div class="flex justify-between items-center mb-4">
+<h2 class="font-label-md text-label-md text-on-surface uppercase tracking-wider">AI Processing Pipeline</h2>
+<span class="flex items-center gap-1 font-label-sm text-status-ai bg-primary-container/20 px-2 py-1 rounded">
+<span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+                        Extraction Complete
+                    </span>
+</div>
+<div class="flex items-center justify-between relative px-2">
+<!-- Connecting Line -->
+<div class="absolute top-1/2 left-4 right-4 h-0.5 bg-outline-variant -z-10 -translate-y-1/2"></div>
+<div class="absolute top-1/2 left-4 right-[20%] h-0.5 bg-primary -z-10 -translate-y-1/2"></div>
+<!-- Steps -->
+<div class="flex flex-col items-center gap-1 bg-surface-container-lowest px-1">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center"><span class="material-symbols-outlined text-[14px] filled-icon">check</span></div>
+<span class="font-label-sm text-[10px] text-on-surface">Received</span>
+</div>
+<div class="flex flex-col items-center gap-1 bg-surface-container-lowest px-1">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center"><span class="material-symbols-outlined text-[14px] filled-icon">check</span></div>
+<span class="font-label-sm text-[10px] text-on-surface">Category</span>
+</div>
+<div class="flex flex-col items-center gap-1 bg-surface-container-lowest px-1">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center"><span class="material-symbols-outlined text-[14px] filled-icon">check</span></div>
+<span class="font-label-sm text-[10px] text-on-surface">Scanned</span>
+</div>
+<div class="flex flex-col items-center gap-1 bg-surface-container-lowest px-1">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center"><span class="material-symbols-outlined text-[14px] filled-icon">check</span></div>
+<span class="font-label-sm text-[10px] text-on-surface">Extracted</span>
+</div>
+<div class="flex flex-col items-center gap-1 bg-surface-container-lowest px-1">
+<div class="w-6 h-6 rounded-full bg-surface-container border-2 border-primary text-primary flex items-center justify-center animate-pulse"><span class="material-symbols-outlined text-[14px]">edit_document</span></div>
+<span class="font-label-sm text-[10px] text-primary font-bold">Checked</span>
+</div>
+<div class="flex flex-col items-center gap-1 bg-surface-container-lowest px-1">
+<div class="w-6 h-6 rounded-full bg-surface border border-outline-variant text-outline flex items-center justify-center"><span class="material-symbols-outlined text-[14px]">summarize</span></div>
+<span class="font-label-sm text-[10px] text-outline">Summary</span>
+</div>
+</div>
+</div>
+<!-- Extracted Form Data -->
+<div class="flex-1 bg-surface-container-lowest border border-outline-variant rounded-lg flex flex-col overflow-hidden shadow-[0px_4px_12px_rgba(31,78,121,0.08)]">
+<div class="h-12 border-b border-outline-variant bg-surface flex items-center justify-between px-4 flex-shrink-0">
+<h2 class="font-title-lg text-title-lg text-on-surface flex items-center gap-2">
+                        Claim Data
+                        <span class="bg-status-pending text-on-tertiary font-label-sm px-2 py-0.5 rounded text-[10px] uppercase">Action Required</span>
+</h2>
+<div class="flex gap-2">
+<button class="font-label-md px-3 py-1.5 border border-outline-variant text-on-surface-variant rounded hover:bg-surface-variant transition-colors">Discard Draft</button>
+<button class="font-label-md px-3 py-1.5 bg-primary text-on-primary rounded hover:bg-surface-tint transition-colors">Save &amp; Proceed</button>
+</div>
+</div>
+<div class="flex-1 scrollable-pane p-6 bg-surface-bright">
+<form class="space-y-6">
+<!-- High Confidence Field Group -->
+<div class="grid grid-cols-2 gap-6">
+<div class="space-y-1">
+<div class="flex justify-between items-center">
+<label class="font-label-sm text-on-surface-variant">Member Name</label>
+<span class="text-[10px] text-status-approved flex items-center"><span class="material-symbols-outlined text-[12px] mr-0.5">verified</span> 99% Match</span>
+</div>
+<input class="w-full border-outline-variant rounded-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary h-9 bg-surface-container-lowest" type="text" value="Sarah Jenkins"/>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between items-center">
+<label class="font-label-sm text-on-surface-variant">Policy Number</label>
+<span class="text-[10px] text-status-approved flex items-center"><span class="material-symbols-outlined text-[12px] mr-0.5">verified</span> 98% Match</span>
+</div>
+<input class="w-full border-outline-variant rounded-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary h-9 bg-surface-container-lowest" type="text" value="POL-987654321"/>
+</div>
+</div>
+<!-- Low Confidence Field - Highlighted -->
+<div class="bg-error-container/20 border-l-4 border-error p-4 rounded-r-md">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-error mt-0.5">warning</span>
+<div class="flex-1 space-y-3">
+<div>
+<div class="flex justify-between items-center mb-1">
+<h4 class="font-label-md text-on-surface">Diagnosis Code Needs Verification</h4>
+<span class="text-[10px] text-error font-bold flex items-center"><span class="material-symbols-outlined text-[12px] mr-0.5">help</span> 42% Confidence</span>
+</div>
+<p class="font-body-sm text-on-surface-variant mb-2">The extracted code (J01.90) conflicts with the procedural description in Document 2.</p>
+</div>
+<div class="space-y-1">
+<label class="font-label-sm text-on-error-container">Extracted Diagnosis</label>
+<div class="relative">
+<input class="w-full border-error bg-surface-container-lowest rounded-md text-body-md focus:border-error focus:ring-1 focus:ring-error h-9 pr-8 text-on-error-container" type="text" value="J01.90 (Acute sinusitis)"/>
+<button class="absolute right-2 top-1.5 text-error hover:text-on-error-container" type="button"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Mixed Confidence Group -->
+<div class="grid grid-cols-2 gap-6 pt-2 border-t border-outline-variant">
+<div class="space-y-1">
+<div class="flex justify-between items-center">
+<label class="font-label-sm text-on-surface-variant">Claimed Amount</label>
+<span class="text-[10px] text-status-approved flex items-center"><span class="material-symbols-outlined text-[12px] mr-0.5">verified</span> 95% Match</span>
+</div>
+<div class="relative">
+<span class="absolute left-3 top-2 text-on-surface-variant">$</span>
+<input class="w-full pl-7 border-outline-variant rounded-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary h-9 bg-surface-container-lowest" type="text" value="450.00"/>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between items-center">
+<label class="font-label-sm text-on-surface-variant">Provider NPI</label>
+<span class="text-[10px] text-status-pending flex items-center"><span class="material-symbols-outlined text-[12px] mr-0.5">info</span> 78% Match</span>
+</div>
+<input class="w-full border-status-pending/50 rounded-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary h-9 bg-surface-container-lowest" type="text" value="1098765432"/>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between items-center">
+<label class="font-label-sm text-on-surface-variant">Incident Description</label>
+<span class="text-[10px] text-status-approved flex items-center"><span class="material-symbols-outlined text-[12px] mr-0.5">verified</span> AI Synthesized</span>
+</div>
+<textarea class="w-full border-outline-variant rounded-md text-body-sm focus:border-primary focus:ring-1 focus:ring-primary bg-surface-container-lowest h-20 resize-none text-on-surface p-2">Patient visited clinic on Oct 12 complaining of severe sinus pressure and headache lasting 5 days. Diagnosed with acute sinusitis. Prescribed antibiotics and advised rest.</textarea>
+</div>
+</form>
+</div>
+</div>
+</section>
+<!-- Right Pane: Inspector Pane (Fixed 380px) -->
+<aside class="w-inspector-width bg-surface-container-lowest border border-outline-variant rounded-lg flex flex-col flex-shrink-0">
+<div class="h-12 border-b border-outline-variant bg-surface flex items-center px-4 shrink-0 gap-2">
+<span class="material-symbols-outlined text-secondary">assignment_turned_in</span>
+<h2 class="font-label-md text-label-md text-on-surface uppercase tracking-wider">Verification &amp; Action</h2>
+</div>
+<div class="flex-1 scrollable-pane p-4 space-y-6">
+<!-- Completeness Checklist -->
+<div class="space-y-2">
+<h3 class="font-label-md text-on-surface-variant border-b border-outline-variant pb-1">Document Checklist</h3>
+<ul class="space-y-2">
+<li class="flex items-center justify-between font-body-sm bg-surface-container-low p-2 rounded">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-status-approved text-[18px]">check_circle</span>
+<span>Claim Form</span>
+</div>
+<span class="text-[10px] text-on-surface-variant">Doc 1</span>
+</li>
+<li class="flex items-center justify-between font-body-sm bg-surface-container-low p-2 rounded">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-status-approved text-[18px]">check_circle</span>
+<span>Medical Invoice</span>
+</div>
+<span class="text-[10px] text-on-surface-variant">Doc 2</span>
+</li>
+<li class="flex items-center justify-between font-body-sm bg-error-container/30 border border-error/20 p-2 rounded">
+<div class="flex items-center gap-2 text-error">
+<span class="material-symbols-outlined text-[18px]">error</span>
+<span class="font-medium">Specialist Report</span>
+</div>
+<span class="text-[10px] text-error font-semibold uppercase">Missing</span>
+</li>
+</ul>
+</div>
+<!-- AI Summary -->
+<div class="space-y-2">
+<h3 class="font-label-md text-on-surface-variant border-b border-outline-variant pb-1 flex justify-between items-center">
+                        AI Claim Summary
+                        <span class="material-symbols-outlined text-secondary text-[16px]">auto_awesome</span>
+</h3>
+<div class="bg-secondary-container/20 p-3 rounded border border-secondary-container text-body-sm text-on-surface leading-relaxed">
+                        Claim is for a routine outpatient visit. Amount ($450) is within standard bounds for CPT code 99214. 
+                        <strong>Risk level is low</strong>. However, the diagnosis code requires manual verification due to illegible handwriting on the source invoice. Missing specialist report is likely not required for this tier of claim.
+                    </div>
+</div>
+<!-- Draft Reply Panel -->
+<div class="space-y-2">
+<h3 class="font-label-md text-on-surface-variant border-b border-outline-variant pb-1">Communication</h3>
+<div class="border border-outline-variant rounded-md overflow-hidden bg-surface-bright focus-within:ring-1 focus-within:ring-primary focus-within:border-primary">
+<div class="bg-surface p-2 border-b border-outline-variant flex justify-between items-center">
+<select class="text-label-sm border-none bg-transparent py-0 pl-1 pr-6 focus:ring-0 text-primary font-medium cursor-pointer">
+<option>Template: Request Info</option>
+<option>Template: Approval Notice</option>
+<option>Template: Denial Notice</option>
+</select>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">open_in_full</span>
+</div>
+<textarea class="w-full p-3 text-body-sm border-none focus:ring-0 resize-none h-24 text-on-surface" placeholder="Type message..."></textarea>
+<div class="p-2 border-t border-outline-variant bg-surface flex justify-end">
+<button class="bg-primary text-on-primary font-label-sm px-3 py-1.5 rounded flex items-center gap-1 hover:bg-surface-tint">
+<span class="material-symbols-outlined text-[16px]">send</span> Send
+                            </button>
+</div>
+</div>
+</div>
+<!-- Activity Log -->
+<div class="space-y-2 pt-2">
+<h3 class="font-label-md text-on-surface-variant border-b border-outline-variant pb-1">Activity Log</h3>
+<div class="relative pl-3 space-y-4 before:absolute before:inset-y-0 before:left-3.5 before:w-px before:bg-outline-variant">
+<div class="relative flex items-start gap-3">
+<div class="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-status-pending ring-2 ring-surface-container-lowest"></div>
+<div>
+<p class="font-label-sm text-on-surface">Flagged for Review</p>
+<p class="text-[10px] text-on-surface-variant">System AI - Just now</p>
+</div>
+</div>
+<div class="relative flex items-start gap-3">
+<div class="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-outline-variant ring-2 ring-surface-container-lowest"></div>
+<div>
+<p class="font-label-sm text-on-surface">Data Extraction Complete</p>
+<p class="text-[10px] text-on-surface-variant">System AI - 2 mins ago</p>
+</div>
+</div>
+<div class="relative flex items-start gap-3">
+<div class="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-outline-variant ring-2 ring-surface-container-lowest"></div>
+<div>
+<p class="font-label-sm text-on-surface">Documents Received (2)</p>
+<p class="text-[10px] text-on-surface-variant">Member Portal - 5 mins ago</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</aside>
+</main>
+</body></html>

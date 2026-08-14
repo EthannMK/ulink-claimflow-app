@@ -1,0 +1,168 @@
+<div class="bg-background text-on-background font-body-md h-screen overflow-hidden flex">
+<!-- SideNavBar -->
+<nav class="bg-surface-container dark:bg-surface-container-high fixed left-0 top-0 h-full w-sidebar-width border-r border-outline-variant dark:border-outline flex flex-col p-4 z-20">
+<div class="mb-8"><div class="w-[140px] h-[40px] flex items-center overflow-hidden"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqp202t3ITtCP9QzPgsRfIyUDEHTXHFetdndNgSvJ5MQc3k2uudJipsQWeuJIUY9cC6vwfXk_p5cJ2uBZxtycoznTLPvCaNf5sjKfUZxzSxMECFoslrxqHcLCU2IRRGWDnPvUxrx0YbOkot70UjwTc8akQdQUsmk_EcdhpisD3yqyCTDZf5iTvrlRYTwiB8cDKtJK0XXJtiqnkwiARiYAaXY30vNubSR77UHUEorw36UnPoyKyhl6H0FXj1yOEqLBSgw" alt="Ulink Assist Logo" class="h-full w-auto object-contain"></div></div>
+<button class="bg-primary text-on-primary font-label-md text-label-md py-2 px-4 rounded mb-6 w-full text-center hover:bg-surface-tint transition-colors">New Claim</button>
+<ul class="flex flex-col gap-2 flex-grow"><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded bg-secondary-container dark:bg-primary-container text-on-secondary-container dark:text-on-primary-container font-semibold font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="assignment">assignment</span>Claims Queue</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="analytics">analytics</span>Analytics</a></li><li class="mt-4 mb-2 px-3 font-label-sm text-outline uppercase tracking-wider">Administration</li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="group">group</span>Users &amp; Teams</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="hub">hub</span>Channel Connections</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="alt_route">alt_route</span>Routing Rules</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="policy">policy</span>SLA Policies</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="history_edu">history_edu</span>Audit Logs</a></li><li class="mt-auto"><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="settings">settings</span>Settings</a></li></ul>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex flex-col flex-grow ml-sidebar-width h-full w-[calc(100%-260px)] relative">
+<!-- TopNavBar -->
+<header class="bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline flex justify-between items-center h-16 px-container-padding shrink-0 z-10 w-full focus-within:ring-2 focus-within:ring-primary">
+<h2 class="font-title-lg text-title-lg text-primary dark:text-primary-fixed">Claims Console</h2>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<button class="relative text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors"><span class="material-symbols-outlined" data-icon="notifications">notifications</span><span class="absolute top-0 right-0 block h-2 w-2 rounded-full bg-error border-2 border-surface"></span></button>
+<button class="text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+<div class="flex items-center gap-3 pl-4 border-l border-outline-variant">
+<span class="font-label-md text-label-md text-on-surface-variant">JD1 Administrator</span>
+<img alt="User Profile Avatar" class="w-8 h-8 rounded-full object-cover border border-outline-variant" data-alt="A small, professional headshot portrait of an administrator in a corporate setting, with soft lighting and a neutral background, suitable for a user profile avatar." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDcoXnaRl55LyNU8jcWWHqU_4hpdhikhZX4EfnjL1nCkRz0wDFAwoWfmh6V7ZS_6WV9zpYzjY-v-9qtvPKOX_uqv1PpBSPLjUYfkd30OiT2AvvFtbJsRzKkKss8ef52rafYLizinCWDADDRw9CwOjdXEGOmVohcwMOkpN4vELz-ghwjVBeEx_M-AYF3UYxsD_lOF7NGoialC1UuMHTrDDYlfIaZ_Y35zF9MU7mGaESy422d9_N8b0td">
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-grow p-container-padding overflow-auto bg-surface-container-lowest">
+<!-- Dashboard Controls -->
+<div class="flex justify-between items-end mb-6">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Omnichannel Inbox</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Manage incoming claims and queries across all channels.</p>
+</div>
+<div class="flex gap-3">
+<div class="relative border border-outline-variant rounded focus-within:border-primary focus-within:ring-1 focus-within:ring-primary focus-within:shadow-[0_0_8px_rgba(0,55,94,0.2)] transition-all bg-white flex items-center px-3 py-1.5 h-10">
+<span class="material-symbols-outlined text-outline mr-2 text-sm" data-icon="search">search</span>
+<input class="bg-transparent border-none outline-none font-body-sm text-body-sm p-0 w-48 text-on-surface placeholder:text-outline" placeholder="Search claims..." type="text">
+</div>
+<button class="border border-secondary text-secondary font-label-md text-label-md py-1.5 px-4 rounded h-10 hover:bg-secondary hover:text-white transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+                        Filters
+                    </button>
+<button class="border border-outline-variant text-on-surface-variant font-label-md text-label-md py-1.5 px-4 rounded h-10 hover:bg-surface-variant transition-colors flex items-center gap-2">
+                         Bulk Actions
+                    </button>
+</div>
+</div>
+<!-- Enhanced Table Structure mimicking Bento/Cards -->
+<div class="space-y-4">
+<!-- Column Headers (Ghosted) -->
+<div class="grid grid-cols-12 gap-4 px-4 py-2 font-label-md text-label-md text-on-surface-variant bg-surface-container-low rounded-t">
+<div class="col-span-1">Channel</div>
+<div class="col-span-2">Claimant</div>
+<div class="col-span-2">Insurer</div>
+<div class="col-span-2">AI Category</div>
+<div class="col-span-3">Assignment Control</div>
+<div class="col-span-1 text-center">Status</div>
+<div class="col-span-1 text-right">SLA</div>
+</div>
+<!-- Row 1: High Priority / Active -->
+<div class="group grid grid-cols-12 gap-4 px-4 py-3 bg-white border border-outline-variant rounded hover:shadow-[0_4px_12px_rgba(31,78,121,0.08)] transition-shadow items-center relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-error"></div>
+<div class="col-span-1 flex items-center pl-2">
+<div class="w-8 h-8 rounded bg-[#E3F2FD] text-[#1976D2] flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="mail">mail</span>
+</div>
+</div>
+<div class="col-span-2 font-title-lg text-body-sm text-on-surface truncate">Daw Su Su Hlaing</div>
+<div class="col-span-2 font-body-sm text-on-surface-variant truncate">AYA Sompo</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-primary-container text-on-primary-container font-label-sm text-label-sm border border-primary-fixed">
+<span class="material-symbols-outlined text-[12px]" data-icon="magic_button">magic_button</span>
+                            New Claim
+                        </span>
+</div>
+<div class="col-span-3 flex items-center gap-2">
+<div class="flex items-center gap-2 px-2 py-1 rounded border border-outline-variant bg-surface-bright text-body-sm flex-grow">
+<span class="material-symbols-outlined text-status-ai text-[14px]" data-icon="smart_toy">smart_toy</span>
+<span class="truncate">Dr. Myat Min</span>
+</div>
+<button class="text-status-approved hover:bg-[#E8F5E9] p-1 rounded transition-colors" title="Accept Assignment">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+</button>
+<button class="text-outline hover:bg-surface-variant p-1 rounded transition-colors" title="Change Assignee">
+<span class="material-symbols-outlined text-sm" data-icon="swap_horiz">swap_horiz</span>
+</button>
+</div>
+<div class="col-span-1 flex justify-center">
+<span class="inline-block px-2 py-1 rounded bg-[#FEF3C7] text-status-pending font-label-sm text-label-sm">Review</span>
+</div>
+<div class="col-span-1 text-right font-label-md text-error flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="timer">timer</span>
+                        14m
+                    </div>
+</div>
+<!-- Row 2 -->
+<div class="group grid grid-cols-12 gap-4 px-4 py-3 bg-white border border-outline-variant rounded hover:shadow-[0_4px_12px_rgba(31,78,121,0.08)] transition-shadow items-center relative">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary-fixed"></div>
+<div class="col-span-1 flex items-center pl-2">
+<div class="w-8 h-8 rounded bg-[#E8EAF6] text-[#3F51B5] flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="forum">forum</span>
+</div>
+</div>
+<div class="col-span-2 font-title-lg text-body-sm text-on-surface truncate">U Kyaw Zaw</div>
+<div class="col-span-2 font-body-sm text-on-surface-variant truncate">AMI</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm border border-secondary-fixed">
+<span class="material-symbols-outlined text-[12px]" data-icon="magic_button">magic_button</span>
+                            LOG Request
+                        </span>
+</div>
+<div class="col-span-3 flex items-center gap-2">
+<div class="flex items-center gap-2 px-2 py-1 rounded border border-outline-variant bg-surface-bright text-body-sm flex-grow">
+<span class="material-symbols-outlined text-status-ai text-[14px]" data-icon="smart_toy">smart_toy</span>
+<span class="truncate">Nilar Win</span>
+</div>
+<button class="text-status-approved hover:bg-[#E8F5E9] p-1 rounded transition-colors" title="Accept Assignment">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+</button>
+<button class="text-outline hover:bg-surface-variant p-1 rounded transition-colors" title="Change Assignee">
+<span class="material-symbols-outlined text-sm" data-icon="swap_horiz">swap_horiz</span>
+</button>
+</div>
+<div class="col-span-1 flex justify-center">
+<span class="inline-block px-2 py-1 rounded bg-[#E0F2FE] text-[#0284C7] font-label-sm text-label-sm">Intake</span>
+</div>
+<div class="col-span-1 text-right font-label-md text-on-surface-variant flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="timer">timer</span>
+                        2h 45m
+                    </div>
+</div>
+<!-- Row 3 -->
+<div class="group grid grid-cols-12 gap-4 px-4 py-3 bg-white border border-outline-variant rounded hover:shadow-[0_4px_12px_rgba(31,78,121,0.08)] transition-shadow items-center relative opacity-80">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-outline-variant"></div>
+<div class="col-span-1 flex items-center pl-2">
+<div class="w-8 h-8 rounded bg-[#FCE4EC] text-[#E91E63] flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="sms">sms</span>
+</div>
+</div>
+<div class="col-span-2 font-title-lg text-body-sm text-on-surface truncate">Ma Thida Aung</div>
+<div class="col-span-2 font-body-sm text-on-surface-variant truncate">IKBZ</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm border border-outline-variant">
+<span class="material-symbols-outlined text-[12px]" data-icon="magic_button">magic_button</span>
+                            General Query
+                        </span>
+</div>
+<div class="col-span-3 flex items-center gap-2">
+<div class="flex items-center gap-2 px-2 py-1 rounded border border-outline-variant bg-surface-bright text-body-sm flex-grow">
+<span class="material-symbols-outlined text-outline text-[14px]" data-icon="person">person</span>
+<span class="truncate">Unassigned</span>
+</div>
+<button class="text-outline hover:bg-surface-variant p-1 rounded transition-colors" title="Assign">
+<span class="material-symbols-outlined text-sm" data-icon="add_circle">add_circle</span>
+</button>
+</div>
+<div class="col-span-1 flex justify-center">
+<span class="inline-block px-2 py-1 rounded bg-[#E2E8F0] text-outline font-label-sm text-label-sm">Waiting</span>
+</div>
+<div class="col-span-1 text-right font-label-md text-on-surface-variant flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="timer">timer</span>
+                        4h 10m
+                    </div>
+</div>
+</div>
+</main>
+</div>
+</div>

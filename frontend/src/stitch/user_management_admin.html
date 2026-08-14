@@ -1,0 +1,351 @@
+<div class="bg-background text-on-background font-body-md antialiased min-h-screen flex overflow-hidden">
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col h-screen w-[260px] p-4 bg-surface-container dark:bg-surface-container-high border-r border-outline-variant dark:border-outline fixed left-0 top-0 z-20">
+<!-- Brand Header -->
+<div class="flex items-center gap-3 mb-8 px-2">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="hub">hub</span>
+</div>
+<div class="flex flex-col overflow-hidden">
+<span class="font-headline-sm text-headline-sm text-primary dark:text-primary-fixed font-bold truncate">Ulink Assist</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Omnichannel Workspace</span>
+</div>
+</div>
+<!-- CTA -->
+<button class="w-full bg-primary hover:bg-surface-tint text-on-primary rounded-lg py-2.5 px-4 flex items-center justify-center gap-2 mb-6 transition-colors duration-200">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span>
+<span class="font-label-md text-label-md">New Claim</span>
+</button>
+<!-- Navigation Links -->
+<div class="flex-1 flex flex-col gap-1 overflow-y-auto">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span class="font-label-md text-label-md">Claims Queue</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="account_tree">account_tree</span>
+<span class="font-label-md text-label-md">Workflows</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+<span class="font-label-md text-label-md">AI Insights</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-label-md text-label-md">Documents</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-secondary-container dark:bg-primary-container text-on-secondary-container dark:text-on-primary-container font-semibold transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="settings" data-weight="fill">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col ml-0 md:ml-[260px] w-full min-w-0 transition-all duration-300 relative">
+<!-- TopNavBar -->
+<header class="flex justify-between items-center h-16 px-container-padding bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline shrink-0 w-full z-10 sticky top-0">
+<!-- Left: Product Name / Mobile Menu Toggle -->
+<div class="flex items-center gap-4">
+<button class="md:hidden text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<div class="font-headline-sm text-headline-sm text-primary dark:text-primary-fixed">Claims Console</div>
+</div>
+<!-- Center/Right: Search, Actions, Profile -->
+<div class="flex items-center gap-6">
+<!-- Search -->
+<div class="hidden sm:flex relative items-center focus-within:ring-2 focus-within:ring-primary rounded-lg transition-shadow">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant pointer-events-none" data-icon="search">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none w-64 placeholder:text-on-surface-variant/70" placeholder="Search..." type="text"/>
+</div>
+<!-- Trailing Icons -->
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200 rounded-full hover:bg-surface-variant/50">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200 rounded-full hover:bg-surface-variant/50">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+<!-- Profile -->
+<div class="flex items-center gap-3 pl-4 border-l border-outline-variant/50 cursor-pointer group">
+<div class="flex flex-col items-end hidden md:flex">
+<span class="font-label-md text-label-md text-on-surface group-hover:text-primary transition-colors">JD1 Administrator</span>
+</div>
+<img class="w-8 h-8 rounded-full object-cover border border-outline-variant group-hover:border-primary transition-colors" data-alt="A professional headshot of an insurance administrator in a modern office setting, bright lighting, corporate modern aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAVjb98pFShdfXefVpoWCjTM30QsRnFL3ogu0fJcv5h99wSxqWkSdL9-Utw9z8I0Fwgsqywk9cSdl-l7M2GtU_GcQ1ed1970UEYl834HWUpGFe9TAw6_D8M7aiAtfW4LPTI3BEEm8pb17n5YjBwXw0IVyKAccVKGGGAhiHMIjur_aX2aXG7cKoG67xeaCzffQZP1_kpDp3NMubRDitithFTEMGI_K_ZffdCn_xisjvSM5bxieLLQYyR"/>
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 overflow-x-hidden overflow-y-auto bg-surface-bright p-container-padding">
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+<div>
+<h1 class="font-headline-md text-headline-md text-on-surface">User Management</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Manage system access, roles, and permissions across the platform.</p>
+</div>
+<button class="bg-primary hover:bg-surface-tint text-on-primary font-label-md text-label-md py-2 px-4 rounded-lg flex items-center gap-2 transition-colors shadow-sm" onclick="toggleInspector()">
+<span class="material-symbols-outlined text-[18px]" data-icon="person_add">person_add</span>
+                    Invite User
+                </button>
+</div>
+<!-- Main Data Table Container (Level 1 Surface) -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/60 shadow-sm overflow-hidden flex flex-col h-[calc(100vh-220px)] min-h-[400px]">
+<!-- Table Filters / Toolbars -->
+<div class="p-4 border-b border-outline-variant/60 bg-surface-container-low flex flex-wrap items-center justify-between gap-4">
+<div class="flex items-center gap-2">
+<button class="px-3 py-1.5 border border-outline-variant rounded-md font-label-md text-label-md text-on-surface bg-surface-container-lowest hover:bg-surface-variant transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="filter_list">filter_list</span>
+                            Filter
+                        </button>
+<select class="px-3 py-1.5 border border-outline-variant rounded-md font-body-sm text-body-sm text-on-surface bg-surface-container-lowest focus:ring-1 focus:ring-primary focus:border-primary outline-none">
+<option>All Roles</option>
+<option>JD1 Administrator</option>
+<option>CSR</option>
+</select>
+</div>
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant">
+<span>Showing 1-10 of 142 Users</span>
+</div>
+</div>
+<!-- Table -->
+<div class="overflow-x-auto flex-1">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low sticky top-0 z-10">
+<tr>
+<th class="p-3 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant/60 font-semibold w-12 text-center">
+<input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+</th>
+<th class="p-3 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant/60 font-semibold">User</th>
+<th class="p-3 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant/60 font-semibold">Role</th>
+<th class="p-3 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant/60 font-semibold">Status</th>
+<th class="p-3 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant/60 font-semibold">Last Active</th>
+<th class="p-3 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant/60 font-semibold w-16 text-center">Actions</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm text-on-surface divide-y divide-outline-variant/30">
+<!-- Row 1 -->
+<tr class="hover:bg-secondary/5 transition-colors group cursor-pointer">
+<td class="p-3 text-center align-middle">
+<input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+</td>
+<td class="p-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-label-md font-bold shrink-0">SJ</div>
+<div class="flex flex-col">
+<span class="font-medium text-on-surface group-hover:text-primary transition-colors">Sarah Jenkins</span>
+<span class="text-on-surface-variant text-[11px]">s.jenkins@ulink.com</span>
+</div>
+</div>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center px-2 py-1 rounded bg-surface-container-highest border border-outline-variant/50 text-on-surface font-label-sm text-[10px] uppercase tracking-wider">
+                                        Admin
+                                    </span>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-status-approved/10 text-status-approved font-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-status-approved"></span>
+                                        Active
+                                    </span>
+</td>
+<td class="p-3 text-on-surface-variant">Just now</td>
+<td class="p-3 text-center">
+<button class="text-outline hover:text-primary transition-colors p-1 rounded hover:bg-surface-variant/50">
+<span class="material-symbols-outlined text-[18px]" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-secondary/5 transition-colors group cursor-pointer bg-surface-container-low/30">
+<td class="p-3 text-center align-middle">
+<input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+</td>
+<td class="p-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center font-label-md font-bold shrink-0">MR</div>
+<div class="flex flex-col">
+<span class="font-medium text-on-surface group-hover:text-primary transition-colors">Marcus Rodriguez</span>
+<span class="text-on-surface-variant text-[11px]">m.rodriguez@ulink.com</span>
+</div>
+</div>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center px-2 py-1 rounded bg-surface-container-highest border border-outline-variant/50 text-on-surface font-label-sm text-[10px] uppercase tracking-wider">
+                                        JD3
+                                    </span>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-status-pending/10 text-status-pending font-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-status-pending"></span>
+                                        On Leave
+                                    </span>
+</td>
+<td class="p-3 text-on-surface-variant">2 days ago</td>
+<td class="p-3 text-center">
+<button class="text-outline hover:text-primary transition-colors p-1 rounded hover:bg-surface-variant/50">
+<span class="material-symbols-outlined text-[18px]" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-secondary/5 transition-colors group cursor-pointer">
+<td class="p-3 text-center align-middle">
+<input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+</td>
+<td class="p-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-label-md font-bold shrink-0">AL</div>
+<div class="flex flex-col">
+<span class="font-medium text-on-surface group-hover:text-primary transition-colors">Amanda Lee</span>
+<span class="text-on-surface-variant text-[11px]">a.lee@ulink.com</span>
+</div>
+</div>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center px-2 py-1 rounded bg-surface-container-highest border border-outline-variant/50 text-on-surface font-label-sm text-[10px] uppercase tracking-wider">
+                                        JD1
+                                    </span>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-status-approved/10 text-status-approved font-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-status-approved"></span>
+                                        Active
+                                    </span>
+</td>
+<td class="p-3 text-on-surface-variant">45 mins ago</td>
+<td class="p-3 text-center">
+<button class="text-outline hover:text-primary transition-colors p-1 rounded hover:bg-surface-variant/50">
+<span class="material-symbols-outlined text-[18px]" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-secondary/5 transition-colors group cursor-pointer">
+<td class="p-3 text-center align-middle">
+<input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+</td>
+<td class="p-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center font-label-md font-bold shrink-0">
+<span class="material-symbols-outlined text-[16px]" data-icon="smart_toy">smart_toy</span>
+</div>
+<div class="flex flex-col">
+<span class="font-medium text-on-surface group-hover:text-primary transition-colors flex items-center gap-1">
+                                                System Auto-Adjudicator
+                                                <span class="material-symbols-outlined text-status-ai text-[14px]" data-icon="sparkles" data-weight="fill">arrow_back_ios_new</span>
+</span>
+<span class="text-on-surface-variant text-[11px]">ai.service@ulink.com</span>
+</div>
+</div>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center px-2 py-1 rounded bg-status-ai/10 border border-status-ai/20 text-status-ai font-label-sm text-[10px] uppercase tracking-wider">
+                                        System Process
+                                    </span>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-status-approved/10 text-status-approved font-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-status-approved"></span>
+                                        Online
+                                    </span>
+</td>
+<td class="p-3 text-on-surface-variant">Continuous</td>
+<td class="p-3 text-center">
+<button class="text-outline hover:text-primary transition-colors p-1 rounded hover:bg-surface-variant/50" disabled="">
+<span class="material-symbols-outlined text-[18px] opacity-50" data-icon="lock">lock</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</main>
+<!-- Right Side Inspector Pane (Collapsible) -->
+<aside class="fixed right-0 top-16 bottom-0 w-inspector-width bg-surface-container-lowest border-l border-outline-variant shadow-ambient transform translate-x-full transition-transform duration-300 z-30 flex flex-col" id="inspectorPane">
+<!-- Inspector Header -->
+<div class="h-14 px-4 border-b border-outline-variant flex items-center justify-between bg-surface shrink-0">
+<h2 class="font-title-lg text-title-lg text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="manage_accounts">manage_accounts</span>
+                    Invite New User
+                </h2>
+<button class="text-on-surface-variant hover:text-error transition-colors p-1 rounded-full hover:bg-surface-variant/50" onclick="toggleInspector()">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</div>
+<!-- Inspector Content (Form) -->
+<div class="flex-1 overflow-y-auto p-6 space-y-6">
+<!-- Section: Basic Info -->
+<div class="space-y-4">
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider border-b border-outline-variant pb-1">User Details</h3>
+<div class="space-y-1">
+<label class="font-label-md text-label-md text-on-surface">Email Address <span class="text-error">*</span></label>
+<input class="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow" placeholder="e.g. j.doe@ulink.com" type="email"/>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-1">
+<label class="font-label-md text-label-md text-on-surface">First Name</label>
+<input class="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow" type="text"/>
+</div>
+<div class="space-y-1">
+<label class="font-label-md text-label-md text-on-surface">Last Name</label>
+<input class="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow" type="text"/>
+</div>
+</div>
+</div>
+<!-- Section: Role Assignment -->
+<div class="space-y-4">
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider border-b border-outline-variant pb-1">Role Assignment</h3>
+<div class="space-y-1">
+<label class="font-label-md text-label-md text-on-surface">Primary Role <span class="text-error">*</span></label>
+<select class="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow appearance-none">
+<option disabled="" selected="" value="">Select a role...</option>
+<option value="admin">System Administrator</option>
+<option value="jd1">JD1 Administrator (Junior)</option>
+<option value="jd2">JD2 Administrator</option>
+<option value="jd3">JD3 Administrator (Senior)</option>
+<option value="jd4">JD4 Administrator (Lead)</option>
+<option value="csr">Customer Service Rep</option>
+</select>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1">Determines base access levels to the Claims Queue.</p>
+</div>
+<!-- Permissions Grid (Bento style) -->
+<div class="space-y-2 mt-4">
+<label class="font-label-md text-label-md text-on-surface">Additional Permissions</label>
+<div class="grid grid-cols-1 gap-2">
+<label class="flex items-start gap-3 p-3 border border-outline-variant/60 rounded-lg bg-surface-bright cursor-pointer hover:border-primary/50 transition-colors">
+<input class="mt-0.5 rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">Financial Override</span>
+<span class="font-body-sm text-[11px] text-on-surface-variant">Allow user to bypass standard claim limits.</span>
+</div>
+</label>
+<label class="flex items-start gap-3 p-3 border border-outline-variant/60 rounded-lg bg-surface-bright cursor-pointer hover:border-primary/50 transition-colors">
+<input class="mt-0.5 rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">Workflow Management</span>
+<span class="font-body-sm text-[11px] text-on-surface-variant">Can reassign claims and edit rule engines.</span>
+</div>
+</label>
+</div>
+</div>
+</div>
+</div>
+<!-- Inspector Footer Actions -->
+<div class="p-4 border-t border-outline-variant bg-surface-container flex justify-end gap-3 shrink-0">
+<button class="px-4 py-2 border border-outline-variant text-on-surface font-label-md text-label-md rounded-lg hover:bg-surface-variant transition-colors" onclick="toggleInspector()">Cancel</button>
+<button class="px-4 py-2 bg-primary text-on-primary font-label-md text-label-md rounded-lg hover:bg-surface-tint transition-colors shadow-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="send">send</span>
+                    Send Invite
+                </button>
+</div>
+</aside>
+<!-- Overlay for mobile when inspector is open (optional, simple implementation) -->
+<div class="fixed inset-0 bg-on-surface/20 z-20 hidden transition-opacity" id="inspectorOverlay" onclick="toggleInspector()"></div>
+</div>
+</div>

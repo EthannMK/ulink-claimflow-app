@@ -1,0 +1,278 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Ulink Assist - Omnichannel Workspace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#d8dadd",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#643f00",
+                        "secondary": "#1f686a",
+                        "error": "#ba1a1a",
+                        "primary": "#00375e",
+                        "status-approved": "#2D8A4E",
+                        "primary-fixed": "#d1e4ff",
+                        "status-ai": "#1F4E79",
+                        "on-surface-variant": "#42474f",
+                        "inverse-primary": "#a0cafc",
+                        "surface-variant": "#e0e3e6",
+                        "inverse-on-surface": "#eff1f4",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed-dim": "#8fd2d4",
+                        "on-tertiary-container": "#e9b268",
+                        "secondary-fixed": "#abeef0",
+                        "tertiary-fixed-dim": "#f5bc72",
+                        "on-primary-fixed-variant": "#184974",
+                        "surface-container-lowest": "#ffffff",
+                        "status-pending": "#D97706",
+                        "primary-fixed-dim": "#a0cafc",
+                        "on-surface": "#191c1e",
+                        "on-primary": "#ffffff",
+                        "tertiary-container": "#6a4300",
+                        "inverse-surface": "#2d3133",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#001d35",
+                        "on-secondary-fixed": "#002021",
+                        "on-secondary-fixed-variant": "#004f51",
+                        "secondary-container": "#a8eced",
+                        "on-primary-container": "#95bff1",
+                        "surface-container-high": "#e6e8eb",
+                        "surface": "#f7f9fc",
+                        "primary-container": "#1f4e79",
+                        "on-secondary": "#ffffff",
+                        "status-rejected": "#DC2626",
+                        "background": "#f7f9fc",
+                        "surface-bright": "#f7f9fc",
+                        "outline-variant": "#c2c7d0",
+                        "surface-container": "#eceef1",
+                        "brand-accent": "#ED5500",
+                        "surface-container-highest": "#e0e3e6",
+                        "on-secondary-container": "#256c6f",
+                        "surface-container-low": "#f2f4f7",
+                        "on-background": "#191c1e",
+                        "on-tertiary-fixed": "#2a1800",
+                        "tertiary-fixed": "#ffddb5",
+                        "outline": "#72777f",
+                        "text-main": "#485867",
+                        "surface-tint": "#35618d",
+                        "tertiary": "#4c2e00",
+                        "error-container": "#ffdad6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "inspector-width": "380px",
+                        "container-padding": "24px",
+                        "pane-gap": "16px",
+                        "base": "4px",
+                        "sidebar-width": "260px"
+                    },
+                    "fontFamily": {
+                        "title-lg": ["Inter"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "label-md": ["Inter"],
+                        "display-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "label-sm": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-md-mobile": ["Hanken Grotesk"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "title-lg": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "display-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "headline-md-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md h-screen overflow-hidden flex">
+<!-- SideNavBar -->
+<nav class="bg-surface-container dark:bg-surface-container-high fixed left-0 top-0 h-full w-sidebar-width border-r border-outline-variant dark:border-outline flex flex-col p-4 z-20">
+<div class="mb-8"><div class="w-[140px] h-[40px] flex items-center overflow-hidden"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqp202t3ITtCP9QzPgsRfIyUDEHTXHFetdndNgSvJ5MQc3k2uudJipsQWeuJIUY9cC6vwfXk_p5cJ2uBZxtycoznTLPvCaNf5sjKfUZxzSxMECFoslrxqHcLCU2IRRGWDnPvUxrx0YbOkot70UjwTc8akQdQUsmk_EcdhpisD3yqyCTDZf5iTvrlRYTwiB8cDKtJK0XXJtiqnkwiARiYAaXY30vNubSR77UHUEorw36UnPoyKyhl6H0FXj1yOEqLBSgw" alt="Ulink Assist Logo" class="h-full w-auto object-contain"></div></div>
+<button class="bg-primary text-on-primary font-label-md text-label-md py-2 px-4 rounded mb-6 w-full text-center hover:bg-surface-tint transition-colors">New Claim</button>
+<ul class="flex flex-col gap-2 flex-grow"><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded bg-secondary-container dark:bg-primary-container text-on-secondary-container dark:text-on-primary-container font-semibold font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="assignment">assignment</span>Claims Queue</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="analytics">analytics</span>Analytics</a></li><li class="mt-4 mb-2 px-3 font-label-sm text-outline uppercase tracking-wider">Administration</li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="group">group</span>Users &amp; Teams</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="hub">hub</span>Channel Connections</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="alt_route">alt_route</span>Routing Rules</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="policy">policy</span>SLA Policies</a></li><li class=""><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="history_edu">history_edu</span>Audit Logs</a></li><li class="mt-auto"><a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface font-label-md text-label-md transition-colors duration-200 ease-in-out" href="#"><span class="material-symbols-outlined" data-icon="settings">settings</span>Settings</a></li></ul>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex flex-col flex-grow ml-sidebar-width h-full w-[calc(100%-260px)] relative">
+<!-- TopNavBar -->
+<header class="bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline flex justify-between items-center h-16 px-container-padding shrink-0 z-10 w-full focus-within:ring-2 focus-within:ring-primary">
+<h2 class="font-title-lg text-title-lg text-primary dark:text-primary-fixed">Claims Console</h2>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<button class="relative text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors"><span class="material-symbols-outlined" data-icon="notifications">notifications</span><span class="absolute top-0 right-0 block h-2 w-2 rounded-full bg-error border-2 border-surface"></span></button>
+<button class="text-on-surface-variant dark:text-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+<div class="flex items-center gap-3 pl-4 border-l border-outline-variant">
+<span class="font-label-md text-label-md text-on-surface-variant">JD1 Administrator</span>
+<img alt="User Profile Avatar" class="w-8 h-8 rounded-full object-cover border border-outline-variant" data-alt="A small, professional headshot portrait of an administrator in a corporate setting, with soft lighting and a neutral background, suitable for a user profile avatar." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDcoXnaRl55LyNU8jcWWHqU_4hpdhikhZX4EfnjL1nCkRz0wDFAwoWfmh6V7ZS_6WV9zpYzjY-v-9qtvPKOX_uqv1PpBSPLjUYfkd30OiT2AvvFtbJsRzKkKss8ef52rafYLizinCWDADDRw9CwOjdXEGOmVohcwMOkpN4vELz-ghwjVBeEx_M-AYF3UYxsD_lOF7NGoialC1UuMHTrDDYlfIaZ_Y35zF9MU7mGaESy422d9_N8b0td">
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-grow p-container-padding overflow-auto bg-surface-container-lowest">
+<!-- Dashboard Controls -->
+<div class="flex justify-between items-end mb-6">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Omnichannel Inbox</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Manage incoming claims and queries across all channels.</p>
+</div>
+<div class="flex gap-3">
+<div class="relative border border-outline-variant rounded focus-within:border-primary focus-within:ring-1 focus-within:ring-primary focus-within:shadow-[0_0_8px_rgba(0,55,94,0.2)] transition-all bg-white flex items-center px-3 py-1.5 h-10">
+<span class="material-symbols-outlined text-outline mr-2 text-sm" data-icon="search">search</span>
+<input class="bg-transparent border-none outline-none font-body-sm text-body-sm p-0 w-48 text-on-surface placeholder:text-outline" placeholder="Search claims..." type="text">
+</div>
+<button class="border border-secondary text-secondary font-label-md text-label-md py-1.5 px-4 rounded h-10 hover:bg-secondary hover:text-white transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+                        Filters
+                    </button>
+<button class="border border-outline-variant text-on-surface-variant font-label-md text-label-md py-1.5 px-4 rounded h-10 hover:bg-surface-variant transition-colors flex items-center gap-2">
+                         Bulk Actions
+                    </button>
+</div>
+</div>
+<!-- Enhanced Table Structure mimicking Bento/Cards -->
+<div class="space-y-4">
+<!-- Column Headers (Ghosted) -->
+<div class="grid grid-cols-12 gap-4 px-4 py-2 font-label-md text-label-md text-on-surface-variant bg-surface-container-low rounded-t">
+<div class="col-span-1">Channel</div>
+<div class="col-span-2">Claimant</div>
+<div class="col-span-2">Insurer</div>
+<div class="col-span-2">AI Category</div>
+<div class="col-span-3">Assignment Control</div>
+<div class="col-span-1 text-center">Status</div>
+<div class="col-span-1 text-right">SLA</div>
+</div>
+<!-- Row 1: High Priority / Active -->
+<div class="group grid grid-cols-12 gap-4 px-4 py-3 bg-white border border-outline-variant rounded hover:shadow-[0_4px_12px_rgba(31,78,121,0.08)] transition-shadow items-center relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-error"></div>
+<div class="col-span-1 flex items-center pl-2">
+<div class="w-8 h-8 rounded bg-[#E3F2FD] text-[#1976D2] flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="mail">mail</span>
+</div>
+</div>
+<div class="col-span-2 font-title-lg text-body-sm text-on-surface truncate">Daw Su Su Hlaing</div>
+<div class="col-span-2 font-body-sm text-on-surface-variant truncate">AYA Sompo</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-primary-container text-on-primary-container font-label-sm text-label-sm border border-primary-fixed">
+<span class="material-symbols-outlined text-[12px]" data-icon="magic_button">magic_button</span>
+                            New Claim
+                        </span>
+</div>
+<div class="col-span-3 flex items-center gap-2">
+<div class="flex items-center gap-2 px-2 py-1 rounded border border-outline-variant bg-surface-bright text-body-sm flex-grow">
+<span class="material-symbols-outlined text-status-ai text-[14px]" data-icon="smart_toy">smart_toy</span>
+<span class="truncate">Dr. Myat Min</span>
+</div>
+<button class="text-status-approved hover:bg-[#E8F5E9] p-1 rounded transition-colors" title="Accept Assignment">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+</button>
+<button class="text-outline hover:bg-surface-variant p-1 rounded transition-colors" title="Change Assignee">
+<span class="material-symbols-outlined text-sm" data-icon="swap_horiz">swap_horiz</span>
+</button>
+</div>
+<div class="col-span-1 flex justify-center">
+<span class="inline-block px-2 py-1 rounded bg-[#FEF3C7] text-status-pending font-label-sm text-label-sm">Review</span>
+</div>
+<div class="col-span-1 text-right font-label-md text-error flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="timer">timer</span>
+                        14m
+                    </div>
+</div>
+<!-- Row 2 -->
+<div class="group grid grid-cols-12 gap-4 px-4 py-3 bg-white border border-outline-variant rounded hover:shadow-[0_4px_12px_rgba(31,78,121,0.08)] transition-shadow items-center relative">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary-fixed"></div>
+<div class="col-span-1 flex items-center pl-2">
+<div class="w-8 h-8 rounded bg-[#E8EAF6] text-[#3F51B5] flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="forum">forum</span>
+</div>
+</div>
+<div class="col-span-2 font-title-lg text-body-sm text-on-surface truncate">U Kyaw Zaw</div>
+<div class="col-span-2 font-body-sm text-on-surface-variant truncate">AMI</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm border border-secondary-fixed">
+<span class="material-symbols-outlined text-[12px]" data-icon="magic_button">magic_button</span>
+                            LOG Request
+                        </span>
+</div>
+<div class="col-span-3 flex items-center gap-2">
+<div class="flex items-center gap-2 px-2 py-1 rounded border border-outline-variant bg-surface-bright text-body-sm flex-grow">
+<span class="material-symbols-outlined text-status-ai text-[14px]" data-icon="smart_toy">smart_toy</span>
+<span class="truncate">Nilar Win</span>
+</div>
+<button class="text-status-approved hover:bg-[#E8F5E9] p-1 rounded transition-colors" title="Accept Assignment">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+</button>
+<button class="text-outline hover:bg-surface-variant p-1 rounded transition-colors" title="Change Assignee">
+<span class="material-symbols-outlined text-sm" data-icon="swap_horiz">swap_horiz</span>
+</button>
+</div>
+<div class="col-span-1 flex justify-center">
+<span class="inline-block px-2 py-1 rounded bg-[#E0F2FE] text-[#0284C7] font-label-sm text-label-sm">Intake</span>
+</div>
+<div class="col-span-1 text-right font-label-md text-on-surface-variant flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="timer">timer</span>
+                        2h 45m
+                    </div>
+</div>
+<!-- Row 3 -->
+<div class="group grid grid-cols-12 gap-4 px-4 py-3 bg-white border border-outline-variant rounded hover:shadow-[0_4px_12px_rgba(31,78,121,0.08)] transition-shadow items-center relative opacity-80">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-outline-variant"></div>
+<div class="col-span-1 flex items-center pl-2">
+<div class="w-8 h-8 rounded bg-[#FCE4EC] text-[#E91E63] flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="sms">sms</span>
+</div>
+</div>
+<div class="col-span-2 font-title-lg text-body-sm text-on-surface truncate">Ma Thida Aung</div>
+<div class="col-span-2 font-body-sm text-on-surface-variant truncate">IKBZ</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm border border-outline-variant">
+<span class="material-symbols-outlined text-[12px]" data-icon="magic_button">magic_button</span>
+                            General Query
+                        </span>
+</div>
+<div class="col-span-3 flex items-center gap-2">
+<div class="flex items-center gap-2 px-2 py-1 rounded border border-outline-variant bg-surface-bright text-body-sm flex-grow">
+<span class="material-symbols-outlined text-outline text-[14px]" data-icon="person">person</span>
+<span class="truncate">Unassigned</span>
+</div>
+<button class="text-outline hover:bg-surface-variant p-1 rounded transition-colors" title="Assign">
+<span class="material-symbols-outlined text-sm" data-icon="add_circle">add_circle</span>
+</button>
+</div>
+<div class="col-span-1 flex justify-center">
+<span class="inline-block px-2 py-1 rounded bg-[#E2E8F0] text-outline font-label-sm text-label-sm">Waiting</span>
+</div>
+<div class="col-span-1 text-right font-label-md text-on-surface-variant flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="timer">timer</span>
+                        4h 10m
+                    </div>
+</div>
+</div>
+</main>
+</div>
+
+
+</body></html>

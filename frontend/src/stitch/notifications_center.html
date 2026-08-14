@@ -1,0 +1,235 @@
+<div class="bg-background text-on-surface font-body-md h-screen overflow-hidden flex">
+<!-- SideNavBar -->
+<nav class="bg-surface-container fixed left-0 top-0 h-full w-sidebar-width border-r border-outline-variant flex flex-col p-4 z-20">
+<div class="flex items-center gap-3 mb-8 px-2">
+<img alt="Ulink Assist Brand Logo" class="w-8 h-8 rounded" data-alt="A small, modern blue geometric logo for an insurance workspace, isolated on a white background. Professional, fintech aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCv3KC0HYk9tqCK8rUx5W8OI690lOiHJuR0aB96DkmqoczF4HPzQdo6r6LtXcyUV25HdoJLjTtOF8VRvzNAiPtZ5e-T-wWMBZJRuQBX840zg6OgNHKsiz7CUefxQZn9MZ9ePb0Xbg98pyoNdo4jLvHSHNv3bn70m2kc-ffjx5dO06ikjA78BMyOsESzNegCOiSBNNZ3DMLf7wpKPoJXTKy9pKSnzCu03eLikuyX1weI92P6rKAOB9lI"/>
+<div>
+<h1 class="font-headline-sm text-headline-sm text-primary font-bold">Ulink Assist</h1>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Omnichannel Workspace</p>
+</div>
+</div>
+<button class="bg-primary text-on-primary font-label-md text-label-md py-2 px-4 rounded-lg mb-6 flex items-center justify-center gap-2 hover:bg-primary-container hover:text-on-primary-container transition-colors duration-200">
+<span class="material-symbols-outlined text-[18px]">add</span>
+            New Claim
+        </button>
+<ul class="flex-col space-y-1 flex-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]">assignment</span>
+<span class="font-label-md text-label-md">Claims Queue</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]">account_tree</span>
+<span class="font-label-md text-label-md">Workflows</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+<span class="font-label-md text-label-md">AI Insights</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]">description</span>
+<span class="font-label-md text-label-md">Documents</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</li>
+</ul>
+</nav>
+<!-- Main Content Area Wrapper -->
+<div class="ml-[260px] flex-1 flex flex-col h-screen">
+<!-- TopNavBar -->
+<header class="bg-surface docked full-width top-0 border-b border-outline-variant flex justify-between items-center h-16 px-container-padding shrink-0 z-10 relative">
+<div class="flex items-center gap-4">
+<span class="font-headline-sm text-headline-sm text-primary">Claims Console</span>
+<div class="relative focus-within:ring-2 focus-within:ring-primary rounded-lg ml-4">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+<input class="pl-10 pr-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg font-body-sm text-body-sm focus:outline-none focus:border-primary w-64" placeholder="Search claims..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 text-on-surface-variant">
+<button class="hover:text-primary transition-colors relative group" onclick="toggleDropdown('notification-dropdown')">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-brand-accent rounded-full border border-surface"></span>
+</button>
+<button class="hover:text-primary transition-colors">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</div>
+<div class="flex items-center gap-3 border-l border-outline-variant pl-6">
+<div class="text-right">
+<p class="font-label-md text-label-md text-on-surface">JD1 Administrator</p>
+</div>
+<img alt="User Profile Avatar" class="w-8 h-8 rounded-full border border-outline-variant" data-alt="A professional headshot of an administrator in a corporate setting. High-quality lighting, soft focus background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAC9IMhmqyhIFBjqj7wVJ-XZ8qBfx4dZwN8KfhdOYH8dyMd6HH1TwKWngPy7yUjh7SpcqoE9ynSIVWMKrv4TSRdIujJHLU0eQjdYw8FkJiIL3oiPxsmZLIbGOkUor8kAAz3AVYfjhnrV80ZLabzup3_vPm7BzOUAydMlh841X60zPCvN5K9J1_ecVwG92A3zPANh9gSw1LyaOv_3kqd6KI5og-ZsDCshJJXFllJMMgw5ZFCONoMqDQw"/>
+</div>
+</div>
+<!-- Compact Notification Dropdown Overlay -->
+<div class="absolute top-[60px] right-container-padding w-[360px] bg-surface border border-outline-variant rounded-xl shadow-[0_4px_12px_rgba(31,78,121,0.08)] flex flex-col hidden z-50" id="notification-dropdown">
+<div class="flex justify-between items-center p-4 border-b border-outline-variant">
+<h3 class="font-headline-sm text-headline-sm">Notifications</h3>
+<button class="text-primary font-label-md text-label-md hover:underline">Mark all read</button>
+</div>
+<div class="max-h-[400px] overflow-y-auto">
+<!-- Compact Unread Item -->
+<div class="p-4 border-b border-outline-variant bg-primary-fixed/20 hover:bg-surface-container-low cursor-pointer flex gap-3">
+<div class="w-8 h-8 rounded-full bg-status-ai/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-status-ai">auto_awesome</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm text-on-surface mb-1">AI has finished extracting data for <a class="text-primary font-medium hover:underline" href="#">CLM-88291-X</a></p>
+<span class="font-label-sm text-label-sm text-on-surface-variant">2 mins ago</span>
+</div>
+</div>
+<!-- Compact Read Item -->
+<div class="p-4 border-b border-outline-variant hover:bg-surface-container-low cursor-pointer flex gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">assignment</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm text-on-surface mb-1">New priority item assigned to you: <a class="text-primary font-medium hover:underline" href="#">CLM-44120-B</a></p>
+<span class="font-label-sm text-label-sm text-on-surface-variant">1 hour ago</span>
+</div>
+</div>
+</div>
+<div class="p-3 text-center border-t border-outline-variant">
+<a class="font-label-md text-label-md text-primary hover:underline" href="#">View All Notifications</a>
+</div>
+</div>
+</header>
+<!-- Main Canvas: Notifications Center -->
+<main class="flex-1 overflow-y-auto p-container-padding bg-surface-container-low">
+<div class="max-w-4xl mx-auto">
+<!-- Page Header & Controls -->
+<div class="flex items-center justify-between mb-6">
+<h2 class="font-headline-md text-headline-md text-on-surface">Notifications Center</h2>
+<button class="font-label-md text-label-md text-primary border border-outline-variant px-4 py-2 rounded-lg bg-surface hover:bg-surface-container transition-colors">
+                        Mark all as read
+                    </button>
+</div>
+<!-- Filters -->
+<div class="flex gap-2 mb-6">
+<button class="px-4 py-1.5 rounded-full bg-primary text-on-primary font-label-md text-label-md">All</button>
+<button class="px-4 py-1.5 rounded-full bg-surface border border-outline-variant text-on-surface-variant hover:bg-surface-container transition-colors font-label-md text-label-md">Assignments</button>
+<button class="px-4 py-1.5 rounded-full bg-surface border border-outline-variant text-on-surface-variant hover:bg-surface-container transition-colors font-label-md text-label-md">Mentions</button>
+<button class="px-4 py-1.5 rounded-full bg-surface border border-outline-variant text-on-surface-variant hover:bg-surface-container transition-colors font-label-md text-label-md">Alerts</button>
+</div>
+<!-- Notification List Card -->
+<div class="bg-surface border border-outline-variant rounded-xl shadow-[0_4px_12px_rgba(31,78,121,0.08)] overflow-hidden">
+<!-- Group: Today -->
+<div class="bg-surface-container-low px-6 py-2 border-b border-outline-variant">
+<span class="font-label-md text-label-md text-on-surface-variant">Today</span>
+</div>
+<!-- Unread AI Item -->
+<div class="flex gap-4 p-6 border-b border-outline-variant bg-primary-fixed/10 hover:bg-surface-container-lowest transition-colors cursor-pointer group">
+<div class="w-10 h-10 rounded-full bg-status-ai/10 flex items-center justify-center shrink-0 border border-status-ai/20">
+<span class="material-symbols-outlined text-[20px] text-status-ai filled">auto_awesome</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<p class="font-body-md text-body-md text-on-surface">
+                                    AI has finished extracting data for claim <a class="font-medium text-primary hover:underline" href="#">CLM-88291-X</a>. Ready for review.
+                                </p>
+<span class="font-label-sm text-label-sm text-on-surface-variant whitespace-nowrap ml-4">10:42 AM</span>
+</div>
+<div class="flex gap-2 mt-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-label-sm font-label-sm bg-status-ai/10 text-status-ai">AI Processed</span>
+</div>
+</div>
+<div class="w-2 h-2 rounded-full bg-primary mt-2 shrink-0"></div>
+</div>
+<!-- Unread Mention -->
+<div class="flex gap-4 p-6 border-b border-outline-variant bg-primary-fixed/10 hover:bg-surface-container-lowest transition-colors cursor-pointer group">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center shrink-0 border border-outline-variant">
+<span class="material-symbols-outlined text-[20px] text-on-secondary-container">alternate_email</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<p class="font-body-md text-body-md text-on-surface">
+<span class="font-medium">Sarah Jenkins</span> mentioned you in a note on <a class="font-medium text-primary hover:underline" href="#">CLM-44120-B</a>: "Can you verify the billing codes?"
+                                </p>
+<span class="font-label-sm text-label-sm text-on-surface-variant whitespace-nowrap ml-4">9:15 AM</span>
+</div>
+</div>
+<div class="w-2 h-2 rounded-full bg-primary mt-2 shrink-0"></div>
+</div>
+<!-- SLA Warning -->
+<div class="flex gap-4 p-6 border-b border-outline-variant hover:bg-surface-container-lowest transition-colors cursor-pointer group">
+<div class="w-10 h-10 rounded-full bg-status-pending/10 flex items-center justify-center shrink-0 border border-status-pending/20">
+<span class="material-symbols-outlined text-[20px] text-status-pending">warning</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<p class="font-body-md text-body-md text-on-surface">
+                                    SLA nearing breach for <a class="font-medium text-primary hover:underline" href="#">CLM-99012-A</a>. 2 hours remaining for initial review.
+                                </p>
+<span class="font-label-sm text-label-sm text-on-surface-variant whitespace-nowrap ml-4">8:30 AM</span>
+</div>
+</div>
+</div>
+<!-- Group: Earlier -->
+<div class="bg-surface-container-low px-6 py-2 border-y border-outline-variant">
+<span class="font-label-md text-label-md text-on-surface-variant">Yesterday</span>
+</div>
+<!-- SLA Breached -->
+<div class="flex gap-4 p-6 border-b border-outline-variant hover:bg-surface-container-lowest transition-colors cursor-pointer group">
+<div class="w-10 h-10 rounded-full bg-status-rejected/10 flex items-center justify-center shrink-0 border border-status-rejected/20">
+<span class="material-symbols-outlined text-[20px] text-status-rejected">error</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<p class="font-body-md text-body-md text-on-surface">
+                                    SLA breached for escalated claim <a class="font-medium text-primary hover:underline" href="#">CLM-11234-Z</a>.
+                                </p>
+<span class="font-label-sm text-label-sm text-on-surface-variant whitespace-nowrap ml-4">Yesterday, 4:45 PM</span>
+</div>
+</div>
+</div>
+<!-- Reassigned Item -->
+<div class="flex gap-4 p-6 border-b border-outline-variant hover:bg-surface-container-lowest transition-colors cursor-pointer group">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0 border border-outline-variant">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">move_item</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<p class="font-body-md text-body-md text-on-surface">
+                                    Claim <a class="font-medium text-primary hover:underline" href="#">CLM-55678-Y</a> was reassigned to you from the general queue.
+                                </p>
+<span class="font-label-sm text-label-sm text-on-surface-variant whitespace-nowrap ml-4">Yesterday, 2:10 PM</span>
+</div>
+</div>
+</div>
+<!-- Decision Approved -->
+<div class="flex gap-4 p-6 hover:bg-surface-container-lowest transition-colors cursor-pointer group">
+<div class="w-10 h-10 rounded-full bg-status-approved/10 flex items-center justify-center shrink-0 border border-status-approved/20">
+<span class="material-symbols-outlined text-[20px] text-status-approved">check_circle</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<p class="font-body-md text-body-md text-on-surface">
+                                    Final decision approved for <a class="font-medium text-primary hover:underline" href="#">CLM-33490-C</a>. Payment processing initiated.
+                                </p>
+<span class="font-label-sm text-label-sm text-on-surface-variant whitespace-nowrap ml-4">Yesterday, 11:00 AM</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>

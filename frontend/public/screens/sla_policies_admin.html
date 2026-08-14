@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SLA Policies - Ulink Assist</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed": "#2a1800",
+                      "on-primary-container": "#95bff1",
+                      "on-secondary-fixed-variant": "#004f51",
+                      "secondary-container": "#a8eced",
+                      "status-approved": "#2D8A4E",
+                      "tertiary": "#4c2e00",
+                      "on-tertiary-fixed-variant": "#643f00",
+                      "on-tertiary-container": "#e9b268",
+                      "secondary": "#1f686a",
+                      "outline": "#72777f",
+                      "status-pending": "#D97706",
+                      "on-surface-variant": "#42474f",
+                      "background": "#f7f9fc",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#a0cafc",
+                      "surface-container-highest": "#e0e3e6",
+                      "outline-variant": "#c2c7d0",
+                      "surface": "#f7f9fc",
+                      "inverse-primary": "#a0cafc",
+                      "error-container": "#ffdad6",
+                      "primary-fixed": "#d1e4ff",
+                      "on-secondary-container": "#256c6f",
+                      "tertiary-fixed-dim": "#f5bc72",
+                      "tertiary-container": "#6a4300",
+                      "on-background": "#191c1e",
+                      "on-error-container": "#93000a",
+                      "surface-dim": "#d8dadd",
+                      "status-rejected": "#DC2626",
+                      "surface-container": "#eceef1",
+                      "brand-accent": "#ED5500",
+                      "on-primary-fixed-variant": "#184974",
+                      "on-error": "#ffffff",
+                      "on-surface": "#191c1e",
+                      "inverse-surface": "#2d3133",
+                      "status-ai": "#1F4E79",
+                      "on-secondary-fixed": "#002021",
+                      "inverse-on-surface": "#eff1f4",
+                      "secondary-fixed": "#abeef0",
+                      "on-tertiary": "#ffffff",
+                      "surface-container-lowest": "#ffffff",
+                      "tertiary-fixed": "#ffddb5",
+                      "surface-container-low": "#f2f4f7",
+                      "error": "#ba1a1a",
+                      "surface-variant": "#e0e3e6",
+                      "on-primary": "#ffffff",
+                      "primary": "#00375e",
+                      "surface-tint": "#35618d",
+                      "secondary-fixed-dim": "#8fd2d4",
+                      "primary-container": "#1f4e79",
+                      "on-primary-fixed": "#001d35",
+                      "surface-bright": "#f7f9fc",
+                      "surface-container-high": "#e6e8eb",
+                      "text-main": "#485867"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "container-padding": "24px",
+                      "pane-gap": "16px",
+                      "inspector-width": "380px",
+                      "base": "4px",
+                      "sidebar-width": "260px"
+              },
+              "fontFamily": {
+                      "display-lg": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-md-mobile": [
+                              "Hanken Grotesk"
+                      ],
+                      "label-sm": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "title-lg": [
+                              "Inter"
+                      ],
+                      "label-md": [
+                              "Inter"
+                      ],
+                      "headline-sm": [
+                              "Hanken Grotesk"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Hanken Grotesk"
+                      ]
+              },
+              "fontSize": {
+                      "display-lg": [
+                              "36px",
+                              {
+                                      "lineHeight": "44px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-md-mobile": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-sm": [
+                              "11px",
+                              {
+                                      "lineHeight": "14px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "title-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-md": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-sm": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background h-screen overflow-hidden flex">
+<!-- SideNavBar -->
+<nav class="bg-surface-container text-primary font-label-md text-label-md fixed left-0 top-0 h-full w-sidebar-width border-r border-outline-variant flex flex-col p-4 z-20">
+<div class="flex items-center gap-3 mb-8 px-2">
+<img alt="Ulink Assist Brand Logo" class="h-8 w-auto" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDf8lmJEcfDzFp3l_8LxsqQHUGfZZjadW5x1uS3svv0CK-w9GTdNigJVRxtWhNDJt8CVTKn-HXscftCUdpLw5nyL3ji3iv1p_1CjTUPzNgTu_XgiXOEeRUwtwvc1BT6FyL_HLHkyGi2eKIx99HxTP2z45C_-tOvwF7omxOrm1_I2m0MmTbucOSRFIDK117EZ9FS_e1dcFGjWfb45woOXuBsZRB1Fx6bTAZFEb2wZK-n2Mcjkw60JJ-gWLybbVxaN2DONA"/>
+<div>
+<h1 class="font-headline-sm text-headline-sm text-primary font-bold">Ulink Assist</h1>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Omnichannel Workspace</p>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span>Claims Queue</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="account_tree">account_tree</span>
+<span>Workflows</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span>Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+<span>AI Insights</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span>Documents</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-secondary-container text-on-secondary-container font-semibold transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="settings" data-weight="fill">settings</span>
+<span>Settings</span>
+</a>
+</div>
+<button class="mt-auto flex items-center justify-center gap-2 bg-primary text-on-primary font-label-md text-label-md py-3 rounded-lg shadow-sm hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-[18px]">add</span>
+            New Claim
+        </button>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col ml-[260px] relative w-[calc(100%-260px)] h-full overflow-hidden">
+<!-- TopNavBar -->
+<header class="bg-surface text-primary font-title-lg text-title-lg docked full-width top-0 border-b border-outline-variant flex justify-between items-center h-16 px-container-padding z-10">
+<div class="flex items-center gap-6">
+<h2 class="font-headline-sm text-headline-sm text-primary font-bold tracking-tight">Claims Console</h2>
+<div class="relative hidden lg:flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant text-[20px]">search</span>
+<input class="pl-10 pr-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-full font-body-sm text-body-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all w-64" placeholder="Search policies, IDs..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors focus:outline-none p-1 rounded-full hover:bg-surface-container">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors focus:outline-none p-1 rounded-full hover:bg-surface-container">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<div class="h-6 w-px bg-outline-variant mx-2"></div>
+<div class="flex items-center gap-3">
+<div class="text-right hidden sm:block">
+<p class="font-label-md text-label-md text-on-surface">JD1 Administrator</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant">System Admin</p>
+</div>
+<img class="w-9 h-9 rounded-full border border-outline-variant object-cover" data-alt="A professional corporate headshot of a female administrator in a modern office setting. The lighting is bright and even, typical of a high-end corporate environment. She is wearing a dark navy blazer, smiling subtly. The background is slightly blurred showing modern glass office partitions. The overall mood is confident, reliable, and professional, perfectly suited for a high-trust insurance fintech platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxmyr-8zPXJRPyBBGsUrSje4p-hAdqBJVi5eM3L16KN7egoQ5YIhRSS3qW9xTJi57UF4BQ90mBFxxMrc1tfRpyR1s1AxpdTLgYRLepf5XO2JKqumkA6WSy6wbDmQr70hZzl_imHVNG7nqRR0Fp6cwi3H0XDb062jr8stAWVASYnQRdIjzqmXY9QeCaV4jAgVgalZoLTSjC20aWfbujWnnzCLtFDK9lKlYRra9wMblL9azMJXab5ZHj"/>
+</div>
+</div>
+</header>
+<!-- Page Content Canvas -->
+<main class="flex-1 overflow-y-auto bg-surface p-container-padding">
+<div class="max-w-6xl mx-auto flex flex-col gap-6">
+<!-- Page Header -->
+<div class="flex justify-between items-end">
+<div>
+<h1 class="font-headline-md text-headline-md text-primary mb-1">SLA Policies</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Configure Service Level Agreements, target times, and breach notifications across all claim categories.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 border border-outline rounded-lg font-label-md text-label-md text-primary hover:bg-surface-container-low transition-colors">
+                            Export Log
+                        </button>
+<button class="px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md text-label-md shadow-sm hover:opacity-90 transition-opacity flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                            New Policy
+                        </button>
+</div>
+</div>
+<!-- Bento Grid Layout for Policies -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-pane-gap">
+<!-- Main Policies Table (Spans 2 columns on XL) -->
+<div class="xl:col-span-2 flex flex-col gap-pane-gap">
+<!-- Policy Category: New Claims -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+<div class="px-5 py-4 border-b border-outline-variant bg-surface-container-low flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">note_add</span>
+<h3 class="font-title-lg text-title-lg text-on-surface">New Claim Processing</h3>
+</div>
+<span class="px-2 py-1 bg-status-approved/10 text-status-approved font-label-sm text-label-sm rounded-full">Active</span>
+</div>
+<div class="p-0">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-lowest border-b border-outline-variant font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+<th class="px-5 py-3 font-medium">Policy Name</th>
+<th class="px-5 py-3 font-medium">Priority</th>
+<th class="px-5 py-3 font-medium">Target Response</th>
+<th class="px-5 py-3 font-medium">Target Resolution</th>
+<th class="px-5 py-3 font-medium text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="font-body-md text-body-md text-on-surface divide-y divide-outline-variant">
+<tr class="hover:bg-secondary/5 transition-colors group">
+<td class="px-5 py-3 font-medium">Inpatient Admittance</td>
+<td class="px-5 py-3">
+<span class="flex items-center gap-1 text-status-rejected font-medium"><span class="material-symbols-outlined text-[16px]">priority_high</span> Critical</span>
+</td>
+<td class="px-5 py-3">15 mins</td>
+<td class="px-5 py-3">2 hours</td>
+<td class="px-5 py-3 text-right">
+<button class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+</td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors">
+<td class="px-5 py-3 font-medium">Outpatient Surgery</td>
+<td class="px-5 py-3">
+<span class="flex items-center gap-1 text-status-pending font-medium"><span class="material-symbols-outlined text-[16px]">warning</span> High</span>
+</td>
+<td class="px-5 py-3">30 mins</td>
+<td class="px-5 py-3">4 hours</td>
+<td class="px-5 py-3 text-right">
+<button class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+</td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors">
+<td class="px-5 py-3 font-medium">Routine Consultation</td>
+<td class="px-5 py-3">
+<span class="flex items-center gap-1 text-on-surface-variant"><span class="material-symbols-outlined text-[16px]">horizontal_rule</span> Normal</span>
+</td>
+<td class="px-5 py-3">2 hours</td>
+<td class="px-5 py-3">24 hours</td>
+<td class="px-5 py-3 text-right">
+<button class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Policy Category: LOG (Letter of Guarantee) -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+<div class="px-5 py-4 border-b border-outline-variant bg-surface-container-low flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">verified</span>
+<h3 class="font-title-lg text-title-lg text-on-surface">Letter of Guarantee (LOG)</h3>
+</div>
+<span class="px-2 py-1 bg-status-approved/10 text-status-approved font-label-sm text-label-sm rounded-full">Active</span>
+</div>
+<div class="p-0">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-lowest border-b border-outline-variant font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+<th class="px-5 py-3 font-medium">Policy Name</th>
+<th class="px-5 py-3 font-medium">Priority</th>
+<th class="px-5 py-3 font-medium">Target Response</th>
+<th class="px-5 py-3 font-medium">Target Resolution</th>
+<th class="px-5 py-3 font-medium text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="font-body-md text-body-md text-on-surface divide-y divide-outline-variant">
+<tr class="hover:bg-secondary/5 transition-colors">
+<td class="px-5 py-3 font-medium">Emergency LOG</td>
+<td class="px-5 py-3">
+<span class="flex items-center gap-1 text-status-rejected font-medium"><span class="material-symbols-outlined text-[16px]">priority_high</span> Critical</span>
+</td>
+<td class="px-5 py-3">10 mins</td>
+<td class="px-5 py-3">30 mins</td>
+<td class="px-5 py-3 text-right">
+<button class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+</td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors">
+<td class="px-5 py-3 font-medium">Standard Admission LOG</td>
+<td class="px-5 py-3">
+<span class="flex items-center gap-1 text-status-pending font-medium"><span class="material-symbols-outlined text-[16px]">warning</span> High</span>
+</td>
+<td class="px-5 py-3">1 hour</td>
+<td class="px-5 py-3">4 hours</td>
+<td class="px-5 py-3 text-right">
+<button class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Right Sidebar: Global Settings & Breach Alerts -->
+<div class="xl:col-span-1 flex flex-col gap-pane-gap">
+<!-- Breach Settings Panel -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0_4px_12px_rgba(31,78,121,0.08)] overflow-hidden relative">
+<!-- Subtle decorative top border -->
+<div class="absolute top-0 left-0 w-full h-1 bg-brand-accent"></div>
+<div class="p-5 border-b border-outline-variant">
+<h3 class="font-title-lg text-title-lg text-primary mb-1 flex items-center gap-2">
+<span class="material-symbols-outlined text-brand-accent">notifications_active</span>
+                                    Breach Alerts &amp; Escalation
+                                </h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Configure automated actions when SLAs approach or exceed limits.</p>
+</div>
+<div class="p-5 flex flex-col gap-5">
+<!-- Setting 1 -->
+<div class="flex items-start justify-between gap-4">
+<div class="flex-1">
+<label class="font-label-md text-label-md text-on-surface block mb-1">Pre-breach Warning</label>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Notify assignees before target time expires.</p>
+</div>
+<div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-1">
+<input checked="" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-2 border-primary appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5" id="toggle1" name="toggle1" style="border-color: #00375e; background-color: #00375e;" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-5 rounded-full bg-primary-fixed-dim cursor-pointer" for="toggle1"></label>
+</div>
+</div>
+<div class="ml-2 pl-4 border-l-2 border-outline-variant">
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Warning Threshold</label>
+<select class="w-full bg-surface-container border border-outline-variant rounded-md py-1.5 px-3 font-body-sm text-body-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all">
+<option>75% of Target Time</option>
+<option selected="">90% of Target Time</option>
+<option>15 mins before</option>
+</select>
+</div>
+<hr class="border-outline-variant/50"/>
+<!-- Setting 2 -->
+<div class="flex items-start justify-between gap-4">
+<div class="flex-1">
+<label class="font-label-md text-label-md text-on-surface block mb-1">Manager Escalation</label>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Auto-reassign or alert supervisors on breach.</p>
+</div>
+<div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-1">
+<input checked="" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-2 border-primary appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5" id="toggle2" name="toggle2" style="border-color: #00375e; background-color: #00375e;" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-5 rounded-full bg-primary-fixed-dim cursor-pointer" for="toggle2"></label>
+</div>
+</div>
+<div class="ml-2 pl-4 border-l-2 border-outline-variant flex flex-col gap-3">
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Action</label>
+<select class="w-full bg-surface-container border border-outline-variant rounded-md py-1.5 px-3 font-body-sm text-body-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all">
+<option>Alert Only</option>
+<option selected="">Alert &amp; Re-assign</option>
+</select>
+</div>
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Target Group</label>
+<select class="w-full bg-surface-container border border-outline-variant rounded-md py-1.5 px-3 font-body-sm text-body-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all">
+<option selected="">Team Leads (Tier 2)</option>
+<option>Department Heads</option>
+</select>
+</div>
+</div>
+</div>
+<div class="p-4 bg-surface-container-low border-t border-outline-variant text-right">
+<button class="px-4 py-1.5 bg-surface-container-highest text-primary font-label-md text-label-md rounded border border-outline-variant hover:bg-surface-variant transition-colors">
+                                    Save Alert Settings
+                                </button>
+</div>
+</div>
+<!-- System Status Card -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 flex flex-col gap-3">
+<h4 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Current Performance</h4>
+<div class="flex items-center gap-4">
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="font-body-sm text-body-sm text-on-surface">Overall Compliance</span>
+<span class="font-label-md text-label-md text-status-approved">98.2%</span>
+</div>
+<div class="w-full bg-surface-variant rounded-full h-1.5">
+<div class="bg-status-approved h-1.5 rounded-full" style="width: 98.2%"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4 mt-2">
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="font-body-sm text-body-sm text-on-surface">Critical Breaches (24h)</span>
+<span class="font-label-md text-label-md text-status-pending">3</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Padding for bottom scrolling -->
+<div class="h-12 w-full"></div>
+</main>
+</div>
+</body></html>

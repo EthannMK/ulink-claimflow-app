@@ -1,35 +1,42 @@
-import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { PlaceholderPage } from './pages/PlaceholderPage'
-
-// Eager sample screen; others are placeholders for Codex to build.
+import { LoginPage } from './pages/LoginPage'
 import { InboxPage } from './pages/InboxPage'
+import { NewClaimPage } from './pages/NewClaimPage'
+import { ClaimWorkspacePage } from './pages/ClaimWorkspacePage'
+import { LogWorkspacePage } from './pages/LogWorkspacePage'
+import { DashboardPage } from './pages/DashboardPage'
+import { ProviderConfirmationPage } from './pages/ProviderConfirmationPage'
+import { UserManagementPage } from './pages/UserManagementPage'
+import { NotificationsPage } from './pages/NotificationsPage'
+import { MyProfilePage } from './pages/MyProfilePage'
 
-const P = (title: string) => <PlaceholderPage title={title} />
+const P = (t: string) => <PlaceholderPage title={t} />
 
 export const router = createBrowserRouter([
-  { path: '/', element: <Navigate to="/inbox" replace /> },
-  { path: '/login', element: P('login_ulink_assist') },
+  { path: '/', element: <Navigate to="/login" replace /> },
+  { path: '/login', element: <LoginPage /> },
   {
     element: <Layout />,
     children: [
       { path: '/inbox', element: <InboxPage /> },
-      { path: '/claim/:id', element: P('claim_workspace_intake') },
-      { path: '/log/:id', element: P('log_request_workspace') },
-      { path: '/adjudication/:id', element: P('medical_adjudication_workspace') },
-      { path: '/confirmation', element: P('provider_confirmation_tracker') },
-      { path: '/dashboard', element: P('kpi_dashboard_executive_view') },
-      { path: '/notifications', element: P('notifications_center') },
-      { path: '/profile', element: P('my_profile_preferences') },
-      { path: '/admin/users', element: P('user_management_admin') },
-      { path: '/admin/roles', element: P('roles_permissions_admin') },
-      { path: '/admin/routing', element: P('routing_assignment_rules') },
-      { path: '/admin/sla', element: P('sla_policies_admin') },
-      { path: '/admin/reports', element: P('reports_analytics_admin') },
-      { path: '/admin/audit', element: P('audit_log_admin') },
-      { path: '/admin/channels', element: P('channel_connections_admin') },
-      { path: '/settings', element: P('settings_business_rules') },
+      { path: '/new-claim', element: <NewClaimPage /> },
+      { path: '/claim/:id', element: <ClaimWorkspacePage /> },
+      { path: '/log/:id', element: <LogWorkspacePage /> },
+      { path: '/adjudication/:id', element: P('Medical Adjudication') },
+      { path: '/confirmation', element: <ProviderConfirmationPage /> },
+      { path: '/dashboard', element: <DashboardPage /> },
+      { path: '/notifications', element: <NotificationsPage /> },
+      { path: '/profile', element: <MyProfilePage /> },
+      { path: '/admin/users', element: <UserManagementPage /> },
+      { path: '/admin/roles', element: P('Roles & Permissions') },
+      { path: '/admin/routing', element: P('Routing Rules') },
+      { path: '/admin/sla', element: P('SLA Policies') },
+      { path: '/admin/reports', element: P('Reports & Analytics') },
+      { path: '/admin/audit', element: P('Audit Log') },
+      { path: '/admin/channels', element: P('Channel Connections') },
+      { path: '/settings', element: P('Settings') },
     ],
   },
 ])

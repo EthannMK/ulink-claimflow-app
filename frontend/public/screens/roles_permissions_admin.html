@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ulink Assist - Roles &amp; Permissions</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed": "#2a1800",
+                      "on-primary-container": "#95bff1",
+                      "on-secondary-fixed-variant": "#004f51",
+                      "secondary-container": "#a8eced",
+                      "status-approved": "#2D8A4E",
+                      "tertiary": "#4c2e00",
+                      "on-tertiary-fixed-variant": "#643f00",
+                      "on-tertiary-container": "#e9b268",
+                      "secondary": "#1f686a",
+                      "outline": "#72777f",
+                      "status-pending": "#D97706",
+                      "on-surface-variant": "#42474f",
+                      "background": "#f7f9fc",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#a0cafc",
+                      "surface-container-highest": "#e0e3e6",
+                      "outline-variant": "#c2c7d0",
+                      "surface": "#f7f9fc",
+                      "inverse-primary": "#a0cafc",
+                      "error-container": "#ffdad6",
+                      "primary-fixed": "#d1e4ff",
+                      "on-secondary-container": "#256c6f",
+                      "tertiary-fixed-dim": "#f5bc72",
+                      "tertiary-container": "#6a4300",
+                      "on-background": "#191c1e",
+                      "on-error-container": "#93000a",
+                      "surface-dim": "#d8dadd",
+                      "status-rejected": "#DC2626",
+                      "surface-container": "#eceef1",
+                      "brand-accent": "#ED5500",
+                      "on-primary-fixed-variant": "#184974",
+                      "on-error": "#ffffff",
+                      "on-surface": "#191c1e",
+                      "inverse-surface": "#2d3133",
+                      "status-ai": "#1F4E79",
+                      "on-secondary-fixed": "#002021",
+                      "inverse-on-surface": "#eff1f4",
+                      "secondary-fixed": "#abeef0",
+                      "on-tertiary": "#ffffff",
+                      "surface-container-lowest": "#ffffff",
+                      "tertiary-fixed": "#ffddb5",
+                      "surface-container-low": "#f2f4f7",
+                      "error": "#ba1a1a",
+                      "surface-variant": "#e0e3e6",
+                      "on-primary": "#ffffff",
+                      "primary": "#00375e",
+                      "surface-tint": "#35618d",
+                      "secondary-fixed-dim": "#8fd2d4",
+                      "primary-container": "#1f4e79",
+                      "on-primary-fixed": "#001d35",
+                      "surface-bright": "#f7f9fc",
+                      "surface-container-high": "#e6e8eb",
+                      "text-main": "#485867"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "container-padding": "24px",
+                      "pane-gap": "16px",
+                      "inspector-width": "380px",
+                      "base": "4px",
+                      "sidebar-width": "260px"
+              },
+              "fontFamily": {
+                      "display-lg": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-md-mobile": [
+                              "Hanken Grotesk"
+                      ],
+                      "label-sm": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "title-lg": [
+                              "Inter"
+                      ],
+                      "label-md": [
+                              "Inter"
+                      ],
+                      "headline-sm": [
+                              "Hanken Grotesk"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Hanken Grotesk"
+                      ]
+              }
+            },
+          }
+      </script>
+<style>
+          .material-symbols-outlined {
+            font-variation-settings:
+            'FILL' 0,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 24
+          }
+          .material-symbols-outlined.filled {
+            font-variation-settings:
+            'FILL' 1,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 24
+          }
+          
+          /* Checkbox custom styles */
+          input[type="checkbox"].toggle-switch {
+              appearance: none;
+              width: 36px;
+              height: 20px;
+              background-color: theme('colors.surface-variant');
+              border-radius: theme('borderRadius.full');
+              position: relative;
+              cursor: pointer;
+              outline: none;
+              transition: background-color 0.3s ease;
+          }
+          input[type="checkbox"].toggle-switch::before {
+              content: '';
+              position: absolute;
+              width: 16px;
+              height: 16px;
+              border-radius: theme('borderRadius.full');
+              background-color: theme('colors.on-surface');
+              top: 2px;
+              left: 2px;
+              transition: transform 0.3s ease;
+          }
+          input[type="checkbox"].toggle-switch:checked {
+              background-color: theme('colors.primary');
+          }
+          input[type="checkbox"].toggle-switch:checked::before {
+              transform: translateX(16px);
+              background-color: theme('colors.on-primary');
+          }
+          
+          /* Scrollbar styling for data table */
+          .custom-scrollbar::-webkit-scrollbar {
+              width: 6px;
+              height: 6px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-track {
+              background: transparent;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb {
+              background-color: theme('colors.outline-variant');
+              border-radius: 10px;
+          }
+      </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex overflow-hidden">
+<!-- SideNavBar -->
+<nav class="bg-surface-container dark:bg-surface-container-high fixed left-0 top-0 h-full w-sidebar-width border-r border-outline-variant dark:border-outline flex flex-col p-4 z-20">
+<!-- Brand Header -->
+<div class="flex items-center gap-3 mb-8 px-2">
+<img alt="Ulink Assist Brand Logo" class="h-8 w-auto" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBU1E5a2Th7d6ClStiCDsNaDFy8CYNbAWED_cbCAzf8MBfk30Kx-9P4KTD_97WzkO-u4ULXwFsa9PvYEtAkQdHtpgB835no10zk6PEeeA98nAj55I5uz-Z5cKKaAI3PxYP8qr93aSyqDd_Rdff5rMqz-EB-840oUwXq6mb651BSISJo63uld80X_V05weUNBf7MKmjugJd9eBl8OZb8Ewz7se2Fa3ELod5hcKyuwjVzPC5i4FnpDbFYMyUtY5r7pCmqGg"/>
+<div>
+<h1 class="font-headline-sm text-headline-sm text-primary dark:text-primary-fixed font-bold">Ulink Assist</h1>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Omnichannel Workspace</p>
+</div>
+</div>
+<!-- Primary CTA -->
+<button class="bg-primary hover:bg-surface-tint text-on-primary font-label-md text-label-md py-3 px-4 rounded-lg flex items-center justify-center gap-2 w-full mb-6 transition-colors duration-200">
+<span class="material-symbols-outlined text-[18px]">add</span>
+            New Claim
+        </button>
+<!-- Navigation Links -->
+<ul class="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">assignment</span>
+                    Claims Queue
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">account_tree</span>
+                    Workflows
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+                    Analytics
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+                    AI Insights
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">description</span>
+                    Documents
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-secondary-container dark:bg-primary-container text-on-secondary-container dark:text-on-primary-container font-semibold transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px] filled">settings</span>
+                    Settings
+                </a>
+</li>
+</ul>
+<!-- Bottom User Profile Area (Optional, but good practice in sidebars) -->
+<div class="mt-auto pt-4 border-t border-outline-variant">
+<div class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-variant cursor-pointer transition-colors">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold font-label-sm">
+                    JA
+                </div>
+<div class="flex-1 min-w-0">
+<p class="font-label-sm text-on-surface truncate">JD1 Administrator</p>
+<p class="font-label-sm text-on-surface-variant text-[10px] truncate">Admin User</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">more_vert</span>
+</div>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 ml-[260px] flex flex-col h-screen overflow-hidden">
+<!-- TopNavBar -->
+<header class="bg-surface dark:bg-inverse-surface flex justify-between items-center h-16 px-container-padding border-b border-outline-variant dark:border-outline z-10 shrink-0">
+<div class="flex items-center gap-4">
+<!-- Mobile Menu Button (Hidden on Desktop) -->
+<button class="md:hidden text-on-surface-variant p-1 rounded-md hover:bg-surface-variant">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h2 class="font-title-lg text-title-lg text-primary dark:text-primary-fixed">Roles &amp; Permissions</h2>
+</div>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-4">
+<!-- Search (on left as per json) -->
+<div class="relative hidden sm:block focus-within:ring-2 focus-within:ring-primary rounded-lg transition-shadow">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+<input class="w-64 h-9 pl-9 pr-4 bg-surface-container-low border border-outline-variant rounded-lg font-body-sm text-on-surface focus:outline-none focus:border-primary" placeholder="Search settings..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-9 h-9 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="w-9 h-9 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</div>
+<div class="h-6 w-px bg-outline-variant mx-1"></div>
+<!-- Secondary Action / Profile -->
+<div class="flex items-center gap-2 cursor-pointer group">
+<img alt="User Profile Avatar" class="w-8 h-8 rounded-full object-cover border border-outline-variant group-hover:border-primary transition-colors" data-alt="A small, professional headshot photo of a corporate administrator in a bright office environment, smiling subtly. High quality, well lit." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDr1qaeYxAvrdCLAVs84pv6VWF0liUvHthw3GkMR6PtgYn9vWsF6wer3uxTF_ZzCFHjz9eeVCy6gpTux1h-u-AA2wKfwkVRAJ9Iy6XBIbBeDOGTknkOmeThJ1AxbVg-Xpr-M0SapnmjXNma9XxOY1C6AksGmeR39FCZNIMzexw1s0eCyQ3fzUldfwUsGbflqA2RTcrOOZqR5Ucz0XTZFV0cHz_oIY6PShi3Xpt1V9MFPT1ZCdY_FhKJ"/>
+</div>
+</div>
+</header>
+<!-- Page Canvas -->
+<main class="flex-1 overflow-auto bg-surface p-container-padding">
+<div class="max-w-7xl mx-auto space-y-6">
+<!-- Header Section -->
+<div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-1">Permission Matrix</h3>
+<p class="font-body-md text-on-surface-variant max-w-2xl">Configure granular access control for system roles. Changes are saved automatically and apply to subsequent user sessions.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 border border-outline text-on-surface font-label-md rounded-lg hover:bg-surface-variant transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">history</span>
+                            Audit Log
+                        </button>
+<button class="px-4 py-2 bg-primary text-on-primary font-label-md rounded-lg hover:bg-surface-tint transition-colors flex items-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add_moderator</span>
+                            New Role
+                        </button>
+</div>
+</div>
+<!-- Main Data Table Container (Level 1 Surface) -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+<!-- Toolbar -->
+<div class="px-4 py-3 border-b border-outline-variant bg-surface-container-low flex justify-between items-center">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="font-label-md text-on-surface-variant">Filter by Module:</span>
+<select class="bg-surface border border-outline-variant rounded-md text-body-sm py-1 pl-2 pr-8 focus:ring-1 focus:ring-primary focus:border-primary outline-none">
+<option>All Modules</option>
+<option>Claim Processing</option>
+<option>User Management</option>
+<option>System Configuration</option>
+</select>
+</div>
+</div>
+<div class="text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-status-approved">check_circle</span>
+                            All changes synced
+                        </div>
+</div>
+<!-- The Table -->
+<div class="overflow-x-auto custom-scrollbar">
+<table class="w-full text-left border-collapse min-w-[800px]">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="py-3 px-4 font-label-md text-on-surface w-1/4 sticky left-0 bg-surface-container-low z-10 border-r border-outline-variant shadow-[4px_0_12px_rgba(0,0,0,0.02)]">
+                                        System Action
+                                    </th>
+<th class="py-3 px-4 font-label-md text-center text-on-surface">CSR</th>
+<th class="py-3 px-4 font-label-md text-center text-on-surface">JD1<br/><span class="text-[10px] text-on-surface-variant font-normal">Junior Adj.</span></th>
+<th class="py-3 px-4 font-label-md text-center text-on-surface">JD2<br/><span class="text-[10px] text-on-surface-variant font-normal">Senior Adj.</span></th>
+<th class="py-3 px-4 font-label-md text-center text-on-surface">JD3<br/><span class="text-[10px] text-on-surface-variant font-normal">Lead Adj.</span></th>
+<th class="py-3 px-4 font-label-md text-center text-on-surface">JD4<br/><span class="text-[10px] text-on-surface-variant font-normal">Manager</span></th>
+<th class="py-3 px-4 font-label-md text-center text-primary bg-primary-fixed-dim/10">Admin</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-on-surface divide-y divide-outline-variant">
+<!-- Category: Claim Processing -->
+<tr class="bg-surface-container-low/50">
+<td class="py-2 px-4 font-label-sm text-on-surface-variant uppercase tracking-wider bg-surface-container-high/30" colspan="7">
+                                        Claim Processing
+                                    </td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors group">
+<td class="py-3 px-4 sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-low transition-colors z-10 border-r border-outline-variant">
+<div class="font-medium text-on-surface">View Claim Details</div>
+<div class="text-label-sm text-on-surface-variant mt-0.5">Read-only access to claim records</div>
+</td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center bg-primary-fixed-dim/5"><input checked="" class="toggle-switch" disabled="" type="checkbox"/></td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors group">
+<td class="py-3 px-4 sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-low transition-colors z-10 border-r border-outline-variant">
+<div class="font-medium text-on-surface flex items-center gap-2">
+                                            Edit Claim Metadata
+                                        </div>
+</td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center bg-primary-fixed-dim/5"><input checked="" class="toggle-switch" disabled="" type="checkbox"/></td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors group">
+<td class="py-3 px-4 sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-low transition-colors z-10 border-r border-outline-variant">
+<div class="font-medium text-on-surface">Approve Claim (Level 1)</div>
+<div class="text-label-sm text-on-surface-variant mt-0.5">Threshold &lt; $5,000</div>
+</td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center bg-primary-fixed-dim/5"><input checked="" class="toggle-switch" disabled="" type="checkbox"/></td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors group">
+<td class="py-3 px-4 sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-low transition-colors z-10 border-r border-outline-variant">
+<div class="font-medium text-on-surface">Approve Claim (Level 2)</div>
+<div class="text-label-sm text-on-surface-variant mt-0.5">Threshold &gt; $5,000</div>
+</td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center bg-primary-fixed-dim/5"><input checked="" class="toggle-switch" disabled="" type="checkbox"/></td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors group">
+<td class="py-3 px-4 sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-low transition-colors z-10 border-r border-outline-variant">
+<div class="font-medium text-status-ai flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+                                            Override AI Adjudication
+                                        </div>
+</td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input checked="" class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center bg-primary-fixed-dim/5"><input checked="" class="toggle-switch" disabled="" type="checkbox"/></td>
+</tr>
+<!-- Category: User Management -->
+<tr class="bg-surface-container-low/50">
+<td class="py-2 px-4 font-label-sm text-on-surface-variant uppercase tracking-wider bg-surface-container-high/30 border-t border-outline-variant" colspan="7">
+                                        System Management
+                                    </td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors group">
+<td class="py-3 px-4 sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-low transition-colors z-10 border-r border-outline-variant">
+<div class="font-medium text-on-surface">Manage Users</div>
+</td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" type="checkbox"/></td>
+<td class="py-3 px-4 text-center bg-primary-fixed-dim/5"><input checked="" class="toggle-switch" disabled="" type="checkbox"/></td>
+</tr>
+<tr class="hover:bg-secondary/5 transition-colors group">
+<td class="py-3 px-4 sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-low transition-colors z-10 border-r border-outline-variant">
+<div class="font-medium text-on-surface">Configure Channels</div>
+<div class="text-label-sm text-on-surface-variant mt-0.5">Email, SMS, Portal integrations</div>
+</td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center"><input class="toggle-switch" disabled="" type="checkbox"/></td>
+<td class="py-3 px-4 text-center bg-primary-fixed-dim/5"><input checked="" class="toggle-switch" disabled="" type="checkbox"/></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Bottom Action Bar (Optional context) -->
+<div class="bg-primary-fixed/30 border border-primary-fixed-dim rounded-lg p-4 flex items-center gap-4 text-sm mt-4">
+<span class="material-symbols-outlined text-primary">info</span>
+<p class="text-on-surface"><strong>Note:</strong> Admin role permissions are hardcoded and cannot be modified. They maintain full system access.</p>
+</div>
+</div>
+</main>
+</div>
+</body></html>

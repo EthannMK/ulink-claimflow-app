@@ -1,0 +1,257 @@
+<div class="bg-background text-on-background font-body-md h-screen overflow-hidden flex">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full w-sidebar-width bg-surface-container dark:bg-surface-container-high border-r border-outline-variant dark:border-outline flex flex-col p-4 z-20">
+<div class="flex items-center gap-3 mb-8 px-2">
+<img alt="Ulink Assist Brand Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCuSMz4wJJpT7Qq7jZd7O3Ru3F06RMffbt_-5iN5nfeItG_Mxe5xhuL-kPxxh7mJ8yFWr0jxqgqM5EjUUHg0m5wWgO_YAuwUX2dqBkRBXAoWaJrcj85oZfKP8stSwGa00lCQicX_YbUcW9cqnWGDEmCJ2d7W7QioTwdu1eRaKa9cgNshNDDe3zs4vCaGrvFoMCaRjyIwWnjH8MWKxDUAB8yes-cCmMSHrf7mp0iqeAbtHGi8WaWTkdKvVq48Ul8xMvDAQ"/>
+<div>
+<h1 class="font-headline-sm text-headline-sm text-primary dark:text-primary-fixed font-bold leading-tight">Ulink Assist</h1>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Omnichannel Workspace</span>
+</div>
+</div>
+<button class="bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container font-label-md text-label-md py-3 px-4 rounded-lg flex items-center justify-center gap-2 mb-6 transition-colors duration-200 shadow-sm w-full">
+<span class="material-symbols-outlined text-[18px]">add</span>
+            New Claim
+        </button>
+<ul class="flex-1 space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">assignment</span>
+                    Claims Queue
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">account_tree</span>
+                    Workflows
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+                    Analytics
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+                    AI Insights
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-on-surface-variant dark:text-surface-variant hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px]">description</span>
+                    Documents
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md bg-secondary-container dark:bg-primary-container text-on-secondary-container dark:text-on-primary-container font-semibold transition-colors duration-200 ease-in-out font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[20px] fill-icon">settings</span>
+                    Settings
+                </a>
+</li>
+</ul>
+<div class="mt-auto pt-4 border-t border-outline-variant">
+<div class="flex items-center gap-3 px-2 py-2">
+<img class="w-8 h-8 rounded-full object-cover" data-alt="A professional headshot of a corporate healthcare administrator in a well-lit office setting. High-quality corporate modern aesthetic, clean white background with soft teal accents in clothing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhbe1KZ3C0fAsrsnhnVi5NNL2dv7kNoB84lCZSYFcsBRt1Zb1Ny0RPxtJfCb82bit9gQvoocB1mNi6B4ro9Picf79laYHcMRzfzdyPkyJ_T31z8bTj55qERQdRnezHVjHb_K0nU7yjskBUTzC_vNa065MIXpKYIVUMK-_k0VvvzDoq2Mx40Y5cj_bN2MSSp-oI-ekS5l2FHD2-vjvgGMmebbtvYc9cnJs1QyqpqX-DDCcEhPsc76ec"/>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">JD1 Administrator</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Admin Console</span>
+</div>
+</div>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 ml-[260px] flex flex-col h-full bg-background overflow-hidden relative">
+<!-- TopNavBar -->
+<header class="flex justify-between items-center h-16 px-container-padding bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline shrink-0 z-10 w-full relative">
+<div class="flex items-center gap-4">
+<span class="font-title-lg text-title-lg text-primary dark:text-primary-fixed">Claims Console</span>
+<div class="h-4 w-px bg-outline-variant mx-2"></div>
+<div class="relative focus-within:ring-2 focus-within:ring-primary rounded-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+<input class="w-64 pl-9 pr-4 py-1.5 text-sm bg-surface-container-low border border-outline-variant rounded-md focus:outline-none font-body-sm text-on-surface placeholder-outline transition-colors" placeholder="Search settings..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<div class="h-8 w-8 rounded-full bg-surface-variant border border-outline-variant overflow-hidden flex items-center justify-center">
+<img alt="User Profile Avatar" class="object-cover w-full h-full" data-alt="A high-resolution, professional portrait of a business administrator in a modern, light-filled office. The aesthetic is corporate and trustworthy, featuring neutral tones and a crisp, white environment with soft navy details." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBHn8aU6V7Odfty5tj9-T-ZyO00W59jcuxP7PazLrXCi4YyUZ9zgtP4Eq-WGcSTUH-wIkOaQCqq_h2h9Z-yObomYJ4RgRcT_RN5S3xZXJQiYKq_1qyWG81Ik3MRZMlJHCWqi8NkpbXvys2C-WHlDlvY57NMrAqLghZ8zV-nDpseS5F1n8w5IDTLfQ2zeJijAawxuNskzPgf9z0u7y8B9jP8hy0WVrrwXFp4dsJf85_yfr2AQauw7A2T"/>
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 overflow-y-auto p-container-padding w-full h-full">
+<div class="max-w-5xl mx-auto space-y-6 pb-12">
+<!-- Page Header -->
+<div class="flex justify-between items-end border-b border-outline-variant pb-4">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<a class="text-primary hover:underline font-label-md text-label-md" href="#">Settings</a>
+<span class="material-symbols-outlined text-outline text-[14px]">chevron_right</span>
+<span class="text-on-surface-variant font-label-md text-label-md">Workflow Automation</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Routing &amp; Assignment Rules</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Configure how incoming claims and Letters of Guarantee (LOG) are automatically routed to your team.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 border border-outline text-on-surface hover:bg-surface-variant rounded font-label-md text-label-md transition-colors">Discard Changes</button>
+<button class="px-4 py-2 bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container rounded font-label-md text-label-md transition-colors shadow-sm">Save Configuration</button>
+</div>
+</div>
+<!-- Global Overrides Card -->
+<section class="bg-surface border border-outline-variant rounded-lg p-6 shadow-sm">
+<div class="flex items-start justify-between">
+<div>
+<h3 class="font-title-lg text-title-lg text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-status-ai">smart_toy</span>
+                                AI Auto-Assignment Engine
+                            </h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 max-w-2xl">When active, the AI engine will use the configured rules below to automatically assign tasks to available team members, optimizing for workload and specialization.</p>
+</div>
+<div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+<input checked="" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer z-10 transition-transform duration-200 ease-in-out checked:translate-x-6 checked:border-primary border-outline-variant" id="ai-toggle" name="toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-outline-variant cursor-pointer transition-colors duration-200 ease-in-out" for="ai-toggle"></label>
+</div>
+</div>
+<div class="mt-4 p-3 bg-surface-container-low rounded border border-outline-variant flex items-center gap-3">
+<span class="material-symbols-outlined text-status-pending text-[20px]">info</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Manual override is enabled. Supervisors can always reassign tasks manually from the Claims Queue.</span>
+</div>
+</section>
+<!-- Configuration Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Rule Module: Category Routing -->
+<div class="bg-surface border border-outline-variant rounded-lg flex flex-col h-full shadow-sm">
+<div class="p-5 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest rounded-t-lg">
+<h4 class="font-label-md text-label-md text-on-surface uppercase tracking-wider flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">category</span>
+                                Route by Category
+                            </h4>
+<button class="text-primary hover:underline font-label-sm text-label-sm">Edit Logic</button>
+</div>
+<div class="p-5 flex-1 flex flex-col gap-4">
+<p class="font-body-sm text-body-sm text-on-surface-variant">Direct specific types of requests to specialized teams or queues.</p>
+<div class="space-y-3">
+<div class="flex items-center justify-between p-3 border border-outline-variant rounded bg-surface-container-lowest">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span class="font-body-md text-body-md text-on-surface font-medium">New Claims (Inpatient)</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-1 bg-surface-container rounded text-on-surface-variant">Team: Complex Claims</span>
+</div>
+<div class="flex items-center justify-between p-3 border border-outline-variant rounded bg-surface-container-lowest">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-status-pending"></div>
+<span class="font-body-md text-body-md text-on-surface font-medium">Letter of Guarantee (LOG)</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-1 bg-surface-container rounded text-on-surface-variant">Team: Urgent Response</span>
+</div>
+<div class="flex items-center justify-between p-3 border border-outline-variant rounded bg-surface-container-lowest">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-outline"></div>
+<span class="font-body-md text-body-md text-on-surface font-medium">Outpatient Claims</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-1 bg-surface-container rounded text-on-surface-variant">Round-Robin: All Agents</span>
+</div>
+</div>
+<button class="mt-auto w-full py-2 border border-dashed border-outline-variant text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded transition-colors font-label-md text-label-md flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[16px]">add</span> Add Category Rule
+                            </button>
+</div>
+</div>
+<!-- Rule Module: Insurer Specific -->
+<div class="bg-surface border border-outline-variant rounded-lg flex flex-col h-full shadow-sm">
+<div class="p-5 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest rounded-t-lg">
+<h4 class="font-label-md text-label-md text-on-surface uppercase tracking-wider flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">corporate_fare</span>
+                                Route by Insurer / Payer
+                            </h4>
+<div class="relative inline-block w-8 align-middle select-none">
+<input checked="" class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer z-10 transition-transform duration-200 ease-in-out checked:translate-x-4 checked:border-primary border-outline-variant" id="insurer-toggle" name="toggle2" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-4 rounded-full bg-outline-variant cursor-pointer transition-colors duration-200 ease-in-out" for="insurer-toggle"></label>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col gap-4">
+<p class="font-body-sm text-body-sm text-on-surface-variant">Assign claims to agents dedicated to specific payer SLAs.</p>
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-outline-variant">
+<th class="pb-2 font-label-sm text-label-sm text-on-surface-variant font-medium">Insurer</th>
+<th class="pb-2 font-label-sm text-label-sm text-on-surface-variant font-medium">Assigned To</th>
+</tr>
+</thead>
+<tbody>
+<tr class="border-b border-outline-variant hover:bg-surface-container-low transition-colors">
+<td class="py-3 font-body-md text-body-md text-on-surface">Global Health Alliance</td>
+<td class="py-3 font-body-sm text-body-sm text-on-surface-variant">Agent Group A</td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-surface-container-low transition-colors">
+<td class="py-3 font-body-md text-body-md text-on-surface">MediCare Plus</td>
+<td class="py-3 font-body-sm text-body-sm text-on-surface-variant">Sarah Jenkins (Lead)</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-3 font-body-md text-body-md text-on-surface italic text-outline">All Others</td>
+<td class="py-3 font-body-sm text-body-sm text-on-surface-variant">Default Routing Logic</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Rule Module: Workload Balancing -->
+<div class="bg-surface border border-outline-variant rounded-lg flex flex-col h-full shadow-sm col-span-1 lg:col-span-2">
+<div class="p-5 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest rounded-t-lg">
+<h4 class="font-label-md text-label-md text-on-surface uppercase tracking-wider flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">balance</span>
+                                Default Distribution Logic
+                            </h4>
+</div>
+<div class="p-5 grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="col-span-1 md:col-span-1 flex flex-col justify-center">
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">When a claim does not match any specific Category or Insurer rules above, how should it be distributed among the general pool?</p>
+</div>
+<div class="col-span-1 md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+<!-- Option 1 -->
+<label class="relative flex cursor-pointer rounded-lg border bg-surface-container-lowest p-4 shadow-sm focus:outline-none border-primary ring-1 ring-primary">
+<input checked="" class="sr-only" name="distribution" type="radio" value="workload"/>
+<span class="flex flex-1">
+<span class="flex flex-col">
+<span class="block font-label-md text-label-md text-on-surface mb-1 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">trending_down</span>
+                                                Lowest Workload
+                                            </span>
+<span class="mt-1 flex items-center font-body-sm text-body-sm text-on-surface-variant">
+                                                Assigns to the agent with the fewest active claims currently in their queue.
+                                            </span>
+</span>
+</span>
+<span aria-hidden="true" class="material-symbols-outlined text-primary ml-3">check_circle</span>
+</label>
+<!-- Option 2 -->
+<label class="relative flex cursor-pointer rounded-lg border border-outline-variant bg-surface-container-lowest p-4 shadow-sm focus:outline-none hover:bg-surface-container-low transition-colors">
+<input class="sr-only" name="distribution" type="radio" value="roundrobin"/>
+<span class="flex flex-1">
+<span class="flex flex-col">
+<span class="block font-label-md text-label-md text-on-surface mb-1 flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[18px]">loop</span>
+                                                Round-Robin
+                                            </span>
+<span class="mt-1 flex items-center font-body-sm text-body-sm text-on-surface-variant">
+                                                Distributes evenly in a sequential order across all available agents.
+                                            </span>
+</span>
+</span>
+<span aria-hidden="true" class="material-symbols-outlined text-transparent ml-3">check_circle</span>
+</label>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>

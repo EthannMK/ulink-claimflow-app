@@ -1,0 +1,189 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Ulink Assist - Login</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#d8dadd",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#643f00",
+                        "secondary": "#1f686a",
+                        "error": "#ba1a1a",
+                        "primary": "#00375e",
+                        "status-approved": "#2D8A4E",
+                        "primary-fixed": "#d1e4ff",
+                        "status-ai": "#1F4E79",
+                        "on-surface-variant": "#42474f",
+                        "inverse-primary": "#a0cafc",
+                        "surface-variant": "#e0e3e6",
+                        "inverse-on-surface": "#eff1f4",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed-dim": "#8fd2d4",
+                        "on-tertiary-container": "#e9b268",
+                        "secondary-fixed": "#abeef0",
+                        "tertiary-fixed-dim": "#f5bc72",
+                        "on-primary-fixed-variant": "#184974",
+                        "surface-container-lowest": "#ffffff",
+                        "status-pending": "#D97706",
+                        "primary-fixed-dim": "#a0cafc",
+                        "on-surface": "#191c1e",
+                        "on-primary": "#ffffff",
+                        "tertiary-container": "#6a4300",
+                        "inverse-surface": "#2d3133",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#001d35",
+                        "on-secondary-fixed": "#002021",
+                        "on-secondary-fixed-variant": "#004f51",
+                        "secondary-container": "#a8eced",
+                        "on-primary-container": "#95bff1",
+                        "surface-container-high": "#e6e8eb",
+                        "surface": "#f7f9fc",
+                        "primary-container": "#1f4e79",
+                        "on-secondary": "#ffffff",
+                        "status-rejected": "#DC2626",
+                        "background": "#f7f9fc",
+                        "surface-bright": "#f7f9fc",
+                        "outline-variant": "#c2c7d0",
+                        "surface-container": "#eceef1",
+                        "brand-accent": "#ED5500",
+                        "surface-container-highest": "#e0e3e6",
+                        "on-secondary-container": "#256c6f",
+                        "surface-container-low": "#f2f4f7",
+                        "on-background": "#191c1e",
+                        "on-tertiary-fixed": "#2a1800",
+                        "tertiary-fixed": "#ffddb5",
+                        "outline": "#72777f",
+                        "text-main": "#485867",
+                        "surface-tint": "#35618d",
+                        "tertiary": "#4c2e00",
+                        "error-container": "#ffdad6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "inspector-width": "380px",
+                        "container-padding": "24px",
+                        "pane-gap": "16px",
+                        "base": "4px",
+                        "sidebar-width": "260px"
+                    },
+                    "fontFamily": {
+                        "title-lg": ["Inter"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "label-md": ["Inter"],
+                        "display-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "label-sm": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-md-mobile": ["Hanken Grotesk"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "title-lg": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "display-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "headline-md-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        .soft-ambient-shadow {
+            box-shadow: 0px 4px 12px rgba(31, 78, 121, 0.08);
+        }
+
+        .input-glow:focus-within {
+            box-shadow: 0 0 0 2px rgba(0, 55, 94, 0.2);
+            border-color: theme('colors.primary');
+        }
+    </style>
+</head>
+<body class="bg-[#F5F7FA] text-on-surface min-h-screen flex items-center justify-center p-4 antialiased">
+<!-- Login Container -->
+<div class="w-full max-w-md bg-surface-container-lowest rounded-xl soft-ambient-shadow border border-outline-variant p-8 md:p-10 relative overflow-hidden">
+<!-- Subtle Top Accent -->
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-secondary"></div>
+<!-- Logo Area -->
+<div class="flex flex-col items-center mb-8">
+<div class="mb-4 flex items-center justify-center" style="width: 140px; height: 40px;"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuB9U-SwjeGiPTdWYzvA-bVAhPYWP2-ANj-49BPCkYMX_ZNI-I_SksGkejk-VmTDBR5JabYIva9ao66KnGrIX3NWBZyHdZXFBrwKFmXbmlNkGusQYQzWUFbj3S6xJyjn00CM4Cg3H6IA94fdPUHBL1vp6dYKdBP1c8ZZwgsKmuA4Iky2Q8HNns771n1lz5xYUIFOeSlnWyhMKSyTWy-6k45edkqbDxZ8TrgsfYJWECKO_gSZdfm2G-2D-h0p5um5qkbOSw" alt="Ulink Assist Logo" class="max-w-full max-h-full object-contain"></div>
+<h1 class="font-headline-md text-headline-md text-primary text-center">Ulink Assist</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2 text-center">Omnichannel Workspace</p>
+</div>
+<!-- Login Form -->
+<form class="space-y-6">
+<!-- Email Field -->
+<div class="space-y-1">
+<label class="font-label-md text-label-md text-text-main block" for="email">Email Address</label>
+<div class="relative input-glow rounded transition-all duration-200 border border-outline-variant bg-surface-container-lowest">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-outline text-[20px]">mail</span>
+</div>
+<input class="w-full pl-10 pr-4 py-2 bg-transparent border-none focus:ring-0 font-body-md text-body-md text-on-surface rounded placeholder:text-outline-variant" id="email" name="email" placeholder="administrator@ulink.com" required="" type="email">
+</div>
+</div>
+<!-- Password Field -->
+<div class="space-y-1">
+<div class="flex justify-between items-center">
+<label class="font-label-md text-label-md text-text-main block" for="password">Password</label>
+<a class="font-label-md text-label-md text-primary hover:text-secondary transition-colors" href="#">Forgot password?</a>
+</div>
+<div class="relative input-glow rounded transition-all duration-200 border border-outline-variant bg-surface-container-lowest">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-outline text-[20px]">lock</span>
+</div>
+<input class="w-full pl-10 pr-10 py-2 bg-transparent border-none focus:ring-0 font-body-md text-body-md text-on-surface rounded placeholder:text-outline-variant" id="password" name="password" placeholder="••••••••" required="" type="password">
+<button class="absolute inset-y-0 right-0 pr-3 flex items-center text-outline hover:text-on-surface transition-colors focus:outline-none" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility_off</span>
+</button>
+</div>
+</div>
+<!-- Remember Me -->
+<div class="flex items-center">
+<input class="h-4 w-4 text-primary focus:ring-primary border-outline-variant rounded bg-surface-container-lowest cursor-pointer" id="remember-me" name="remember-me" type="checkbox">
+<label class="ml-2 block font-body-sm text-body-sm text-on-surface-variant cursor-pointer" for="remember-me">
+                    Remember me on this device
+                </label>
+</div>
+<!-- Submit Button -->
+<div>
+<button class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded bg-primary text-on-primary font-label-md text-label-md hover:bg-surface-tint focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors shadow-sm" type="submit">
+                    Sign In to Workspace
+                </button>
+</div>
+</form>
+<!-- Footer Note -->
+<div class="mt-8 pt-6 border-t border-outline-variant text-center">
+<p class="font-label-sm text-label-sm text-outline flex items-center justify-center gap-1">
+<span class="material-symbols-outlined fill text-[14px] text-secondary">verified_user</span>
+                Secure Enterprise Portal
+            </p>
+</div>
+</div>
+
+
+</body></html>

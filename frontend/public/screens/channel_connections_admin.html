@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ulink Assist - Channel Connections</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed": "#2a1800",
+                      "on-primary-container": "#95bff1",
+                      "on-secondary-fixed-variant": "#004f51",
+                      "secondary-container": "#a8eced",
+                      "status-approved": "#2D8A4E",
+                      "tertiary": "#4c2e00",
+                      "on-tertiary-fixed-variant": "#643f00",
+                      "on-tertiary-container": "#e9b268",
+                      "secondary": "#1f686a",
+                      "outline": "#72777f",
+                      "status-pending": "#D97706",
+                      "on-surface-variant": "#42474f",
+                      "background": "#f7f9fc",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#a0cafc",
+                      "surface-container-highest": "#e0e3e6",
+                      "outline-variant": "#c2c7d0",
+                      "surface": "#f7f9fc",
+                      "inverse-primary": "#a0cafc",
+                      "error-container": "#ffdad6",
+                      "primary-fixed": "#d1e4ff",
+                      "on-secondary-container": "#256c6f",
+                      "tertiary-fixed-dim": "#f5bc72",
+                      "tertiary-container": "#6a4300",
+                      "on-background": "#191c1e",
+                      "on-error-container": "#93000a",
+                      "surface-dim": "#d8dadd",
+                      "status-rejected": "#DC2626",
+                      "surface-container": "#eceef1",
+                      "brand-accent": "#ED5500",
+                      "on-primary-fixed-variant": "#184974",
+                      "on-error": "#ffffff",
+                      "on-surface": "#191c1e",
+                      "inverse-surface": "#2d3133",
+                      "status-ai": "#1F4E79",
+                      "on-secondary-fixed": "#002021",
+                      "inverse-on-surface": "#eff1f4",
+                      "secondary-fixed": "#abeef0",
+                      "on-tertiary": "#ffffff",
+                      "surface-container-lowest": "#ffffff",
+                      "tertiary-fixed": "#ffddb5",
+                      "surface-container-low": "#f2f4f7",
+                      "error": "#ba1a1a",
+                      "surface-variant": "#e0e3e6",
+                      "on-primary": "#ffffff",
+                      "primary": "#00375e",
+                      "surface-tint": "#35618d",
+                      "secondary-fixed-dim": "#8fd2d4",
+                      "primary-container": "#1f4e79",
+                      "on-primary-fixed": "#001d35",
+                      "surface-bright": "#f7f9fc",
+                      "surface-container-high": "#e6e8eb",
+                      "text-main": "#485867"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "container-padding": "24px",
+                      "pane-gap": "16px",
+                      "inspector-width": "380px",
+                      "base": "4px",
+                      "sidebar-width": "260px"
+              },
+              "fontFamily": {
+                      "display-lg": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-md-mobile": [
+                              "Hanken Grotesk"
+                      ],
+                      "label-sm": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "title-lg": [
+                              "Inter"
+                      ],
+                      "label-md": [
+                              "Inter"
+                      ],
+                      "headline-sm": [
+                              "Hanken Grotesk"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Hanken Grotesk"
+                      ]
+              },
+              "fontSize": {
+                      "display-lg": [
+                              "36px",
+                              {
+                                      "lineHeight": "44px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-md-mobile": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-sm": [
+                              "11px",
+                              {
+                                      "lineHeight": "14px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "title-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-md": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-sm": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-fill {
+            font-variation-settings: 'FILL' 1;
+        }
+        .soft-shadow {
+            box-shadow: 0px 4px 12px rgba(31, 78, 121, 0.08);
+        }
+        body {
+            background-color: #f7f9fc;
+        }
+    </style>
+</head>
+<body class="text-on-surface font-body-md antialiased overflow-hidden">
+<!-- App Layout -->
+<div class="flex h-screen w-full">
+<!-- SideNavBar Component -->
+<nav class="hidden md:flex flex-col h-screen w-[260px] p-4 bg-surface-container border-r border-outline-variant transition-colors duration-200 ease-in-out shrink-0 z-10">
+<!-- Brand Area -->
+<div class="flex items-center gap-3 px-2 py-4 mb-6">
+<img alt="Ulink Assist Brand Logo" class="h-10 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCW9U0y5dUgaeQlvnemhWYZLrIyYUBn5xRlRBk7j5fIYFLo_81N1VEJFLRXnyQqBdjTZLGupOvlrrtUlmuSQ6hHUQd250TV8fF2IwI7O4lzCTDLdOLrPgnSvSxAawwBttLjudi2ScKO9X4ElJg_gN52uMja69g7cWzXP7KMSxpshnuGYj-t4O5jLuBQvl0PQyJ7X-1fL3-bnWhg1YOFE8WFxw7daezp8UPGbgbn7BvRIZ0QXNl4bUATMdg-askl0zGs2Q"/>
+<div>
+<h1 class="font-headline-sm text-headline-sm text-primary font-bold tracking-tight">Ulink Assist</h1>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Omnichannel Workspace</p>
+</div>
+</div>
+<!-- CTA -->
+<button class="w-full bg-primary hover:bg-primary/90 text-on-primary font-label-md text-label-md py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 mb-6 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                New Claim
+            </button>
+<!-- Navigation Links -->
+<ul class="flex-1 space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-md text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="assignment">assignment</span>
+<span class="font-label-md text-label-md">Claims Queue</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-md text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="account_tree">account_tree</span>
+<span class="font-label-md text-label-md">Workflows</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-md text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="analytics">analytics</span>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-md text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="auto_awesome">auto_awesome</span>
+<span class="font-label-md text-label-md">AI Insights</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-md text-on-surface-variant hover:bg-surface-variant transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="description">description</span>
+<span class="font-label-md text-label-md">Documents</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-md bg-secondary-container text-on-secondary-container font-semibold transition-colors duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px] icon-fill" data-icon="settings">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</li>
+</ul>
+<!-- Bottom User Profile mini -->
+<div class="mt-auto pt-4 border-t border-outline-variant flex items-center gap-3 px-2">
+<img class="w-8 h-8 rounded-full object-cover" data-alt="A small, professional headshot photo of a corporate administrator in a light office setting, modern corporate lighting, high quality." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-xlJZAXWy54nA7N_3zNcwRKnTaIGVMj5INzmnQDWRAQQi6raGd9CPR3OHgiTqRf57SghU9yI7ifs3UAiAeSnBpHgsdEyemfr8QF1vuMauMJd0nQa5Xz5BoyApvhz0qEBYG5rex5MuQ3vPZsLd3s4oek6gbqfAiuxMpCIs1QnuDlWC3bstxA0i7AjrhQj7v_JYGJgevMmg9mrznkxgPWUPgZNv6_kgiETtQqk7E9Pv4Lakii6EyAxE"/>
+<div class="flex-1 min-w-0">
+<p class="font-label-md text-label-md text-on-surface truncate">Admin User</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant truncate">JD1 Administrator</p>
+</div>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-screen overflow-hidden bg-background">
+<!-- TopNavBar Component -->
+<header class="flex justify-between items-center h-16 px-container-padding bg-surface border-b border-outline-variant shrink-0 w-full z-10">
+<div class="flex items-center gap-4">
+<!-- Mobile Menu Trigger (hidden on desktop) -->
+<button class="md:hidden text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h2 class="font-title-lg text-title-lg text-primary font-semibold">Claims Console</h2>
+<span class="text-outline-variant mx-2 hidden sm:inline">|</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface hidden sm:inline">Channel Connections</h3>
+</div>
+<div class="flex items-center gap-6">
+<!-- Search Bar (on_left logic handled in flex ordering if needed, here right aligned for settings context) -->
+<div class="relative hidden lg:block w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+<input class="w-full pl-9 pr-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-md font-body-sm text-body-sm focus-within:ring-2 focus-within:ring-primary focus:outline-none transition-all" placeholder="Search settings..." type="text"/>
+</div>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-3">
+<button class="text-on-surface-variant hover:text-primary transition-colors relative" title="Notifications">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-brand-accent rounded-full border border-surface"></span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors" title="Help">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Scrollable Canvas -->
+<div class="flex-1 overflow-y-auto p-container-padding">
+<!-- Page Header -->
+<div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+<div>
+<h1 class="font-headline-md text-headline-md text-primary">Channel Connections</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Manage inbound communication channels and routing preferences.</p>
+</div>
+<button class="bg-surface hover:bg-surface-variant text-primary border border-outline-variant font-label-md text-label-md py-2 px-4 rounded-md flex items-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-[18px]">add_link</span>
+                        Add Channel
+                    </button>
+</div>
+<div class="flex flex-col xl:flex-row gap-pane-gap">
+<!-- Main Connections Grid -->
+<div class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
+<!-- Email Card -->
+<div class="bg-surface rounded-lg border border-outline-variant p-5 hover:shadow-sm transition-shadow">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-fixed-dim/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">mail</span>
+</div>
+<div>
+<h3 class="font-title-lg text-title-lg text-on-surface">Email Integration</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">claims@ulinkassist.com</p>
+</div>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-status-approved/10 text-status-approved uppercase tracking-wider">
+                                    Active
+                                </span>
+</div>
+<div class="space-y-3 mb-5">
+<div class="flex justify-between items-center py-1 border-b border-surface-container-high">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Last Sync</span>
+<span class="font-body-sm text-body-sm text-on-surface">2 mins ago</span>
+</div>
+<div class="flex justify-between items-center py-1 border-b border-surface-container-high">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Daily Volume</span>
+<span class="font-body-sm text-body-sm text-on-surface">~450 claims</span>
+</div>
+</div>
+<div class="flex justify-end">
+<button class="text-primary font-label-md text-label-md hover:bg-primary-fixed-dim/10 px-3 py-1.5 rounded transition-colors">Configure</button>
+</div>
+</div>
+<!-- Facebook Card -->
+<div class="bg-surface rounded-lg border border-outline-variant p-5 hover:shadow-sm transition-shadow">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-[#1877F2]/10 flex items-center justify-center text-[#1877F2]">
+<span class="material-symbols-outlined">forum</span>
+</div>
+<div>
+<h3 class="font-title-lg text-title-lg text-on-surface">Facebook Messenger</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">@UlinkAssistOfficial</p>
+</div>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-status-approved/10 text-status-approved uppercase tracking-wider">
+                                    Active
+                                </span>
+</div>
+<div class="space-y-3 mb-5">
+<div class="flex justify-between items-center py-1 border-b border-surface-container-high">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Last Sync</span>
+<span class="font-body-sm text-body-sm text-on-surface">Just now</span>
+</div>
+<div class="flex justify-between items-center py-1 border-b border-surface-container-high">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Daily Volume</span>
+<span class="font-body-sm text-body-sm text-on-surface">~120 inquiries</span>
+</div>
+</div>
+<div class="flex justify-end">
+<button class="text-primary font-label-md text-label-md hover:bg-primary-fixed-dim/10 px-3 py-1.5 rounded transition-colors">Configure</button>
+</div>
+</div>
+<!-- Viber Card -->
+<div class="bg-surface rounded-lg border border-outline-variant p-5 hover:shadow-sm transition-shadow">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-[#7360F2]/10 flex items-center justify-center text-[#7360F2]">
+<span class="material-symbols-outlined">chat</span>
+</div>
+<div>
+<h3 class="font-title-lg text-title-lg text-on-surface">Viber Business</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">+1 (555) 019-2834</p>
+</div>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-status-pending/10 text-status-pending uppercase tracking-wider">
+                                    Syncing...
+                                </span>
+</div>
+<div class="space-y-3 mb-5">
+<div class="flex justify-between items-center py-1 border-b border-surface-container-high">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Last Sync</span>
+<span class="font-body-sm text-body-sm text-on-surface text-status-pending">Delayed</span>
+</div>
+<div class="flex justify-between items-center py-1 border-b border-surface-container-high">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Daily Volume</span>
+<span class="font-body-sm text-body-sm text-on-surface">~85 messages</span>
+</div>
+</div>
+<div class="flex justify-end">
+<button class="text-primary font-label-md text-label-md hover:bg-primary-fixed-dim/10 px-3 py-1.5 rounded transition-colors">Configure</button>
+</div>
+</div>
+<!-- Web Form Card -->
+<div class="bg-surface rounded-lg border border-outline-variant p-5 hover:shadow-sm transition-shadow">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed/20 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">web</span>
+</div>
+<div>
+<h3 class="font-title-lg text-title-lg text-on-surface">Member Portal Form</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Direct API Integration</p>
+</div>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-status-approved/10 text-status-approved uppercase tracking-wider">
+                                    Active
+                                </span>
+</div>
+<div class="space-y-3 mb-5">
+<div class="flex justify-between items-center py-1 border-b border-surface-container-high">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Last Sync</span>
+<span class="font-body-sm text-body-sm text-on-surface">Real-time</span>
+</div>
+<div class="flex justify-between items-center py-1 border-b border-surface-container-high">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Daily Volume</span>
+<span class="font-body-sm text-body-sm text-on-surface">~800 submissions</span>
+</div>
+</div>
+<div class="flex justify-end">
+<button class="text-primary font-label-md text-label-md hover:bg-primary-fixed-dim/10 px-3 py-1.5 rounded transition-colors">Configure</button>
+</div>
+</div>
+</div>
+<!-- Inspector Pane: Per-Insurer Routing Notes -->
+<aside class="w-full xl:w-[380px] shrink-0 flex flex-col gap-4">
+<div class="bg-surface rounded-lg border border-outline-variant p-5 soft-shadow h-full flex flex-col">
+<div class="flex items-center justify-between mb-4 pb-3 border-b border-outline-variant">
+<h3 class="font-title-lg text-title-lg text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">route</span>
+                                    Routing Exceptions
+                                </h3>
+<button class="text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">
+                                Manage custom routing rules for specific insurer portals that override default channel behavior.
+                            </p>
+<div class="space-y-4 flex-1 overflow-y-auto pr-1">
+<!-- Rule Item -->
+<div class="p-3 bg-surface-container-low rounded border border-outline-variant/50">
+<div class="flex justify-between items-start mb-2">
+<h4 class="font-label-md text-label-md text-on-surface">AYA Sompo (VIP)</h4>
+<span class="material-symbols-outlined text-[16px] text-secondary">verified_user</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-2">
+                                        All Viber messages from AYA Sompo members must route directly to Tier 2 support queue, bypassing AI triage.
+                                    </p>
+<div class="flex gap-2">
+<span class="px-2 py-0.5 bg-surface-variant text-on-surface-variant text-[10px] rounded uppercase font-semibold">Viber Only</span>
+<span class="px-2 py-0.5 bg-secondary/10 text-secondary text-[10px] rounded uppercase font-semibold">Priority</span>
+</div>
+</div>
+<!-- Rule Item -->
+<div class="p-3 bg-surface-container-low rounded border border-outline-variant/50">
+<div class="flex justify-between items-start mb-2">
+<h4 class="font-label-md text-label-md text-on-surface">KBZ MS General</h4>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-2">
+                                        Email claims missing attachment metadata should auto-trigger a follow-up web form link via SMS.
+                                    </p>
+<div class="flex gap-2">
+<span class="px-2 py-0.5 bg-surface-variant text-on-surface-variant text-[10px] rounded uppercase font-semibold">Email -&gt; SMS</span>
+</div>
+</div>
+</div>
+<button class="mt-4 w-full border border-outline hover:bg-surface-variant text-primary font-label-md text-label-md py-2 rounded-md transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                                Add Routing Note
+                            </button>
+</div>
+</aside>
+</div>
+</div>
+</main>
+</div>
+</body></html>
