@@ -1,0 +1,27 @@
+# Ulink Assist - Product Requirements Document
+
+## Overview
+A unified AI-powered layer for TPA claims administration. Receives requests from Email, Facebook, Viber, Web forms, and Phone. Uses AI for categorization, assignment, and document extraction.
+
+## Roles
+- **Admin**: System configuration and user management.
+- **JD1 (Intake)**: Receive, validate, and summarize.
+- **JD2 (Data Entry)**: Approval for claims < 300,000 MMK or vaccinations.
+- **JD3 (Doctor)**: Medical adjudication for claims >= 300,000 MMK.
+- **JD4 (Payment)**: Processing approved payments.
+- **CSR (Call Center)**: Provider and clinic confirmations.
+
+## Core Features
+- AI Categorization (New Claim, LOG, Query, Complaint, etc.)
+- AI Document Pipeline (Scan, Extract, Check, Summarize)
+- Omnichannel Inbox
+- Role-based Workspaces
+- Adjudication Engine
+- Provider Confirmation Tracker
+- KPI Dashboard
+
+## Design Specs
+- **Primary Color**: #1F4E79 (Deep Navy)
+- **Background**: #F5F7FA (Light Neutral)
+- **Status Colors**: Blue (AI), Green (Done), Amber (Pending), Red (Rejected)
+- **Layout**: Left sidebar navigation, top global search/profile.

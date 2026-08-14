@@ -1,0 +1,108 @@
+openapi: 3.0.3
+info:
+  title: Ulink ClaimFlow API
+  version: 0.1.0
+  description: FE<->BE contract. Frontend mocks and backend responses must match these schemas.
+servers:
+  - url: http://localhost:8000
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses: { '200': { description: OK } }
+  /api/claims:
+    get:
+      summary: List inbox items (claims/requests) with filters
+      parameters:
+        - { name: channel, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: assignee, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+      responses:
+        '200':
+          description: Paged list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClaimList' }
+  /api/claims/{id}:
+    get:
+      summary: Get one claim/request with extracted data and documents
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Claim' }
+          description: A claim
+  /api/users:
+    get:
+      summary: List users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/User' } }
+          description: Users
+components:
+  schemas:
+    Channel:
+      type: string
+      enum: [email, facebook, viber, telegram, webform, phone]
+    Category:
+      type: string
+      enum: [new_claim, log_request, query, complaint, payment_followup, document_submission]
+    Status:
+      type: string
+      enum: [new, in_progress, awaiting_docs, ready_for_review, approved, partially_approved, rejected, closed]
+    Role:
+      type: string
+      enum: [admin, jd1, jd2, jd3, jd4, csr]
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        team: { type: string }
+        active: { type: boolean }
+    Document:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string, description: 'e.g. claim_form, invoice, medical_report, id_copy' }
+        url: { type: string }
+        pages: { type: integer }
+    ExtractedField:
+      type: object
+      properties:
+        key: { type: string }
+        value: { type: string }
+        confidence: { type: number, description: '0..1' }
+    Claim:
+      type: object
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        category: { $ref: '#/components/schemas/Category' }
+        status: { $ref: '#/components/schemas/Status' }
+        insurer: { type: string }
+        memberName: { type: string }
+        policyNumber: { type: string }
+        assignee: { type: string, nullable: true }
+        suggestedAssignee: { type: string, nullable: true }
+        receivedAt: { type: string, format: date-time }
+        documentsComplete: { type: boolean }
+        amount: { type: number, nullable: true }
+        summary: { type: string, nullable: true }
+        extracted: { type: array, items: { $ref: '#/components/schemas/ExtractedField' } }
+        documents: { type: array, items: { $ref: '#/components/schemas/Document' } }
+    ClaimList:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Claim' } }
+        page: { type: integer }
+        total: { type: integer }
