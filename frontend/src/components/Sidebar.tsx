@@ -3,6 +3,7 @@ const groups: { title?: string; items: { to: string; label: string; icon: string
   { items: [
     { to: '/inbox', label: 'Inbox', icon: 'inbox' },
     { to: '/new-claim', label: 'New Claim', icon: 'add_circle' },
+    { to: '/ocr-demo', label: 'Claim Intake AI', icon: 'document_scanner' },
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { to: '/confirmation', label: 'Confirmation', icon: 'fact_check' },
     { to: '/notifications', label: 'Notifications', icon: 'notifications' },
