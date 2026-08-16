@@ -1,5 +1,6 @@
 /** Theme from docs/DESIGN.md — full Stitch token set. */
 export default {
+  safelist: (function(){var t=['primary','brand-accent','secondary','status-ai','status-approved','status-pending','status-rejected','on-surface-variant'];var o=[];t.forEach(function(x){o.push('text-'+x,'bg-'+x,'bg-'+x+'/10');});return o;})(),
   content: ['./index.html', './src/**/*.{ts,tsx}', './src/stitch/*.html'],
   theme: {
     extend: {

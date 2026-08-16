@@ -6,7 +6,7 @@ export function RolesPage() {
       <PageTitle title="Roles & Permissions" sub="What each role can see and do. Admin has full access; agents are scoped to their work." />
       <Card className="overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-surface-container text-on-surface-variant">
+          <thead className="bg-surface-container/70 text-on-surface-variant text-xs uppercase tracking-wide">
             <tr>
               <th className="px-4 py-3 font-semibold text-left">Capability</th>
               {roleCols.map((r) => <th key={r} className="px-4 py-3 font-semibold text-center">{r}</th>)}

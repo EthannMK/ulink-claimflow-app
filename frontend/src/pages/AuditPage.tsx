@@ -6,7 +6,7 @@ export function AuditPage() {
       <PageTitle title="Audit Log" sub="Every action — AI and human — for traceability." />
       <Card className="overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-surface-container text-on-surface-variant text-left">
+          <thead className="bg-surface-container/70 text-on-surface-variant text-left text-xs uppercase tracking-wide">
             <tr>{['Time', 'User', 'Action', 'Item'].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}</tr>
           </thead>
           <tbody>

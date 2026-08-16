@@ -13,7 +13,7 @@ export function ProviderConfirmationPage() {
       <PageTitle title="Provider / Clinic Confirmation" sub="Auto-filled from iAS/Freshdesk — replaces the manual Google Sheet." />
       <Card className="overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-surface-container text-on-surface-variant text-left">
+          <thead className="bg-surface-container/70 text-on-surface-variant text-left text-xs uppercase tracking-wide">
             <tr>{['Input date','Assignee','Reason','Ticket','Member','Provider','Provider phone','Insurer','CSR','Status'].map(h =>
               <th key={h} className="px-3 py-3 font-semibold whitespace-nowrap">{h}</th>)}</tr>
           </thead>

@@ -6,7 +6,7 @@ export function SlaPage() {
       <PageTitle title="SLA Policies" sub="Target response / handling times per request type, with warning and breach thresholds." action={<Button>Add policy</Button>} />
       <Card className="overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-surface-container text-on-surface-variant text-left">
+          <thead className="bg-surface-container/70 text-on-surface-variant text-left text-xs uppercase tracking-wide">
             <tr>{['Request category', 'Target', 'Warn at', 'Breach at', ''].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}</tr>
           </thead>
           <tbody>
