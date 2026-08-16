@@ -6,7 +6,7 @@ export function LoginPage() {
     <div className="min-h-screen grid place-items-center bg-gradient-to-b from-surface to-surface-container px-4">
       <div className="w-[400px] bg-white rounded-2xl border border-outline-variant shadow-md p-8">
         <div className="flex flex-col items-center text-center mb-6">
-          <img src="/ulink-logo.png" alt="Ulink" className="h-16 w-auto mb-2" />
+          <img src="/brand-logo.png" alt="Ulink" className="h-16 w-auto mb-2" />
           <div className="font-display font-bold text-primary text-lg leading-tight">Ulink ClaimFlow</div>
           <div className="text-xs text-text-main">AI claims workspace</div>
         </div>

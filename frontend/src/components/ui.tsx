@@ -45,7 +45,7 @@ export function Button({ children, variant = 'primary', size = 'md', ...p }: any
 export function Logo({ size = 36, showText = true }: { size?: number; showText?: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      <img src="/ulink-logo.png" alt="Ulink" style={{ height: size, width: 'auto' }} />
+      <img src="/brand-logo.png" alt="Ulink" style={{ height: size, width: 'auto' }} />
       {showText && (
         <div className="leading-tight">
           <div className="font-display font-bold text-primary text-[15px]">Ulink ClaimFlow</div>
