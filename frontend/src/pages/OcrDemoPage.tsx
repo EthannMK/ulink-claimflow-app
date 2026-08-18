@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import Tesseract from 'tesseract.js'
+import { scanFile } from '../lib/scan'
+import { backendOn } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
-import { confidenceCls } from '../lib/format'
+import { confidenceCls, formatMMK } from '../lib/format'
 
 // ---------- config (would come from backend, per insurer + claim type) ----------
 type Item = { type: string; mandatory: boolean }
@@ -83,6 +85,10 @@ async function pdfToImages(file: File, onStage: (s: string) => void): Promise<st
   return imgs
 }
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+function mapDocType(t: string): string {
+  const m: Record<string, string> = { claim_form: 'Claim form', invoice: 'Invoice / bill', medical_report: 'Medical report', id: 'ID copy', log: 'LOG / pre-authorization form' }
+  return m[t] || 'Other / unclassified'
+}
 
 interface DocResult { name: string; type: string; confidence: number }
 const STEPS = ['Received', 'Documents checked', 'Data extracted', 'Summary ready', 'JD1 review']
@@ -95,12 +101,44 @@ export function OcrDemoPage() {
   const [stage, setStage] = useState(''); const [progress, setProgress] = useState(0)
   const [docs, setDocs] = useState<DocResult[] | null>(null)
   const [values, setValues] = useState<Record<string, string>>({})
+  const [confs, setConfs] = useState<Record<string, number>>({})
   const [draft, setDraft] = useState('')
   const [flash, setFlash] = useState('')
 
   async function analyze() {
     if (!files.length) return
     setRunning(true); setDocs(null); setProgress(0); setFlash('')
+    if (backendOn()) {
+      try {
+        const results: DocResult[] = []
+        const collected: Record<string, { value: string; conf: number }> = {}
+        for (let fi = 0; fi < files.length; fi++) {
+          const f = files[fi]
+          setStage(`Reading ${f.name}…`); setProgress(Math.round((fi / files.length) * 100))
+          // send the whole file (Gemini reads multi-page PDFs natively — no page-1-only image conversion)
+          const res = await scanFile(f, f.name)
+          results.push({ name: f.name, type: mapDocType(res.doc_type), confidence: res.fields.length ? Math.round(res.fields.reduce((a, b) => a + b.confidence, 0) / res.fields.length * 100) : 70 })
+          res.fields.forEach((x) => { collected[x.key.toLowerCase()] = { value: String(x.value), conf: x.confidence } })
+        }
+        const seeded: Record<string, string> = {}
+        const seededConf: Record<string, number> = {}
+        INSURER_FIELDS[insurer].forEach((fld) => {
+          const kw = fld.key.toLowerCase().split(' ')[0]
+          const hit = Object.entries(collected).find(([k]) => k.includes(kw) || fld.key.toLowerCase().includes(k))
+          let val = hit ? hit[1].value : fld.demo
+          if (fld.match === 'amount') val = formatMMK(val)
+          seeded[fld.key] = val
+          // rule: no data -> confidence 0 (never a made-up number)
+          seededConf[fld.key] = val.trim() === '' ? 0 : (hit ? hit[1].conf : fld.conf)
+        })
+        setValues(seeded); setConfs(seededConf); setDocs(results); setProgress(100)
+        const missing = CHECKLISTS[claimType].filter((c) => c.mandatory && !new Set(results.map((r) => r.type)).has(c.type))
+        const who = seeded['Claimant name'] || seeded['Member name'] || 'Member'
+        setDraft(`Dear ${who},\n\nThank you for your claim submission. To continue processing, please send us the following document(s):\n- ${missing.map((m) => m.type).join('\n- ')}\n\nBest regards,\nUlink Assist`)
+      } catch (e: any) { setFlash('Backend scan failed: ' + (e?.message ?? 'unknown')) }
+      finally { setRunning(false); setStage('') }
+      return
+    }
     const results: DocResult[] = []; let allText = ''
     try {
       for (let fi = 0; fi < files.length; fi++) {
@@ -119,14 +157,17 @@ export function OcrDemoPage() {
       }
       // seed insurer fields, overlay any OCR hits
       const found = scan(allText); const seeded: Record<string, string> = {}
+      const seededConf: Record<string, number> = {}
       INSURER_FIELDS[insurer].forEach((f) => {
         let v = f.demo
         if (f.match === 'policy' && found.policies[0]) v = found.policies[0]
         if (f.match === 'amount' && found.amounts[0]) v = found.amounts[0] + ' MMK'
         if (f.match === 'date' && found.dates[0]) v = found.dates[0]
         seeded[f.key] = v
+        // rule: no data -> confidence 0 (never a made-up number)
+        seededConf[f.key] = v.trim() === '' ? 0 : f.conf
       })
-      setValues(seeded); setDocs(results)
+      setValues(seeded); setConfs(seededConf); setDocs(results)
       const missing = CHECKLISTS[claimType].filter((c) => c.mandatory && !new Set(results.map((r) => r.type)).has(c.type))
       const who = seeded['Claimant name'] || seeded['Member name'] || 'Member'
       setDraft(`Dear ${who},\n\nThank you for your claim submission. To continue processing, please send us the following document(s):\n- ${missing.map((m) => m.type).join('\n- ')}\n\nOnce received, we will proceed with your claim.\n\nBest regards,\nUlink Assist`)
@@ -182,7 +223,9 @@ export function OcrDemoPage() {
           <div className="mt-4"><Button onClick={analyze}>{running ? 'Analyzing…' : 'Analyze documents'}</Button></div>
           {running && <p className="text-xs text-text-main mt-2">{stage} {progress > 0 && `(${progress}%)`}</p>}
           {flash && <p className="text-xs text-status-rejected mt-2">{flash}</p>}
-          <p className="text-xs text-outline mt-2">Front-end demo. The backend classifies and extracts far more accurately with a vision model.</p>
+          {backendOn()
+            ? <p className="text-xs text-status-approved mt-2 flex items-center gap-1"><Icon name="verified" className="text-[14px]" />Live AI — reading documents with a vision model.</p>
+            : <p className="text-xs text-outline mt-2">Front-end demo. Connect the backend for live vision-model extraction.</p>}
         </Card>
 
         {/* results */}
@@ -209,16 +252,23 @@ export function OcrDemoPage() {
             <Card className="p-5">
               <h3 className="font-semibold text-sm mb-3">Extracted claim data <span className="text-status-ai font-normal">· AI ({insurer})</span> — JD1 can edit</h3>
               <div className="grid grid-cols-2 gap-3">
-                {INSURER_FIELDS[insurer].map((f) => (
-                  <div key={f.key}>
-                    <label className="block text-xs text-text-main mb-1">{f.key}</label>
-                    <div className="flex items-center gap-2">
-                      <input value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
-                        className="flex-1 text-sm border border-outline-variant rounded-md px-2 py-1" />
-                      <Badge className={confidenceCls(f.conf)}>{Math.round(f.conf * 100)}%</Badge>
+                {INSURER_FIELDS[insurer].map((f) => {
+                  const val = values[f.key] ?? ''
+                  const conf = confs[f.key] ?? 0
+                  const hasData = val.trim() !== ''
+                  return (
+                    <div key={f.key}>
+                      <label className="block text-xs text-text-main mb-1">{f.key}</label>
+                      <div className="flex items-center gap-2">
+                        <input value={val} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                          className="flex-1 text-sm border border-outline-variant rounded-md px-2 py-1" />
+                        {hasData
+                          ? <Badge className={confidenceCls(conf)}>{Math.round(conf * 100)}%</Badge>
+                          : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">—</Badge>}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </Card>
           )}

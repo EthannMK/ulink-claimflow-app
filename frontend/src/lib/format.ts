@@ -27,6 +27,12 @@ export function timeAgo(iso: string): string {
   if (d < 1440) return `${Math.round(d / 60)}h ago`
   return `${Math.round(d / 1440)}d ago`
 }
+export function formatMMK(v: string): string {
+  if (!/\d/.test(v)) return v
+  const digits = v.replace(/[^\d]/g, '')
+  if (!digits) return v
+  return Number(digits).toLocaleString('en-US') + ' MMK'
+}
 export function confidenceCls(c: number): string {
   if (c >= 0.85) return 'bg-status-approved/10 text-status-approved'
   if (c >= 0.7) return 'bg-status-pending/10 text-status-pending'
