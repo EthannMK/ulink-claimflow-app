@@ -15,9 +15,11 @@ export function InboxPage() {
   const nav = useNavigate()
   const [tab, setTab] = useState('all')
   const [channel, setChannel] = useState('all')
+  const [q, setQ] = useState('')
   const items = useMemo(() => (data?.items ?? []).filter(
     (c) => (tab === 'all' || c.category === tab) && (channel === 'all' || c.channel === channel)
-  ), [data, tab, channel])
+      && (q.trim() === '' || `${c.reference} ${c.memberName} ${c.insurer} ${c.policyNumber ?? ''}`.toLowerCase().includes(q.toLowerCase()))
+  ), [data, tab, channel, q])
   const routeFor = (c: any) => c.category === 'log_request' ? `/log/${c.id}` : `/claim/${c.id}`
 
   return (
@@ -44,7 +46,7 @@ export function InboxPage() {
           <option value="viber">Viber</option><option value="webform">Web form</option><option value="phone">Phone</option>
         </select>
         <div className="flex items-center gap-2 bg-white border border-outline-variant rounded-lg px-3 py-2 text-sm text-outline">
-          <Icon name="search" className="text-[18px]" /><input placeholder="Search…" className="outline-none w-40" />
+          <Icon name="search" className="text-[18px]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search ref, member, insurer…" className="outline-none w-48 text-text-main" />
         </div>
       </div>
 

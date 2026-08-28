@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getClaim } from '../lib/api'
 import { Card, Badge, Icon, Button } from '../components/ui'
 export function AdjudicationPage() {
   const { id } = useParams(); const nav = useNavigate()
+  const [flash, setFlash] = useState('')
   const { data: c } = useQuery({ queryKey: ['claim', id], queryFn: () => getClaim(id!) })
   if (!c) return <p className="text-outline">Loading…</p>
   const big = (c.amount ?? 0) >= 300000
@@ -29,7 +31,12 @@ export function AdjudicationPage() {
           <p className="text-sm text-text-main mb-3">{big
             ? 'Amount exceeds 300,000 MMK — post-hospitalisation items are not covered (Nil), so recommend partial approval excluding those lines. Reason: policy sub-limit.'
             : 'Within limits and covered benefits. No exclusions triggered.'}</p>
-          <div className="flex gap-2"><Button>Approve</Button><Button variant="outline">Partial</Button><Button variant="ghost">Reject</Button></div>
+          <div className="flex gap-2">
+            <Button onClick={() => setFlash('Approved by JD3. Passed to JD4 (payment). ✓')}>Approve</Button>
+            <Button variant="outline" onClick={() => setFlash('Partially approved. Excluded lines noted. ✓')}>Partial</Button>
+            <Button variant="ghost" onClick={() => setFlash('Rejected. Reason recorded. ✓')}>Reject</Button>
+          </div>
+          {flash && <p className="text-sm text-status-approved mt-3 flex items-center gap-1"><Icon name="check_circle" className="text-[18px]" />{flash}</p>}
           <p className="text-xs text-outline mt-3">Doctor makes the final decision; the AI only recommends.</p>
         </Card>
       </div>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getClaim } from '../lib/api'
@@ -5,6 +6,7 @@ import { Card, Badge, Icon, Button } from '../components/ui'
 
 export function LogWorkspacePage() {
   const { id } = useParams(); const nav = useNavigate()
+  const [flash, setFlash] = useState('')
   const { data: c } = useQuery({ queryKey: ['claim', id], queryFn: () => getClaim(id!) })
   if (!c) return <p className="text-outline">Loading…</p>
   return (
@@ -29,7 +31,11 @@ export function LogWorkspacePage() {
             <Icon name="warning" className="text-[18px]" />
             <span>Estimated cost exceeds USD 1,000 — requires insurer approval before issuing the LOG.</span>
           </div>
-          <div className="flex gap-2 mt-4"><Button>Issue LOG</Button><Button variant="outline">Request insurer approval</Button></div>
+          <div className="flex gap-2 mt-4">
+            <Button onClick={() => setFlash('LOG issued and sent to the provider. ✓')}>Issue LOG</Button>
+            <Button variant="outline" onClick={() => setFlash('Insurer approval requested. ✓')}>Request insurer approval</Button>
+          </div>
+          {flash && <p className="text-sm text-status-approved mt-3 flex items-center gap-1"><Icon name="check_circle" className="text-[18px]" />{flash}</p>}
           <p className="text-xs text-outline mt-3">LOG is valid for 1 week from issue.</p>
         </Card>
       </div>

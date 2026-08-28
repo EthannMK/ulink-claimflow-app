@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getClaim } from '../lib/api'
@@ -16,6 +17,7 @@ function SectionHead({ icon, title, tone = 'primary', extra }: { icon: string; t
 }
 export function ClaimWorkspacePage() {
   const { id } = useParams(); const nav = useNavigate()
+  const [flash, setFlash] = useState('')
   const { data: c, isLoading } = useQuery({ queryKey: ['claim', id], queryFn: () => getClaim(id!) })
   if (isLoading) return <p className="text-outline">Loading…</p>
   if (!c) return <p className="text-outline">Claim not found.</p>
@@ -34,8 +36,12 @@ export function ClaimWorkspacePage() {
           </div>
           <div className="text-sm text-text-main">{c.memberName} · {c.insurer}{c.amount ? ` · ${c.amount.toLocaleString()} MMK` : ''}</div>
         </div>
-        <div className="ml-auto flex gap-2"><Button variant="outline">Reassign</Button><Button>Pass to JD2</Button></div>
+        <div className="ml-auto flex gap-2">
+          <Button variant="outline" onClick={() => setFlash('Claim reassigned. ✓')}>Reassign</Button>
+          <Button onClick={() => nav('/jd2')}>Pass to JD2</Button>
+        </div>
       </div>
+      {flash && <div className="mb-4 text-sm text-status-approved flex items-center gap-1"><Icon name="check_circle" className="text-[18px]" />{flash}</div>}
 
       <div className="grid grid-cols-12 gap-4">
         <Card className="col-span-3 p-4 h-fit">
@@ -100,9 +106,9 @@ export function ClaimWorkspacePage() {
             <SectionHead icon="reply" title="Draft reply" />
             <textarea rows={3} className="w-full text-sm border border-outline-variant rounded-md px-2 py-1" defaultValue={c.documentsComplete ? 'Thank you, your claim is complete and under review.' : 'Dear member, please send the missing itemised invoice to proceed.'} />
             <div className="flex flex-wrap gap-2 mt-3">
-              <Button size="sm">Approve &amp; send</Button>
-              <Button size="sm" variant="outline">Request docs</Button>
-              <Button size="sm" variant="ghost">Pass to JD2</Button>
+              <Button size="sm" onClick={() => setFlash('Reply sent to member. ✓')}>Approve &amp; send</Button>
+              <Button size="sm" variant="outline" onClick={() => setFlash('Document request sent to member. ✓')}>Request docs</Button>
+              <Button size="sm" variant="ghost" onClick={() => nav('/jd2')}>Pass to JD2</Button>
             </div>
           </Card>
         </div>
