@@ -9,10 +9,13 @@ export function Sidebar() {
   const main = [
     { to: '/inbox', label: 'Inbox', icon: 'inbox' },
     { to: '/new-claim', label: 'New Claim', icon: 'add_circle' },
-    { to: '/ocr-demo', label: 'Claim Intake AI', icon: 'document_scanner' },
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { to: '/confirmation', label: 'Confirmation', icon: 'fact_check' },
     { to: '/notifications', label: 'Notifications', icon: 'notifications' },
+  ]
+  const pipeline = [
+    { to: '/jd1', label: 'JD1 · Intake & Validation', icon: 'assignment_turned_in' },
+    { to: '/jd2', label: 'JD2 · Adjudication', icon: 'rule' },
   ]
   const admin = [
     ...(isSuper ? [{ to: '/admin/users', label: 'Users & Teams', icon: 'group' }] : []),
@@ -24,7 +27,7 @@ export function Sidebar() {
     { to: '/admin/audit', label: 'Audit Log', icon: 'history' },
     { to: '/settings', label: 'Settings', icon: 'settings' },
   ]
-  const groups = [{ items: main }, ...(isAdmin ? [{ title: 'Admin', items: admin }] : [])]
+  const groups = [{ items: main }, { title: 'Claim pipeline', items: pipeline }, ...(isAdmin ? [{ title: 'Admin', items: admin }] : [])]
   return (
     <aside className="w-60 shrink-0 bg-white border-r border-outline-variant flex flex-col">
       <div className="h-16 flex items-center px-4 border-b border-outline-variant"><Logo size={34} /></div>
@@ -44,7 +47,6 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-      <div className="px-4 py-3 border-t border-outline-variant text-[10px] text-outline">Signed in as {role.replace('_', ' ')}</div>
     </aside>
   )
 }

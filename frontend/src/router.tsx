@@ -3,7 +3,8 @@ import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { InboxPage } from './pages/InboxPage'
 import { NewClaimPage } from './pages/NewClaimPage'
-import { OcrDemoPage } from './pages/OcrDemoPage'
+import { JD1ReviewPage } from './pages/JD1ReviewPage'
+import { JD2AdjudicationPage } from './pages/JD2AdjudicationPage'
 import { ClaimWorkspacePage } from './pages/ClaimWorkspacePage'
 import { LogWorkspacePage } from './pages/LogWorkspacePage'
 import { AdjudicationPage } from './pages/AdjudicationPage'
@@ -28,7 +29,9 @@ export const router = createBrowserRouter([
     children: [
       { path: '/inbox', element: <InboxPage /> },
       { path: '/new-claim', element: <NewClaimPage /> },
-      { path: '/ocr-demo', element: <OcrDemoPage /> },
+      { path: '/jd1', element: <JD1ReviewPage /> },
+      { path: '/jd2', element: <JD2AdjudicationPage /> },
+      { path: '/jd2/:id', element: <JD2AdjudicationPage /> },
       { path: '/claim/:id', element: <ClaimWorkspacePage /> },
       { path: '/log/:id', element: <LogWorkspacePage /> },
       { path: '/adjudication/:id', element: <AdjudicationPage /> },

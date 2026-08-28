@@ -78,3 +78,98 @@ class Claim(BaseModel):
 
 class ClaimList(BaseModel):
     items: list[Claim]; page: int = 1; total: int = 0
+
+
+# ---- JD1 Process Note models (POC) ----
+from pydantic import Field
+
+class NoteField(BaseModel):
+    value: str = ""
+    confidence: float = 0.0     # 0 when no data (per Ulink rule)
+    remark: str = ""
+
+class JD1Header(BaseModel):
+    member_name: NoteField = Field(default_factory=NoteField)
+    insurer: NoteField = Field(default_factory=NoteField)
+    claim_date: NoteField = Field(default_factory=NoteField)
+    company: NoteField = Field(default_factory=NoteField)
+    nrc_passport: NoteField = Field(default_factory=NoteField)
+    total_claim_amount: NoteField = Field(default_factory=NoteField)
+    treatment_date: NoteField = Field(default_factory=NoteField)
+    claim_no: NoteField = Field(default_factory=NoteField)
+    ias_note: str = ""          # what JD1 must verify in the iAS system
+
+class JD1SectionA(BaseModel):   # A. Document checking (Yes/No + remark)
+    document_complete: NoteField = Field(default_factory=NoteField)
+    document_readable: NoteField = Field(default_factory=NoteField)
+    missing_document: NoteField = Field(default_factory=NoteField)
+    duplicate_document: NoteField = Field(default_factory=NoteField)
+    incorrect_inconsistent: NoteField = Field(default_factory=NoteField)
+
+class JD1SectionB(BaseModel):   # B. Claim information (value + remark)
+    policy_member_eligibility: NoteField = Field(default_factory=NoteField)
+    diagnosis: NoteField = Field(default_factory=NoteField)
+    treatment_procedure: NoteField = Field(default_factory=NoteField)
+    admission_discharge_dates: NoteField = Field(default_factory=NoteField)
+    hospital_provider: NoteField = Field(default_factory=NoteField)
+    claim_amount: NoteField = Field(default_factory=NoteField)
+    prescription_medical_report: NoteField = Field(default_factory=NoteField)
+    invoice_receipt: NoteField = Field(default_factory=NoteField)
+
+class JD1SectionC(BaseModel):   # C. Rule / checking (Yes/No/Unclear + remark)
+    covered_status: NoteField = Field(default_factory=NoteField)   # Covered / Not covered / Unclear
+    exclusion_identified: NoteField = Field(default_factory=NoteField)
+    waiting_period_issue: NoteField = Field(default_factory=NoteField)
+    policy_limit_issue: NoteField = Field(default_factory=NoteField)
+    pre_existing_indicator: NoteField = Field(default_factory=NoteField)
+    duplicate_claim_indicator: NoteField = Field(default_factory=NoteField)
+    fraud_indicator: NoteField = Field(default_factory=NoteField)
+    need_investigation: NoteField = Field(default_factory=NoteField)
+
+class ClassifiedDoc(BaseModel):
+    name: str
+    doc_type: str = "Other"     # Claim form / Medical report / Invoice / ID / Policy wording / TOB / LOG / CSR / Other
+    read_method: str = "vision" # "native" (digital text) or "vision" (scanned image)
+    pages: int | None = None
+    confidence: float = 0.0
+
+class JD1Note(BaseModel):
+    claim_type: str = ""        # reimbursement / LOG / API-eclaim
+    header: JD1Header = Field(default_factory=JD1Header)
+    section_a: JD1SectionA = Field(default_factory=JD1SectionA)
+    section_b: JD1SectionB = Field(default_factory=JD1SectionB)
+    section_c: JD1SectionC = Field(default_factory=JD1SectionC)
+    documents: list[ClassifiedDoc] = []
+    checklist_missing: list[str] = []
+    provider: str = "stub"
+    notes: str = ""
+
+
+# ---- JD2 queue (JD1 -> JD2 handoff) --------------------------------------------
+class JD2Status(str, Enum):
+    pending = "pending"          # handed off by JD1, awaiting JD2
+    approved = "approved"
+    partially_approved = "partially_approved"
+    rejected = "rejected"
+
+class JD2Item(BaseModel):
+    id: str
+    created_at: datetime
+    handed_by: str = ""          # JD1 officer username
+    member_name: str = ""
+    insurer: str = ""
+    claim_type: str = ""
+    claim_amount: str = ""
+    status: JD2Status = JD2Status.pending
+    note: JD1Note                # the full JD1 Process Note
+    decision: str | None = None  # approve / partial / reject
+    reasons: str = ""
+    decided_by: str | None = None
+    decided_at: datetime | None = None
+
+class JD2Decision(BaseModel):
+    decision: str                # "approve" | "partial" | "reject"
+    reasons: str = ""
+
+class JD2List(BaseModel):
+    items: list[JD2Item] = []
