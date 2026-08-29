@@ -81,8 +81,7 @@ export function TopBar() {
         </button>
         {menu && (
           <div className="absolute right-0 mt-1 w-44 bg-white border border-outline-variant rounded-lg shadow-lg py-1 z-20">
-            <button onClick={() => { setMenu(false); nav('/profile') }} className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-surface-container"><Icon name="person" className="text-[18px] text-text-main" />My profile</button>
-            <button onClick={() => { setMenu(false); nav('/profile') }} className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-surface-container"><Icon name="lock" className="text-[18px] text-text-main" />Change password</button>
+            <button onClick={() => { setMenu(false); nav('/profile') }} className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-surface-container"><Icon name="person" className="text-[18px] text-text-main" />My profile &amp; password</button>
             <div className="border-t border-outline-variant/60 my-1" />
             <button onClick={logout} className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-surface-container text-status-rejected"><Icon name="logout" className="text-[18px]" />Sign out</button>
           </div>

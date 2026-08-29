@@ -1,7 +1,14 @@
 import { useState } from 'react'
 import { PageTitle, Card, Badge, Icon, Button, AttachField, type Attachment } from '../components/ui'
-import { usePersistent, genId } from '../lib/persist'
+import { AiExtract } from '../components/AiExtract'
+import { usePersistent, useEditable, genId } from '../lib/persist'
 import { DEFAULT_INSURERS, type InsurerConfig, type FieldType } from '../lib/insurers'
+
+function EditBar({ editing, edit, save, cancel }: { editing: boolean; edit: () => void; save: () => void; cancel: () => void }) {
+  return editing
+    ? <div className="flex gap-2"><Button size="sm" variant="ghost" onClick={cancel}>Cancel</Button><Button size="sm" onClick={save}><Icon name="save" className="text-[16px]" />Save changes</Button></div>
+    : <Button size="sm" onClick={edit}><Icon name="edit" className="text-[16px]" />Edit</Button>
+}
 
 // ---------- data shapes ----------
 interface Template { id: string; name: string; channel: string; subject: string; bodyEn: string; bodyMm: string }
@@ -14,7 +21,7 @@ interface Tob { id: string; plan: string; insurer: string; benefits: Benefit[]; 
 const RULE_CATEGORIES = ['Eligibility', 'Documentation', 'Coverage', 'Payment', 'Fraud', 'Waiting period']
 const BENEFIT_CATEGORIES = ['Inpatient', 'Outpatient', 'Day Care', 'Maternity', 'Dental', 'Optical', 'Chronic', 'Other']
 
-const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Business rules', 'Tables of Benefits'] as const
+const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits'] as const
 const inp = 'w-full text-sm border border-outline-variant rounded-md px-2 py-1.5'
 const FIELD_TYPES: FieldType[] = ['text', 'number', 'amount', 'date', 'select', 'textarea']
 
@@ -32,7 +39,7 @@ export function SettingsPage() {
       {tab === 'Insurers & Fields' && <Insurers />}
       {tab === 'Reply templates' && <Templates />}
       {tab === 'Document checklists' && <Checklists />}
-      {tab === 'Business rules' && <Rules />}
+      {tab === 'Adjudication Rules' && <Rules />}
       {tab === 'Tables of Benefits' && <Benefits />}
     </div>
   )
@@ -40,16 +47,21 @@ export function SettingsPage() {
 
 // ---------- Insurers & Fields (drives New Claim, JD1/JD2 display, AI extraction) ----------
 function Insurers() {
-  const [items, setItems] = usePersistent<InsurerConfig[]>('settings.insurers', DEFAULT_INSURERS)
-  const [sel, setSel] = useState<string | null>(items[0]?.id ?? null)
+  const [saved, setSaved] = usePersistent<InsurerConfig[]>('settings.insurers', DEFAULT_INSURERS)
+  const ed = useEditable(saved, setSaved)
+  const items = ed.value
+  const setItems = ed.setDraft
+  const [sel, setSel] = useState<string | null>(saved[0]?.id ?? null)
   const cur = items.find((i) => i.id === sel) || null
   function upd(p: Partial<InsurerConfig>) { if (!cur) return; setItems(items.map((i) => i.id === cur.id ? { ...i, ...p } : i)) }
   function addInsurer() { const c: InsurerConfig = { id: genId(), name: 'New insurer', fields: [] }; setItems([...items, c]); setSel(c.id) }
   function addField() { if (!cur) return; upd({ fields: [...cur.fields, { id: genId(), label: '', type: 'text', required: false, aiHint: '', options: '' }] }) }
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div>
+      <div className="flex justify-end mb-3"><EditBar editing={ed.editing} edit={ed.edit} save={ed.save} cancel={ed.cancel} /></div>
+      <div className="grid grid-cols-12 gap-4">
       <Card className="col-span-3 p-3 h-fit">
-        <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Insurers</h3><button onClick={addInsurer} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button></div>
+        <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Insurers</h3>{ed.editing && <button onClick={addInsurer} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button>}</div>
         {items.map((i) => (
           <button key={i.id} onClick={() => setSel(i.id)} className={`w-full text-left px-2 py-2 rounded-md text-sm flex items-center gap-2 ${sel === i.id ? 'bg-primary/[0.07] text-primary' : 'hover:bg-surface-container'}`}>
             <Icon name="shield" className="text-[16px]" /><span className="flex-1 truncate">{i.name}</span><Badge className="bg-surface-container">{i.fields.length}</Badge>
@@ -57,8 +69,8 @@ function Insurers() {
         ))}
       </Card>
       <Card className="col-span-9 p-5">
-        {!cur ? <p className="text-sm text-text-main text-center py-10">Select an insurer, or click <b>New</b>.</p> : (
-          <div className="space-y-3">
+        {!cur ? <p className="text-sm text-text-main text-center py-10">Select an insurer{ed.editing ? ', or click New' : ''}.</p> : (
+          <div className={`space-y-3 ${ed.editing ? '' : 'pointer-events-none opacity-90'}`}>
             <div className="flex items-center gap-3">
               <div className="flex-1"><label className="block text-xs text-text-main mb-1">Insurer name</label><input className={inp} value={cur.name} onChange={(e) => upd({ name: e.target.value })} /></div>
               <button onClick={() => { setItems(items.filter((i) => i.id !== cur.id)); setSel(null) }} className="text-xs text-status-rejected mt-5">Delete insurer</button>
@@ -84,21 +96,27 @@ function Insurers() {
           </div>
         )}
       </Card>
+      </div>
     </div>
   )
 }
 
 // ---------- Reply templates ----------
 function Templates() {
-  const [items, setItems] = usePersistent<Template[]>('settings.templates', [])
+  const [saved, setSaved] = usePersistent<Template[]>('settings.templates', [])
+  const ed = useEditable(saved, setSaved)
+  const items = ed.value
+  const setItems = ed.setDraft
   const [sel, setSel] = useState<string | null>(null)
   const cur = items.find((t) => t.id === sel) || null
   function add() { const t: Template = { id: genId(), name: 'New template', channel: 'Email', subject: '', bodyEn: '', bodyMm: '' }; setItems([...items, t]); setSel(t.id) }
   function upd(p: Partial<Template>) { if (!cur) return; setItems(items.map((t) => t.id === cur.id ? { ...t, ...p } : t)) }
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div>
+      <div className="flex justify-end mb-3"><EditBar editing={ed.editing} edit={ed.edit} save={ed.save} cancel={ed.cancel} /></div>
+      <div className="grid grid-cols-12 gap-4">
       <Card className="col-span-4 p-3 h-fit">
-        <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Templates</h3><button onClick={add} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button></div>
+        <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Templates</h3>{ed.editing && <button onClick={add} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button>}</div>
         {items.length === 0 && <p className="text-xs text-outline py-4 text-center">No templates yet.</p>}
         {items.map((t) => (
           <button key={t.id} onClick={() => setSel(t.id)} className={`w-full text-left px-2 py-2 rounded-md text-sm flex items-center gap-2 ${sel === t.id ? 'bg-primary/[0.07] text-primary' : 'hover:bg-surface-container'}`}>
@@ -107,8 +125,8 @@ function Templates() {
         ))}
       </Card>
       <Card className="col-span-8 p-5">
-        {!cur ? <p className="text-sm text-text-main text-center py-10">Select a template, or click <b>New</b>.</p> : (
-          <div className="space-y-3">
+        {!cur ? <p className="text-sm text-text-main text-center py-10">Select a template{ed.editing ? ', or click New' : ''}.</p> : (
+          <div className={`space-y-3 ${ed.editing ? '' : 'pointer-events-none opacity-90'}`}>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs text-text-main mb-1">Name</label><input className={inp} value={cur.name} onChange={(e) => upd({ name: e.target.value })} /></div>
               <div><label className="block text-xs text-text-main mb-1">Channel</label>
@@ -128,21 +146,27 @@ function Templates() {
           </div>
         )}
       </Card>
+      </div>
     </div>
   )
 }
 
 // ---------- Document checklists ----------
 function Checklists() {
-  const [items, setItems] = usePersistent<Checklist[]>('settings.checklists', [])
+  const [saved, setSaved] = usePersistent<Checklist[]>('settings.checklists', [])
+  const ed = useEditable(saved, setSaved)
+  const items = ed.value
+  const setItems = ed.setDraft
   const [sel, setSel] = useState<string | null>(null)
   const cur = items.find((c) => c.id === sel) || null
   function add() { const c: Checklist = { id: genId(), insurer: 'AYA Sompo', claimType: 'New claim', items: [] }; setItems([...items, c]); setSel(c.id) }
   function upd(p: Partial<Checklist>) { if (!cur) return; setItems(items.map((c) => c.id === cur.id ? { ...c, ...p } : c)) }
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div>
+      <div className="flex justify-end mb-3"><EditBar editing={ed.editing} edit={ed.edit} save={ed.save} cancel={ed.cancel} /></div>
+      <div className="grid grid-cols-12 gap-4">
       <Card className="col-span-4 p-3 h-fit">
-        <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Checklists</h3><button onClick={add} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button></div>
+        <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Checklists</h3>{ed.editing && <button onClick={add} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button>}</div>
         {items.length === 0 && <p className="text-xs text-outline py-4 text-center">No checklists yet.</p>}
         {items.map((c) => (
           <button key={c.id} onClick={() => setSel(c.id)} className={`w-full text-left px-2 py-2 rounded-md text-sm flex items-center gap-2 ${sel === c.id ? 'bg-primary/[0.07] text-primary' : 'hover:bg-surface-container'}`}>
@@ -151,8 +175,8 @@ function Checklists() {
         ))}
       </Card>
       <Card className="col-span-8 p-5">
-        {!cur ? <p className="text-sm text-text-main text-center py-10">Select a checklist, or click <b>New</b>.</p> : (
-          <div className="space-y-3">
+        {!cur ? <p className="text-sm text-text-main text-center py-10">Select a checklist{ed.editing ? ', or click New' : ''}.</p> : (
+          <div className={`space-y-3 ${ed.editing ? '' : 'pointer-events-none opacity-90'}`}>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs text-text-main mb-1">Insurer</label><input className={inp} value={cur.insurer} onChange={(e) => upd({ insurer: e.target.value })} /></div>
               <div><label className="block text-xs text-text-main mb-1">Claim type</label><input className={inp} value={cur.claimType} onChange={(e) => upd({ claimType: e.target.value })} /></div>
@@ -176,6 +200,7 @@ function Checklists() {
           </div>
         )}
       </Card>
+      </div>
     </div>
   )
 }
@@ -186,9 +211,19 @@ function Rules() {
   const [draft, setDraft] = useState<Rule | null>(null)
   function blank(): Rule { return { id: genId(), name: '', category: 'Eligibility', condition: '', action: '', enabled: true } }
   function save() { if (!draft || !draft.name.trim()) return; setRules((rs) => rs.some((r) => r.id === draft.id) ? rs.map((r) => r.id === draft.id ? draft : r) : [...rs, draft]); setDraft(null) }
+  function addExtracted(items: any[]) {
+    setRules((rs) => [...rs, ...items.map((it) => ({
+      id: genId(), name: it.name || 'Rule',
+      category: RULE_CATEGORIES.includes(it.category) ? it.category : 'Eligibility',
+      condition: it.condition || '', action: it.action || '', enabled: true,
+    }))])
+  }
   return (
     <div>
-      <div className="flex justify-end mb-3"><Button size="sm" onClick={() => setDraft(blank())}><Icon name="add" className="text-[16px]" />Add rule</Button></div>
+      <div className="flex items-center justify-between mb-3">
+        <AiExtract kind="rules" onAdd={addExtracted} />
+        <Button size="sm" onClick={() => setDraft(blank())}><Icon name="add" className="text-[16px]" />Add rule</Button>
+      </div>
       {draft && (
         <Card className="p-4 mb-3">
           <div className="grid grid-cols-2 gap-3">
@@ -201,7 +236,7 @@ function Rules() {
           <div className="flex gap-2 mt-3"><Button size="sm" onClick={save}>Save rule</Button><Button size="sm" variant="ghost" onClick={() => setDraft(null)}>Cancel</Button></div>
         </Card>
       )}
-      {rules.length === 0 && !draft && <Card className="p-8 text-center text-sm text-text-main">No business rules yet. Each rule is a WHEN → THEN the AI applies during checks.</Card>}
+      {rules.length === 0 && !draft && <Card className="p-8 text-center text-sm text-text-main">No adjudication rules yet. Each rule is a WHEN → THEN the AI and JD2/JD3 apply to claim decisions (coverage, exclusions, limits) — separate from ticket Automations.</Card>}
       <div className="space-y-2">
         {rules.map((r) => (
           <Card key={r.id} className={`p-3 ${r.enabled ? '' : 'opacity-50'}`}>
@@ -224,16 +259,21 @@ function Rules() {
 
 // ---------- Tables of Benefits (structured: category, limit, sub-limit, waiting, co-pay + attachment) ----------
 function Benefits() {
-  const [items, setItems] = usePersistent<Tob[]>('settings.tob.v2', [])
+  const [saved, setSaved] = usePersistent<Tob[]>('settings.tob.v2', [])
+  const ed = useEditable(saved, setSaved)
+  const items = ed.value
+  const setItems = ed.setDraft
   const [sel, setSel] = useState<string | null>(null)
   const cur = items.find((t) => t.id === sel) || null
   function add() { const t: Tob = { id: genId(), plan: 'New plan', insurer: '', benefits: [] }; setItems([...items, t]); setSel(t.id) }
   function upd(p: Partial<Tob>) { if (!cur) return; setItems(items.map((t) => t.id === cur.id ? { ...t, ...p } : t)) }
   const setB = (i: number, p: Partial<Benefit>) => cur && upd({ benefits: cur.benefits.map((x, j) => j === i ? { ...x, ...p } : x) })
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div>
+      <div className="flex justify-end mb-3"><EditBar editing={ed.editing} edit={ed.edit} save={ed.save} cancel={ed.cancel} /></div>
+      <div className="grid grid-cols-12 gap-4">
       <Card className="col-span-3 p-3 h-fit">
-        <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Plans</h3><button onClick={add} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button></div>
+        <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Plans</h3>{ed.editing && <button onClick={add} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button>}</div>
         {items.length === 0 && <p className="text-xs text-outline py-4 text-center">No benefit tables yet.</p>}
         {items.map((t) => (
           <button key={t.id} onClick={() => setSel(t.id)} className={`w-full text-left px-2 py-2 rounded-md text-sm flex items-center gap-2 ${sel === t.id ? 'bg-primary/[0.07] text-primary' : 'hover:bg-surface-container'}`}>
@@ -242,12 +282,13 @@ function Benefits() {
         ))}
       </Card>
       <Card className="col-span-9 p-5">
-        {!cur ? <p className="text-sm text-text-main text-center py-10">Select a plan, or click <b>New</b>.</p> : (
-          <div className="space-y-3">
+        {!cur ? <p className="text-sm text-text-main text-center py-10">Select a plan{ed.editing ? ', or click New' : ''}.</p> : (
+          <div className={`space-y-3 ${ed.editing ? '' : 'pointer-events-none opacity-90'}`}>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs text-text-main mb-1">Plan name</label><input className={inp} value={cur.plan} onChange={(e) => upd({ plan: e.target.value })} /></div>
               <div><label className="block text-xs text-text-main mb-1">Insurer</label><input className={inp} value={cur.insurer} onChange={(e) => upd({ insurer: e.target.value })} placeholder="e.g. AYA Sompo" /></div>
             </div>
+            <AiExtract kind="benefits" onAdd={(items) => upd({ benefits: [...cur.benefits, ...items.map((it) => ({ name: it.name || '', category: BENEFIT_CATEGORIES.includes(it.category) ? it.category : 'Other', limit: it.limit || '', subLimit: it.subLimit || '', waiting: it.waiting || '', copay: it.copay || '' }))] })} />
             <div>
               <div className="flex items-center justify-between mb-1"><label className="text-xs text-text-main">Benefits & limits</label>
                 <button onClick={() => upd({ benefits: [...cur.benefits, { name: '', category: 'Inpatient', limit: '', subLimit: '', waiting: '', copay: '' }] })} className="text-xs text-primary">+ Add benefit</button></div>
@@ -272,6 +313,7 @@ function Benefits() {
           </div>
         )}
       </Card>
+      </div>
     </div>
   )
 }

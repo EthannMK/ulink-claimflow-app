@@ -31,5 +31,11 @@ export async function deleteUser(id: string): Promise<Response> {
 export async function changeMyPassword(current_password: string, new_password: string): Promise<Response> {
   return fetch(`${apiBase()}/api/me/password`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ current_password, new_password }) })
 }
+export async function extractDoc(kind: 'rules' | 'benefits', file: File): Promise<any[]> {
+  const fd = new FormData(); fd.append('kind', kind); fd.append('file', file, file.name)
+  const r = await fetch(`${apiBase()}/api/extract`, { method: 'POST', headers: authHeaders(), body: fd })
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Extraction failed (${r.status})`) }
+  return (await r.json()).items
+}
 export async function listConfirmations(): Promise<ConfirmationRecord[]> { await wait(90); return mockConfirmations }
 export async function listNotifs(): Promise<Notif[]> { await wait(80); return mockNotifs }

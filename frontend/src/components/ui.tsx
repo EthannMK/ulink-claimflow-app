@@ -42,16 +42,37 @@ export function Button({ children, variant = 'primary', size = 'md', ...p }: any
   }
   return <button className={`${base} ${sizes[size]} ${variants[variant]}`} {...p}>{children}</button>
 }
-export interface Attachment { name: string; size: number }
+export interface Attachment { name: string; size: number; dataUrl?: string }
+
+function openPreview(a: Attachment) {
+  if (!a.dataUrl) return
+  const [meta, b64] = a.dataUrl.split(',')
+  const mime = (meta.match(/:(.*?);/) || [])[1] || 'application/octet-stream'
+  const bin = atob(b64); const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  const url = URL.createObjectURL(new Blob([arr], { type: mime }))
+  window.open(url, '_blank')
+}
+
 export function AttachField({ value, onChange, label = 'Attach file' }: { value?: Attachment; onChange: (a?: Attachment) => void; label?: string }) {
+  async function pick(f: File) {
+    const base: Attachment = { name: f.name, size: f.size }
+    if (f.size <= 1_800_000) {           // small enough to keep for in-app preview (per-browser)
+      const dataUrl = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(f) })
+      onChange({ ...base, dataUrl })
+    } else onChange(base)                 // too large -> metadata only until server storage
+  }
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div className="flex items-center gap-2 text-xs flex-wrap">
       <label className="inline-flex items-center gap-1 text-primary cursor-pointer hover:underline">
         <Icon name="attach_file" className="text-[14px]" />{label}
-        <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange({ name: f.name, size: f.size }); e.currentTarget.value = '' }} />
+        <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.currentTarget.value = '' }} />
       </label>
       {value && <span className="flex items-center gap-1 text-text-main bg-surface-container rounded px-2 py-0.5">
         <Icon name="description" className="text-[13px]" />{value.name} · {Math.round(value.size / 1024)} KB
+        {value.dataUrl
+          ? <button onClick={() => openPreview(value)} className="text-primary ml-1">Preview</button>
+          : <span className="text-outline ml-1">(too large to preview here)</span>}
         <button onClick={() => onChange(undefined)} className="text-status-rejected ml-1">×</button>
       </span>}
     </div>

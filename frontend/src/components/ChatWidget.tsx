@@ -34,16 +34,17 @@ export function ChatWidget() {
   return (
     <>
       {!open && (
-        <button onClick={() => setOpen(true)} title="Help assistant"
-          className="fixed bottom-5 right-5 z-30 w-14 h-14 rounded-full bg-primary text-white shadow-lg grid place-items-center hover:bg-primary-dark">
-          <Icon name="chat" className="text-[24px]" />
+        <button onClick={() => setOpen(true)} title="Ask the ClaimFlow assistant"
+          className="fixed bottom-5 right-5 z-30 h-14 pl-4 pr-5 rounded-full bg-gradient-to-br from-primary to-brand-accent text-white shadow-xl ring-4 ring-primary/15 flex items-center gap-2 hover:scale-[1.03] transition-transform">
+          <Icon name="auto_awesome" className="text-[22px]" />
+          <span className="text-sm font-semibold">Ask AI</span>
         </button>
       )}
       {open && (
-        <div className="fixed bottom-5 right-5 z-30 w-80 h-[28rem] bg-white border border-outline-variant rounded-xl shadow-2xl flex flex-col">
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-primary text-white rounded-t-xl">
-            <Icon name="smart_toy" className="text-[20px]" />
-            <span className="font-semibold text-sm flex-1">ClaimFlow Assistant</span>
+        <div className="fixed bottom-5 right-5 z-30 w-80 h-[28rem] bg-white border border-outline-variant rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-br from-primary to-brand-accent text-white">
+            <div className="w-8 h-8 rounded-full bg-white/20 grid place-items-center"><Icon name="auto_awesome" className="text-[18px]" /></div>
+            <div className="flex-1 leading-tight"><div className="font-semibold text-sm">ClaimFlow Assistant</div><div className="text-[10px] text-white/80">Here to help you use the system</div></div>
             <button onClick={() => setOpen(false)}><Icon name="close" className="text-[20px]" /></button>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
