@@ -20,7 +20,9 @@ export function UserManagementPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ username: '', name: '', email: '', role: 'user', password: '', team: '' })
   const [msg, setMsg] = useState('')
-  const [teams, setTeams] = usePersistent<Team[]>('teams', [])
+  const [teams, setTeams] = usePersistent<Team[]>('teams.v2', [
+    { id: 'administrators', name: 'Administrators', lead: 'superadmin', members: ['superadmin', 'admin'] },
+  ])
   const [teamName, setTeamName] = useState('')
   const [resetId, setResetId] = useState<string | null>(null)
   const [newPw, setNewPw] = useState('')

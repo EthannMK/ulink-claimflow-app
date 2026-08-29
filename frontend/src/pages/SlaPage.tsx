@@ -9,14 +9,14 @@ interface Sla {
   frMinutes: string; frUnit: string
   resMinutes: string; resUnit: string
   hours: '24x7' | 'business'
-  escalate: boolean; notes: string; attachment?: Attachment
+  escalate: boolean; escalateEmail: string; notes: string; attachment?: Attachment
 }
 const COND_FIELDS = ['Channel', 'Priority', 'Claim type', 'Insurer', 'Business process']
 const OPS = ['is', 'is not', 'contains']
 const UNITS = ['minutes', 'hours', 'days']
 
 function blank(): Sla {
-  return { id: genId(), name: '', enabled: true, match: 'all', conditions: [{ field: 'Channel', op: 'is', value: '' }], frMinutes: '', frUnit: 'hours', resMinutes: '', resUnit: 'hours', hours: 'business', escalate: true, notes: '' }
+  return { id: genId(), name: '', enabled: true, match: 'all', conditions: [{ field: 'Channel', op: 'is', value: '' }], frMinutes: '', frUnit: 'hours', resMinutes: '', resUnit: 'hours', hours: 'business', escalate: true, escalateEmail: '', notes: '' }
 }
 
 export function SlaPage() {
@@ -58,6 +58,10 @@ export function SlaPage() {
             <div><label className="block text-xs text-text-main mb-1">Operating hours</label>
               <select className={`${inp} w-full`} value={draft.hours} onChange={(e) => setDraft({ ...draft, hours: e.target.value as any })}><option value="business">Business hours (Mon–Fri)</option><option value="24x7">24×7</option></select></div>
             <label className="flex items-center gap-2 text-sm mt-6"><input type="checkbox" checked={draft.escalate} onChange={(e) => setDraft({ ...draft, escalate: e.target.checked })} />Escalate & notify on breach</label>
+            {draft.escalate && (
+              <div className="col-span-2"><label className="block text-xs text-text-main mb-1">Notify emails on breach (comma-separated)</label>
+                <input className={`${inp} w-full`} placeholder="lead@ulink.com, ops@ulink.com" value={draft.escalateEmail} onChange={(e) => setDraft({ ...draft, escalateEmail: e.target.value })} /></div>
+            )}
           </div>
           <textarea className={`${inp} w-full mt-3`} rows={2} placeholder="Notes / business-process description" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
           <div className="mt-2"><AttachField value={draft.attachment} onChange={(a) => setDraft({ ...draft, attachment: a })} label="Attach SLA document" /></div>
