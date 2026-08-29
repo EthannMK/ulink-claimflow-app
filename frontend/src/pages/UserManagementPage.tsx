@@ -3,6 +3,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listUsers, createUser, deleteUser, updateUser } from '../lib/api'
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Badge, Button, Icon } from '../components/ui'
+import { usePersistent, genId } from '../lib/persist'
+
+interface Team { id: string; name: string; lead: string; members: string[] } // members = usernames
 
 const roleCls: Record<string, string> = {
   super_admin: 'bg-brand-accent/10 text-brand-accent', admin: 'bg-primary/10 text-primary',
@@ -15,8 +18,10 @@ export function UserManagementPage() {
   const isSuper = getRole() === 'super_admin'
   const { data } = useQuery({ queryKey: ['users'], queryFn: listUsers })
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ username: '', name: '', email: '', role: 'user', password: '' })
+  const [form, setForm] = useState({ username: '', name: '', email: '', role: 'user', password: '', team: '' })
   const [msg, setMsg] = useState('')
+  const [teams, setTeams] = usePersistent<Team[]>('teams', [])
+  const [teamName, setTeamName] = useState('')
   const [resetId, setResetId] = useState<string | null>(null)
   const [newPw, setNewPw] = useState('')
   const [resetMsg, setResetMsg] = useState('')
@@ -29,9 +34,15 @@ export function UserManagementPage() {
     else setResetMsg((await r.json().catch(() => ({}))).detail || 'Failed')
   }
   async function submit() {
-    const r = await createUser(form)
-    if (r.ok) { setOpen(false); setForm({ username: '', name: '', email: '', role: 'user', password: '' }); setMsg(''); qc.invalidateQueries({ queryKey: ['users'] }) }
-    else setMsg((await r.json().catch(() => ({}))).detail || 'Failed to create user')
+    const { team, ...payload } = form
+    const r = await createUser(payload)
+    if (r.ok) {
+      if (team) setTeams((ts) => ts.map((t) => t.id === team ? { ...t, members: Array.from(new Set([...t.members, form.username])) } : t))
+      setOpen(false); setForm({ username: '', name: '', email: '', role: 'user', password: '', team: '' }); setMsg(''); qc.invalidateQueries({ queryKey: ['users'] })
+    } else setMsg((await r.json().catch(() => ({}))).detail || 'Failed to create user')
+  }
+  function toggleMember(teamId: string, username: string) {
+    setTeams((ts) => ts.map((t) => t.id === teamId ? { ...t, members: t.members.includes(username) ? t.members.filter((m) => m !== username) : [...t.members, username] } : t))
   }
   async function remove(id: string) {
     const r = await deleteUser(id); if (r.ok) qc.invalidateQueries({ queryKey: ['users'] })
@@ -50,6 +61,9 @@ export function UserManagementPage() {
           <div><label className="block text-xs text-text-main mb-1">Role</label>
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full text-sm border border-outline-variant rounded-md px-2 py-1.5">
               <option value="user">user</option><option value="admin">admin</option><option value="super_admin">super_admin</option></select></div>
+          <div><label className="block text-xs text-text-main mb-1">Team</label>
+            <select value={form.team} onChange={(e) => setForm({ ...form, team: e.target.value })} className="w-full text-sm border border-outline-variant rounded-md px-2 py-1.5">
+              <option value="">— none —</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
           <div className="col-span-5 flex items-center gap-2"><Button size="sm" onClick={submit}>Create</Button><Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>{msg && <span className="text-xs text-status-rejected">{msg}</span>}</div>
         </Card>
       )}
@@ -91,6 +105,49 @@ export function UserManagementPage() {
           </tbody>
         </table>
       </Card>
+
+      {/* Teams */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-lg font-bold text-primary">Teams</h2>
+          {isSuper && (
+            <div className="flex items-center gap-2">
+              <input value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="New team name (e.g. JD1 Intake)" className="text-sm border border-outline-variant rounded-md px-2 py-1.5 w-56" />
+              <Button size="sm" onClick={() => { if (teamName.trim()) { setTeams([...teams, { id: genId(), name: teamName.trim(), lead: '', members: [] }]); setTeamName('') } }}><Icon name="group_add" className="text-[16px]" />Create team</Button>
+            </div>
+          )}
+        </div>
+        {teams.length === 0 ? (
+          <Card className="p-8 text-center text-sm text-text-main"><Icon name="groups" className="text-[28px] text-outline" /><p className="mt-1">No teams yet. Create one, then map users to it.</p></Card>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            {teams.map((t) => (
+              <Card key={t.id} className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary grid place-items-center"><Icon name="groups" className="text-[18px]" /></div>
+                  <div className="font-semibold text-sm flex-1">{t.name}</div>
+                  <Badge className="bg-surface-container">{t.members.length} member(s)</Badge>
+                  {isSuper && <button onClick={() => setTeams(teams.filter((x) => x.id !== t.id))} className="text-xs text-status-rejected">Delete</button>}
+                </div>
+                <div className="flex items-center gap-2 mb-1">
+                  <label className="text-xs text-text-main">Team lead:</label>
+                  <select value={t.lead} onChange={(e) => setTeams(teams.map((x) => x.id === t.id ? { ...x, lead: e.target.value } : x))} className="text-xs border border-outline-variant rounded px-1.5 py-1">
+                    <option value="">—</option>{(data ?? []).filter((u: any) => t.members.includes(u.username)).map((u: any) => <option key={u.id} value={u.username}>{u.name}</option>)}
+                  </select>
+                </div>
+                <div className="text-xs text-text-main mb-1">Members:</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {(data ?? []).map((u: any) => (
+                    <label key={u.id} className="flex items-center gap-1.5 text-xs">
+                      <input type="checkbox" disabled={!isSuper} checked={t.members.includes(u.username)} onChange={() => toggleMember(t.id, u.username)} />{u.name}
+                    </label>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -42,6 +42,21 @@ export function Button({ children, variant = 'primary', size = 'md', ...p }: any
   }
   return <button className={`${base} ${sizes[size]} ${variants[variant]}`} {...p}>{children}</button>
 }
+export interface Attachment { name: string; size: number }
+export function AttachField({ value, onChange, label = 'Attach file' }: { value?: Attachment; onChange: (a?: Attachment) => void; label?: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <label className="inline-flex items-center gap-1 text-primary cursor-pointer hover:underline">
+        <Icon name="attach_file" className="text-[14px]" />{label}
+        <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange({ name: f.name, size: f.size }); e.currentTarget.value = '' }} />
+      </label>
+      {value && <span className="flex items-center gap-1 text-text-main bg-surface-container rounded px-2 py-0.5">
+        <Icon name="description" className="text-[13px]" />{value.name} · {Math.round(value.size / 1024)} KB
+        <button onClick={() => onChange(undefined)} className="text-status-rejected ml-1">×</button>
+      </span>}
+    </div>
+  )
+}
 export function Logo({ size = 36, showText = true }: { size?: number; showText?: boolean }) {
   return (
     <div className="flex items-center gap-2">

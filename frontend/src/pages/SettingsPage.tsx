@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PageTitle, Card, Badge, Icon, Button } from '../components/ui'
+import { PageTitle, Card, Badge, Icon, Button, AttachField, type Attachment } from '../components/ui'
 import { usePersistent, genId } from '../lib/persist'
 import { DEFAULT_INSURERS, type InsurerConfig, type FieldType } from '../lib/insurers'
 
@@ -7,9 +7,12 @@ import { DEFAULT_INSURERS, type InsurerConfig, type FieldType } from '../lib/ins
 interface Template { id: string; name: string; channel: string; subject: string; bodyEn: string; bodyMm: string }
 interface ChecklistItem { name: string; mandatory: boolean; aiHint: string }
 interface Checklist { id: string; insurer: string; claimType: string; items: ChecklistItem[] }
-interface Rule { id: string; text: string; enabled: boolean }
-interface Benefit { name: string; limit: string }
-interface Tob { id: string; plan: string; benefits: Benefit[] }
+interface Rule { id: string; name: string; category: string; condition: string; action: string; enabled: boolean; attachment?: Attachment }
+interface Benefit { name: string; category: string; limit: string; subLimit: string; waiting: string; copay: string }
+interface Tob { id: string; plan: string; insurer: string; benefits: Benefit[]; attachment?: Attachment }
+
+const RULE_CATEGORIES = ['Eligibility', 'Documentation', 'Coverage', 'Payment', 'Fraud', 'Waiting period']
+const BENEFIT_CATEGORIES = ['Inpatient', 'Outpatient', 'Day Care', 'Maternity', 'Dental', 'Optical', 'Chronic', 'Other']
 
 const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Business rules', 'Tables of Benefits'] as const
 const inp = 'w-full text-sm border border-outline-variant rounded-md px-2 py-1.5'
@@ -177,40 +180,59 @@ function Checklists() {
   )
 }
 
-// ---------- Business rules ----------
+// ---------- Business rules (structured: category · WHEN condition · THEN action) ----------
 function Rules() {
-  const [rules, setRules] = usePersistent<Rule[]>('settings.rules', [])
-  const [text, setText] = useState('')
-  function add() { if (!text.trim()) return; setRules([...rules, { id: genId(), text: text.trim(), enabled: true }]); setText('') }
+  const [rules, setRules] = usePersistent<Rule[]>('settings.rules.v2', [])
+  const [draft, setDraft] = useState<Rule | null>(null)
+  function blank(): Rule { return { id: genId(), name: '', category: 'Eligibility', condition: '', action: '', enabled: true } }
+  function save() { if (!draft || !draft.name.trim()) return; setRules((rs) => rs.some((r) => r.id === draft.id) ? rs.map((r) => r.id === draft.id ? draft : r) : [...rs, draft]); setDraft(null) }
   return (
-    <Card className="p-5 max-w-3xl">
-      <div className="flex items-center gap-2 mb-3">
-        <input className={inp} value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. 60-day submission window; JD2 authority ≤ 300,000 MMK; accepted banks AYA/CB/KBZ/YOMA" />
-        <Button size="sm" onClick={add}>Add rule</Button>
+    <div>
+      <div className="flex justify-end mb-3"><Button size="sm" onClick={() => setDraft(blank())}><Icon name="add" className="text-[16px]" />Add rule</Button></div>
+      {draft && (
+        <Card className="p-4 mb-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="block text-xs text-text-main mb-1">Rule name</label><input className={inp} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Reject if over 60-day window" /></div>
+            <div><label className="block text-xs text-text-main mb-1">Category</label><select className={inp} value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>{RULE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></div>
+            <div><label className="block text-xs text-text-main mb-1">WHEN (condition)</label><input className={inp} value={draft.condition} onChange={(e) => setDraft({ ...draft, condition: e.target.value })} placeholder="e.g. submission date − treatment date > 60 days" /></div>
+            <div><label className="block text-xs text-text-main mb-1">THEN (action / AI guidance)</label><input className={inp} value={draft.action} onChange={(e) => setDraft({ ...draft, action: e.target.value })} placeholder="e.g. flag as out-of-window; JD2 to decide" /></div>
+          </div>
+          <div className="mt-2"><AttachField value={draft.attachment} onChange={(a) => setDraft({ ...draft, attachment: a })} label="Attach source document (policy clause, memo)" /></div>
+          <div className="flex gap-2 mt-3"><Button size="sm" onClick={save}>Save rule</Button><Button size="sm" variant="ghost" onClick={() => setDraft(null)}>Cancel</Button></div>
+        </Card>
+      )}
+      {rules.length === 0 && !draft && <Card className="p-8 text-center text-sm text-text-main">No business rules yet. Each rule is a WHEN → THEN the AI applies during checks.</Card>}
+      <div className="space-y-2">
+        {rules.map((r) => (
+          <Card key={r.id} className={`p-3 ${r.enabled ? '' : 'opacity-50'}`}>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-primary/10 text-primary">{r.category}</Badge>
+              <span className="font-medium text-sm">{r.name}</span>
+              <div className="ml-auto flex items-center gap-3">
+                <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={r.enabled} onChange={() => setRules(rules.map((x) => x.id === r.id ? { ...x, enabled: !x.enabled } : x))} />On</label>
+                <button onClick={() => setDraft(r)} className="text-xs text-primary">Edit</button>
+                <button onClick={() => setRules(rules.filter((x) => x.id !== r.id))} className="text-xs text-status-rejected">Delete</button>
+              </div>
+            </div>
+            <div className="text-xs text-text-main mt-1"><b>When</b> {r.condition || '—'} <b>then</b> {r.action || '—'} {r.attachment && <span className="text-outline">· 📎 {r.attachment.name}</span>}</div>
+          </Card>
+        ))}
       </div>
-      {rules.length === 0 && <p className="text-sm text-outline text-center py-6">No business rules yet.</p>}
-      {rules.map((r) => (
-        <div key={r.id} className="flex items-center gap-2 text-sm py-2 border-b border-outline-variant/40 last:border-0">
-          <Icon name="gavel" className="text-outline" />
-          <span className={`flex-1 ${r.enabled ? '' : 'text-outline line-through'}`}>{r.text}</span>
-          <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={r.enabled} onChange={() => setRules(rules.map((x) => x.id === r.id ? { ...x, enabled: !x.enabled } : x))} />On</label>
-          <button onClick={() => setRules(rules.filter((x) => x.id !== r.id))} className="text-xs text-status-rejected">Delete</button>
-        </div>
-      ))}
-    </Card>
+    </div>
   )
 }
 
-// ---------- Tables of Benefits ----------
+// ---------- Tables of Benefits (structured: category, limit, sub-limit, waiting, co-pay + attachment) ----------
 function Benefits() {
-  const [items, setItems] = usePersistent<Tob[]>('settings.tob', [])
+  const [items, setItems] = usePersistent<Tob[]>('settings.tob.v2', [])
   const [sel, setSel] = useState<string | null>(null)
   const cur = items.find((t) => t.id === sel) || null
-  function add() { const t: Tob = { id: genId(), plan: 'New plan', benefits: [] }; setItems([...items, t]); setSel(t.id) }
+  function add() { const t: Tob = { id: genId(), plan: 'New plan', insurer: '', benefits: [] }; setItems([...items, t]); setSel(t.id) }
   function upd(p: Partial<Tob>) { if (!cur) return; setItems(items.map((t) => t.id === cur.id ? { ...t, ...p } : t)) }
+  const setB = (i: number, p: Partial<Benefit>) => cur && upd({ benefits: cur.benefits.map((x, j) => j === i ? { ...x, ...p } : x) })
   return (
     <div className="grid grid-cols-12 gap-4">
-      <Card className="col-span-4 p-3 h-fit">
+      <Card className="col-span-3 p-3 h-fit">
         <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Plans</h3><button onClick={add} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button></div>
         {items.length === 0 && <p className="text-xs text-outline py-4 text-center">No benefit tables yet.</p>}
         {items.map((t) => (
@@ -219,22 +241,33 @@ function Benefits() {
           </button>
         ))}
       </Card>
-      <Card className="col-span-8 p-5">
+      <Card className="col-span-9 p-5">
         {!cur ? <p className="text-sm text-text-main text-center py-10">Select a plan, or click <b>New</b>.</p> : (
           <div className="space-y-3">
-            <div><label className="block text-xs text-text-main mb-1">Plan name</label><input className={inp} value={cur.plan} onChange={(e) => upd({ plan: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-xs text-text-main mb-1">Plan name</label><input className={inp} value={cur.plan} onChange={(e) => upd({ plan: e.target.value })} /></div>
+              <div><label className="block text-xs text-text-main mb-1">Insurer</label><input className={inp} value={cur.insurer} onChange={(e) => upd({ insurer: e.target.value })} placeholder="e.g. AYA Sompo" /></div>
+            </div>
             <div>
               <div className="flex items-center justify-between mb-1"><label className="text-xs text-text-main">Benefits & limits</label>
-                <button onClick={() => upd({ benefits: [...cur.benefits, { name: '', limit: '' }] })} className="text-xs text-primary">+ Add benefit</button></div>
+                <button onClick={() => upd({ benefits: [...cur.benefits, { name: '', category: 'Inpatient', limit: '', subLimit: '', waiting: '', copay: '' }] })} className="text-xs text-primary">+ Add benefit</button></div>
+              <div className="grid grid-cols-12 gap-2 text-[11px] text-outline uppercase tracking-wide px-1">
+                <span className="col-span-3">Benefit</span><span className="col-span-2">Category</span><span className="col-span-2">Limit</span><span className="col-span-2">Sub-limit</span><span className="col-span-1">Wait</span><span className="col-span-1">Co-pay</span><span className="col-span-1"></span>
+              </div>
               {cur.benefits.map((b, i) => (
-                <div key={i} className="flex items-center gap-2 py-1">
-                  <input className={inp} value={b.name} placeholder="Benefit (e.g. Hospitalisation)" onChange={(e) => upd({ benefits: cur.benefits.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })} />
-                  <input className={inp} value={b.limit} placeholder="Limit (e.g. 11,000,000 MMK)" onChange={(e) => upd({ benefits: cur.benefits.map((x, j) => j === i ? { ...x, limit: e.target.value } : x) })} />
-                  <button onClick={() => upd({ benefits: cur.benefits.filter((_, j) => j !== i) })} className="text-xs text-status-rejected">Remove</button>
+                <div key={i} className="grid grid-cols-12 gap-2 items-center py-0.5">
+                  <input className={`${inp} col-span-3`} value={b.name} placeholder="Hospitalisation" onChange={(e) => setB(i, { name: e.target.value })} />
+                  <select className={`${inp} col-span-2`} value={b.category} onChange={(e) => setB(i, { category: e.target.value })}>{BENEFIT_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+                  <input className={`${inp} col-span-2`} value={b.limit} placeholder="11,000,000" onChange={(e) => setB(i, { limit: e.target.value })} />
+                  <input className={`${inp} col-span-2`} value={b.subLimit} placeholder="per day" onChange={(e) => setB(i, { subLimit: e.target.value })} />
+                  <input className={`${inp} col-span-1`} value={b.waiting} placeholder="30d" onChange={(e) => setB(i, { waiting: e.target.value })} />
+                  <input className={`${inp} col-span-1`} value={b.copay} placeholder="10%" onChange={(e) => setB(i, { copay: e.target.value })} />
+                  <button onClick={() => upd({ benefits: cur.benefits.filter((_, j) => j !== i) })} className="col-span-1 text-xs text-status-rejected">Remove</button>
                 </div>
               ))}
               {cur.benefits.length === 0 && <p className="text-xs text-outline">No benefits — add rows for this plan.</p>}
             </div>
+            <AttachField value={cur.attachment} onChange={(a) => upd({ attachment: a })} label="Attach Table of Benefits (PDF)" />
             <Button variant="ghost" onClick={() => { setItems(items.filter((t) => t.id !== cur.id)); setSel(null) }}><Icon name="delete" className="text-[16px] text-status-rejected" />Delete plan</Button>
           </div>
         )}

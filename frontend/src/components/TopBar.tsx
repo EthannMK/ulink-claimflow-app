@@ -29,7 +29,7 @@ export function TopBar() {
           <input placeholder="Search claims, members, tickets…" className="bg-transparent outline-none text-sm w-full placeholder:text-outline" />
         </div>
       </div>
-      <button className="relative w-9 h-9 rounded-lg hover:bg-surface-container grid place-items-center">
+      <button onClick={() => nav('/notifications')} title="Notifications" className="relative w-9 h-9 rounded-lg hover:bg-surface-container grid place-items-center ml-auto">
         <Icon name="notifications" className="text-[20px] text-text-main" />
         <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-brand-accent" />
       </button>
