@@ -19,6 +19,7 @@ import { SlaPage } from './pages/SlaPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { AuditPage } from './pages/AuditPage'
 import { ChannelsPage } from './pages/ChannelsPage'
+import { AutomationsPage } from './pages/AutomationsPage'
 import { SettingsPage } from './pages/SettingsPage'
 
 export const router = createBrowserRouter([
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
       { path: '/admin/reports', element: <ReportsPage /> },
       { path: '/admin/audit', element: <AuditPage /> },
       { path: '/admin/channels', element: <ChannelsPage /> },
+      { path: '/admin/automations', element: <AutomationsPage /> },
       { path: '/settings', element: <SettingsPage /> },
     ],
   },

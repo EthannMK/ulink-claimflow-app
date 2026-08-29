@@ -23,6 +23,7 @@ export function Sidebar() {
     { to: '/admin/channels', label: 'Channels', icon: 'hub' },
     { to: '/admin/routing', label: 'Routing Rules', icon: 'alt_route' },
     { to: '/admin/sla', label: 'SLA Policies', icon: 'timer' },
+    { to: '/admin/automations', label: 'Automations', icon: 'smart_toy' },
     { to: '/admin/reports', label: 'Reports', icon: 'analytics' },
     { to: '/admin/audit', label: 'Audit Log', icon: 'history' },
     { to: '/settings', label: 'Settings', icon: 'settings' },
