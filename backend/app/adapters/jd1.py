@@ -85,10 +85,12 @@ Produce a JD1 Process Note as STRICT JSON with this exact shape (every leaf is {
                "policy_limit_issue":{...},"pre_existing_indicator":{...},"duplicate_claim_indicator":{...},
                "fraud_indicator":{...},"need_investigation":{...}},
  "doc_types_present": ["Claim form","Invoice / bill","Medical report","ID copy","LOG / pre-authorization form","Policy wording","Table of Benefits","Provider CSR"],
+ "document_count": <integer>,
  "notes": "brief free-text summary"
 }
 
 For "doc_types_present": list every document TYPE you can actually see anywhere in the packet (including inside scanned images — e.g. a hospital invoice or endoscopy report is a "Medical report" or "Invoice / bill" even if the filename is meaningless). Use only the exact labels shown above.
+For "document_count": the total number of DISTINCT documents you can identify across the whole packet. A single uploaded/scanned file can contain several distinct documents (e.g. one PDF holding a claim form + an invoice + a medical report counts as 3). Count every distinct document, not the number of files.
 
 RULES:
 - For section A/C Yes/No fields, "value" is "YES", "NO", or "Unclear"; put reasoning in "remark".
@@ -145,10 +147,12 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
 
     claim_type_hint = detect_claim_type(docs)
     missing = _missing_docs(docs, claim_type_hint)
+    files_count = len(files)
 
     if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
         note = _stub_note(claim_type_hint)
         note.documents = docs; note.checklist_missing = missing; note.provider = "stub"
+        note.files_count = files_count; note.document_count = len(docs)
         return note
 
     # call Gemini once with the whole packet
@@ -160,19 +164,20 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
         r.raise_for_status()
         txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
     except httpx.HTTPStatusError as e:
-        note = JD1Note(claim_type=claim_type_hint, documents=docs, checklist_missing=missing,
+        return JD1Note(claim_type=claim_type_hint, documents=docs, checklist_missing=missing,
+                       files_count=files_count, document_count=len(docs),
                        provider="gemini", notes=f"Gemini HTTP {e.response.status_code}: {e.response.text[:400]}")
-        return note
     except Exception as e:
-        note = JD1Note(claim_type=claim_type_hint, documents=docs, checklist_missing=missing,
+        return JD1Note(claim_type=claim_type_hint, documents=docs, checklist_missing=missing,
+                       files_count=files_count, document_count=len(docs),
                        provider="gemini", notes=f"Gemini error: {e}")
-        return note
 
     m = re.search(r"\{.*\}", txt, re.S)
     try:
         d = json.loads(m.group(0) if m else txt)
     except Exception:
         return JD1Note(claim_type=claim_type_hint, documents=docs, checklist_missing=missing,
+                       files_count=files_count, document_count=len(docs),
                        provider="gemini", notes="Could not parse model JSON. Raw: " + txt[:500])
 
     # checklist from what the vision model actually SAW (content), unioned with digital classification
@@ -182,6 +187,13 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
     req = MANDATORY.get(ctype, MANDATORY["reimbursement"])
     missing2 = [t for t in req if t not in present]
 
+    try:
+        doc_count = int(d.get("document_count") or 0)
+    except (TypeError, ValueError):
+        doc_count = 0
+    if doc_count <= 0:
+        doc_count = max(len(present), len(docs))
+
     note = JD1Note(
         claim_type=ctype,
         header=_header(d.get("header", {})),
@@ -190,6 +202,8 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
         section_c=_section(JD1SectionC, d.get("section_c", {})),
         documents=docs,
         checklist_missing=missing2,
+        files_count=files_count,
+        document_count=doc_count,
         provider="gemini",
         notes=str(d.get("notes", "")),
     )

@@ -1,10 +1,28 @@
 import { useState } from 'react'
 import { PageTitle, Card, Button, Icon } from '../components/ui'
-import { getName } from '../lib/auth'
+import { getName, getAvatar, setAvatar as saveAvatar } from '../lib/auth'
 import { changeMyPassword } from '../lib/api'
+
+// downscale an uploaded image to a small square data URL (keeps localStorage light)
+function toAvatarDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const size = 256
+      const c = document.createElement('canvas'); c.width = size; c.height = size
+      const ctx = c.getContext('2d')!
+      const s = Math.min(img.width, img.height)
+      ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size)
+      resolve(c.toDataURL('image/jpeg', 0.85))
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 export function MyProfilePage() {
   const [name, setName] = useState(getName())
+  const [avatar, setAvatarState] = useState(getAvatar())
   const [lang, setLang] = useState('English')
   const [email, setEmail] = useState(true)
   const [inApp, setInApp] = useState(true)
@@ -29,10 +47,22 @@ export function MyProfilePage() {
       <PageTitle title="My Profile & Preferences" />
       <div className="grid grid-cols-3 gap-4">
         <Card className="p-5 text-center">
-          <div className="w-20 h-20 rounded-full bg-primary text-white grid place-items-center text-2xl font-display font-bold mx-auto mb-3">{name[0]?.toUpperCase() || 'A'}</div>
+          {avatar
+            ? <img src={avatar} alt={name} className="w-20 h-20 rounded-full object-cover mx-auto mb-3" />
+            : <div className="w-20 h-20 rounded-full bg-primary text-white grid place-items-center text-2xl font-display font-bold mx-auto mb-3">{name[0]?.toUpperCase() || 'A'}</div>}
           <div className="font-semibold">{name}</div>
           <div className="text-sm text-text-main">admin@ulink.com</div>
           <div className="text-xs text-outline mt-1">Role: Admin · Team: Ops</div>
+          <div className="flex items-center justify-center gap-2 mt-3">
+            <label className="text-xs text-primary cursor-pointer hover:underline">
+              Change photo
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const f = e.target.files?.[0]; if (!f) return
+                const url = await toAvatarDataUrl(f); saveAvatar(url); setAvatarState(url); e.target.value = ''
+              }} />
+            </label>
+            {avatar && <button onClick={() => { saveAvatar(''); setAvatarState('') }} className="text-xs text-status-rejected hover:underline">Remove</button>}
+          </div>
         </Card>
         <Card className="col-span-2 p-5 space-y-4">
           <div>

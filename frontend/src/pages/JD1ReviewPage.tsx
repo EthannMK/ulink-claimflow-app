@@ -130,8 +130,12 @@ export function JD1ReviewPage() {
                 {note.provider === 'gemini'
                   ? <Badge className="bg-status-approved/10 text-status-approved">Live AI</Badge>
                   : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">Stub</Badge>}
-                <span className="text-xs text-text-main ml-auto">{note.documents.length} document(s)</span>
+                <span className="ml-auto flex items-center gap-2">
+                  <Badge className="bg-primary/10 text-primary">{note.files_count} file(s)</Badge>
+                  <Badge className="bg-status-ai/10 text-status-ai">{note.document_count} document(s)</Badge>
+                </span>
               </div>
+              <p className="text-xs text-outline mt-1">{note.files_count} file(s) uploaded, containing {note.document_count} distinct document(s) detected by the AI.</p>
               {note.checklist_missing.length > 0 && (
                 <div className="mt-3 flex items-start gap-2 text-sm text-status-rejected">
                   <Icon name="warning" className="text-[18px]" />

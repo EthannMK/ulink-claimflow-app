@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { PageTitle, Card, Badge, Button, Icon } from '../components/ui'
+import { PageTitle, Card, Badge, Button } from '../components/ui'
+import { ChannelGlyph } from '../components/BrandIcons'
 import { mockChannels } from '../mocks/admin'
 import { usePersistent } from '../lib/persist'
 
-interface Ch { name: string; icon: string; connected: boolean; last: string; note: string }
+interface Ch { name: string; glyph: string; connected: boolean; last: string; note: string }
 
 export function ChannelsPage() {
-  const [channels, setChannels] = usePersistent<Ch[]>('channels', mockChannels.map((c) => ({ ...c })))
+  const [channels, setChannels] = usePersistent<Ch[]>('channels.v2', mockChannels.map((c) => ({ ...c })))
   const [open, setOpen] = useState<string | null>(null)
   const [key, setKey] = useState('')
   const [note, setNote] = useState('')
@@ -26,7 +27,7 @@ export function ChannelsPage() {
         {channels.map((c) => (
           <Card key={c.name} className="p-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-9 h-9 rounded-lg bg-surface-container grid place-items-center"><Icon name={c.icon} className="text-[20px] text-primary" /></div>
+              <div className="w-9 h-9 rounded-lg bg-surface-container grid place-items-center"><ChannelGlyph glyph={c.glyph} className="text-[20px] text-primary" /></div>
               <div className="font-semibold text-sm">{c.name}</div>
               <Badge className={`ml-auto ${c.connected ? 'bg-status-approved/10 text-status-approved' : 'bg-on-surface-variant/10 text-on-surface-variant'}`}>{c.connected ? 'Connected' : 'Not connected'}</Badge>
             </div>

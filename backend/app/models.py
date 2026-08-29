@@ -145,6 +145,8 @@ class JD1Note(BaseModel):
     section_c: JD1SectionC = Field(default_factory=JD1SectionC)
     documents: list[ClassifiedDoc] = []
     checklist_missing: list[str] = []
+    files_count: int = 0        # physical files uploaded (a file may bundle several documents)
+    document_count: int = 0     # logical documents detected across all files
     provider: str = "stub"
     notes: str = ""
 

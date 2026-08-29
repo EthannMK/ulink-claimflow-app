@@ -16,6 +16,8 @@ export interface JD1Note {
   section_c: Section
   documents: ClassifiedDoc[]
   checklist_missing: string[]
+  files_count: number
+  document_count: number
   provider: string
   notes: string
 }
