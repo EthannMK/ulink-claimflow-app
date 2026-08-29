@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listUsers, createUser, deleteUser } from '../lib/api'
+import { listUsers, createUser, deleteUser, updateUser } from '../lib/api'
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Badge, Button, Icon } from '../components/ui'
 
@@ -17,6 +17,17 @@ export function UserManagementPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ username: '', name: '', email: '', role: 'user', password: '' })
   const [msg, setMsg] = useState('')
+  const [resetId, setResetId] = useState<string | null>(null)
+  const [newPw, setNewPw] = useState('')
+  const [resetMsg, setResetMsg] = useState('')
+
+  async function resetPassword(id: string) {
+    setResetMsg('')
+    if (newPw.length < 6) { setResetMsg('Min 6 characters'); return }
+    const r = await updateUser(id, { password: newPw })
+    if (r.ok) { setResetId(null); setNewPw(''); setResetMsg('') }
+    else setResetMsg((await r.json().catch(() => ({}))).detail || 'Failed')
+  }
   async function submit() {
     const r = await createUser(form)
     if (r.ok) { setOpen(false); setForm({ username: '', name: '', email: '', role: 'user', password: '' }); setMsg(''); qc.invalidateQueries({ queryKey: ['users'] }) }
@@ -50,13 +61,32 @@ export function UserManagementPage() {
           </thead>
           <tbody>
             {(data ?? []).map((u: any) => (
-              <tr key={u.id} className="border-t border-outline-variant hover:bg-surface-container/50">
+              <Fragment key={u.id}>
+              <tr className="border-t border-outline-variant hover:bg-surface-container/50">
                 <td className="px-4 py-3 font-medium">{u.name}</td>
                 <td className="px-4 py-3 text-text-main">{u.email}</td>
                 <td className="px-4 py-3"><Badge className={roleCls[u.role] || 'bg-surface-container'}>{String(u.role).replace('_', ' ').toUpperCase()}</Badge></td>
                 <td className="px-4 py-3"><Badge className="bg-status-approved/10 text-status-approved">{u.active ? 'Active' : 'Disabled'}</Badge></td>
-                <td className="px-4 py-3 text-right">{isSuper && <button onClick={() => remove(u.id)} className="text-xs text-status-rejected hover:underline">Delete</button>}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">{isSuper && <>
+                  <button onClick={() => { setResetId(resetId === u.id ? null : u.id); setNewPw(''); setResetMsg('') }} className="text-xs text-primary hover:underline mr-3">Reset password</button>
+                  <button onClick={() => remove(u.id)} className="text-xs text-status-rejected hover:underline">Delete</button>
+                </>}</td>
               </tr>
+              {isSuper && resetId === u.id && (
+                <tr className="bg-primary/[0.03]">
+                  <td colSpan={5} className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-main">New password for <b>{u.name}</b>:</span>
+                      <input type="text" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="min 6 characters"
+                        className="text-sm border border-outline-variant rounded-md px-2 py-1 w-56" />
+                      <Button size="sm" onClick={() => resetPassword(u.id)}>Set password</Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setResetId(null); setNewPw('') }}>Cancel</Button>
+                      {resetMsg && <span className="text-xs text-status-rejected">{resetMsg}</span>}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>

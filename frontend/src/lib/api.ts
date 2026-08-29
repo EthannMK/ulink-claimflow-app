@@ -22,8 +22,14 @@ export async function listUsers(): Promise<User[]> {
 export async function createUser(body: any): Promise<Response> {
   return fetch(`${apiBase()}/api/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) })
 }
+export async function updateUser(id: string, body: any): Promise<Response> {
+  return fetch(`${apiBase()}/api/users/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) })
+}
 export async function deleteUser(id: string): Promise<Response> {
   return fetch(`${apiBase()}/api/users/${id}`, { method: 'DELETE', headers: authHeaders() })
+}
+export async function changeMyPassword(current_password: string, new_password: string): Promise<Response> {
+  return fetch(`${apiBase()}/api/me/password`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ current_password, new_password }) })
 }
 export async function listConfirmations(): Promise<ConfirmationRecord[]> { await wait(90); return mockConfirmations }
 export async function listNotifs(): Promise<Notif[]> { await wait(80); return mockNotifs }

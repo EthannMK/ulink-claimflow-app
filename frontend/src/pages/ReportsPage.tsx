@@ -3,6 +3,28 @@ import * as XLSX from 'xlsx'
 import { PageTitle, Card, Button, Icon, Badge } from '../components/ui'
 import { mockClaims } from '../mocks/claims'
 import { mockConfirmations } from '../mocks/confirmations'
+import { genId } from '../lib/persist'
+
+// fuzzy column getter: matches header names ignoring case/spaces/punctuation
+function col(row: any, ...names: string[]): string {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+  for (const n of names) {
+    const k = Object.keys(row).find((key) => norm(key) === norm(n) || norm(key).includes(norm(n)))
+    if (k != null && row[k] != null) return String(row[k])
+  }
+  return ''
+}
+function mapConfirmation(r: any) {
+  return {
+    id: genId(),
+    inputDate: col(r, 'inputdate', 'date') || new Date().toISOString().slice(0, 10),
+    assignee: col(r, 'assignee', 'owner'), reason: col(r, 'reason'),
+    ticket: col(r, 'ticket', 'ticketno'), claim: col(r, 'claim', 'claimno', 'policy'),
+    member: col(r, 'member', 'membername', 'patient'), provider: col(r, 'provider', 'hospital', 'clinic'),
+    providerPhone: col(r, 'providerphone', 'phone'), insurer: col(r, 'insurer'),
+    csr: col(r, 'csr'), status: (col(r, 'status') || 'Pending') as any,
+  }
+}
 
 const rawRows = () => mockClaims.map((c) => ({
   Reference: c.reference, Channel: c.channel, Category: c.category, Status: c.status,
@@ -43,6 +65,26 @@ const reports = [
 export function ReportsPage() {
   const [from, setFrom] = useState('2026-08-01')
   const [to, setTo] = useState('2026-08-31')
+  const [importMsg, setImportMsg] = useState('')
+
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(ev.target!.result as ArrayBuffer), { type: 'array' })
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]) as any[]
+        if (!rows.length) { setImportMsg('No rows found in that file.'); return }
+        const mapped = rows.map(mapConfirmation)
+        const key = 'ulink:confirmations'
+        const existing = JSON.parse(localStorage.getItem(key) || '[]')
+        localStorage.setItem(key, JSON.stringify([...mapped, ...existing]))
+        setImportMsg(`Imported ${mapped.length} record(s) into Provider Confirmation. Open that tab to review.`)
+      } catch (err: any) { setImportMsg('Could not read that file: ' + (err?.message ?? 'unknown')) }
+    }
+    reader.readAsArrayBuffer(file); e.target.value = ''
+  }
+
   return (
     <div>
       <PageTitle title="Reports & Analytics" sub="Download raw data across all dimensions and offline Excel dashboards." />
@@ -52,6 +94,22 @@ export function ReportsPage() {
         <div><label className="block text-xs text-text-main mb-1">From</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="text-sm border border-outline-variant rounded-md px-2 py-1.5" /></div>
         <div><label className="block text-xs text-text-main mb-1">To</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="text-sm border border-outline-variant rounded-md px-2 py-1.5" /></div>
         <div className="text-xs text-outline ml-auto">Exports reflect the selected range (demo uses sample data).</div>
+      </Card>
+
+      {/* import */}
+      <Card className="p-5 mb-5 border-l-4 border-primary">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary grid place-items-center"><Icon name="upload_file" className="text-[24px]" /></div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2"><h3 className="font-semibold">Import your data</h3><Badge className="bg-primary/10 text-primary">CSV · XLSX</Badge></div>
+            <p className="text-sm text-text-main">Upload a spreadsheet from your existing system — it loads into the Provider Confirmation register. Columns are matched by name (member, provider, insurer, ticket, status…).</p>
+            {importMsg && <p className="text-xs text-status-approved mt-1">{importMsg}</p>}
+          </div>
+          <label className="inline-flex items-center gap-1.5 rounded-lg font-semibold px-4 py-2 text-sm bg-primary text-white hover:bg-primary-dark shadow-sm cursor-pointer">
+            <Icon name="upload" className="text-[18px]" /> Choose file
+            <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImport} />
+          </label>
+        </div>
       </Card>
 
       {/* featured Excel dashboard */}

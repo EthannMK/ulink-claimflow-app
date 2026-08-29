@@ -34,6 +34,10 @@ class Token(BaseModel):
     role: Role
     name: str
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
 class ScanField(BaseModel):
     key: str
     value: str
