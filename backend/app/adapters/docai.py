@@ -41,7 +41,9 @@ def review(data: bytes, mime: str) -> ReviewResult:
         client = documentai.DocumentProcessorServiceClient(client_options=opts)
         name = client.processor_path(settings.docai_project, settings.docai_location, settings.docai_processor_id)
         raw = documentai.RawDocument(content=data, mime_type=mime or "application/pdf")
-        result = client.process_document(request=documentai.ProcessRequest(name=name, raw_document=raw))
+        # imageless_mode: we render the preview ourselves, so skip DocAI's images -> raises the
+        # sync page limit from 15 to 30. Bounding boxes are still returned.
+        result = client.process_document(request=documentai.ProcessRequest(name=name, raw_document=raw, imageless_mode=True))
         doc = result.document
     except Exception as e:
         return ReviewResult(error=f"Document AI error: {e}")

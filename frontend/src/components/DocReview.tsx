@@ -7,7 +7,7 @@ async function renderPdfPages(file: File): Promise<string[]> {
   const pdfjs: any = await import('pdfjs-dist')
   pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
   const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
-  const n = Math.min(pdf.numPages, 15); const imgs: string[] = []
+  const n = Math.min(pdf.numPages, 30); const imgs: string[] = []
   for (let i = 1; i <= n; i++) {
     const page = await pdf.getPage(i); const vp = page.getViewport({ scale: 2 })
     const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height
