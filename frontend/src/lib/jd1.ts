@@ -8,6 +8,18 @@ export interface JD1Header {
 }
 export type Section = Record<string, NoteField>
 export interface ClassifiedDoc { name: string; doc_type: string; read_method: string; pages?: number | null; confidence: number }
+
+export interface AuditEntry { field: string; old: string; new: string; by: string; at: string | null }
+export interface InvoiceItem {
+  id: string; description: string; provider: string; date: string
+  amount: string; amount_original: string; readable: boolean
+  confidence: number; page: number; source_file: string; audit: AuditEntry[]
+}
+export interface InvoiceSummary {
+  items: InvoiceItem[]; count: number; invoices_total: string; claim_total: string
+  reconciled: boolean; difference: string; unreadable_count: number; note: string
+}
+
 export interface JD1Note {
   claim_type: string
   header: JD1Header
@@ -15,11 +27,42 @@ export interface JD1Note {
   section_b: Section
   section_c: Section
   documents: ClassifiedDoc[]
+  checklist_required: string[]
   checklist_missing: string[]
+  invoices: InvoiceSummary
+  ai_summary: string
   files_count: number
   document_count: number
   provider: string
   notes: string
+}
+
+// ---- amount helpers + client-side reconciliation (after JD1 edits an amount) ----
+export function amountToInt(s: string): number | null {
+  const digits = (s || '').replace(/[^\d]/g, '')
+  return digits ? parseInt(digits, 10) : null
+}
+export function fmtMMK(n: number): string { return `${n.toLocaleString('en-US')} MMK` }
+
+/** Recompute the InvoiceSummary totals + verdict from the current item amounts. */
+export function reconcileInvoices(inv: InvoiceSummary): InvoiceSummary {
+  const items = inv.items
+  const readable = items.filter((i) => amountToInt(i.amount) !== null)
+  const unreadable = items.length - readable.length
+  const sum = readable.reduce((a, i) => a + (amountToInt(i.amount) || 0), 0)
+  const claimInt = amountToInt(inv.claim_total)
+  let reconciled = false, difference = '', note = ''
+  if (unreadable > 0) {
+    note = `${unreadable} of ${items.length} invoice amount(s) not readable — verify manually before trusting the total.`
+  } else if (claimInt === null) {
+    note = 'No claim-form total to reconcile against — enter the claim total to check.'
+  } else {
+    const diff = sum - claimInt
+    reconciled = diff === 0
+    if (reconciled) note = 'Invoices sum exactly to the claim total.'
+    else { difference = fmtMMK(Math.abs(diff)); note = diff > 0 ? `Invoices exceed the claim total by ${difference}.` : `Invoices fall short of the claim total by ${difference}.` }
+  }
+  return { ...inv, count: items.length, invoices_total: items.length ? fmtMMK(sum) : '', reconciled, difference, unreadable_count: unreadable, note }
 }
 
 export async function runJD1(files: File[]): Promise<JD1Note> {
@@ -27,6 +70,15 @@ export async function runJD1(files: File[]): Promise<JD1Note> {
   files.forEach((f) => fd.append('files', f, f.name))
   const r = await fetch(`${apiBase()}/api/jd1`, { method: 'POST', headers: authHeaders(), body: fd })
   if (!r.ok) throw new Error(`JD1 failed (${r.status})`)
+  return r.json()
+}
+
+export interface DraftMail { subject: string; body: string; reason: string }
+export async function draftClientMail(note: JD1Note): Promise<DraftMail> {
+  const r = await fetch(`${apiBase()}/api/jd1/draft-mail`, {
+    method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(note),
+  })
+  if (!r.ok) throw new Error(`Draft mail failed (${r.status})`)
   return r.json()
 }
 

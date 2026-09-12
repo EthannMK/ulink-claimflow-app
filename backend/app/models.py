@@ -137,6 +137,38 @@ class ClassifiedDoc(BaseModel):
     pages: int | None = None
     confidence: float = 0.0
 
+
+# ---- invoices: extraction + reconciliation + audit trail ----
+class AuditEntry(BaseModel):
+    field: str = "amount"       # which value was changed
+    old: str = ""              # value before the edit
+    new: str = ""             # value after the edit
+    by: str = ""              # username / name of the JD1 officer
+    at: datetime | None = None
+
+class InvoiceItem(BaseModel):
+    id: str
+    description: str = ""       # what the invoice/bill is for (e.g. "in-patient bill", "pharmacy")
+    provider: str = ""        # hospital / clinic if visible
+    date: str = ""            # DD/MM/YY as written
+    amount: str = ""          # current amount (may have been corrected by JD1)
+    amount_original: str = "" # first AI-read value — immutable baseline for audit
+    readable: bool = True      # False when the AI could not read the amount (amount left blank)
+    confidence: float = 0.0
+    page: int = 0
+    source_file: str = ""
+    audit: list[AuditEntry] = []   # every edit JD1 made to this invoice
+
+class InvoiceSummary(BaseModel):
+    items: list[InvoiceItem] = []
+    count: int = 0
+    invoices_total: str = ""       # sum of readable/entered amounts, formatted
+    claim_total: str = ""          # from the claim form (header)
+    reconciled: bool = False       # invoices_total == claim_total (within tolerance)
+    difference: str = ""           # invoices_total - claim_total when they differ
+    unreadable_count: int = 0      # invoices whose amount the AI could not read
+    note: str = ""                 # human-readable reconciliation note
+
 class JD1Note(BaseModel):
     claim_type: str = ""        # reimbursement / LOG / API-eclaim
     header: JD1Header = Field(default_factory=JD1Header)
@@ -144,7 +176,10 @@ class JD1Note(BaseModel):
     section_b: JD1SectionB = Field(default_factory=JD1SectionB)
     section_c: JD1SectionC = Field(default_factory=JD1SectionC)
     documents: list[ClassifiedDoc] = []
-    checklist_missing: list[str] = []
+    checklist_required: list[str] = []   # every mandatory doc type for this claim type
+    checklist_missing: list[str] = []    # subset of required that is absent
+    invoices: InvoiceSummary = Field(default_factory=InvoiceSummary)
+    ai_summary: str = ""        # adjudicator-facing brief composed for the JD2 handoff
     files_count: int = 0        # physical files uploaded (a file may bundle several documents)
     document_count: int = 0     # logical documents detected across all files
     provider: str = "stub"

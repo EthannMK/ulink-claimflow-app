@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { runJD1, handoffToJD2, type JD1Note, type NoteField, type Section } from '../lib/jd1'
-import { backendOn } from '../lib/auth'
+import { runJD1, handoffToJD2, draftClientMail, reconcileInvoices,
+  type JD1Note, type NoteField, type Section, type InvoiceItem, type DraftMail } from '../lib/jd1'
+import { backendOn, getName } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { DocReview } from '../components/DocReview'
 import { usePersistent } from '../lib/persist'
@@ -47,6 +48,9 @@ export function JD1ReviewPage() {
   const [reviewIdx, setReviewIdx] = useState(0)
   const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers.v2', DEFAULT_INSURERS)
   const [reviewInsurerId, setReviewInsurerId] = useState(insurers[0]?.id ?? '')
+  const [mail, setMail] = useState<DraftMail | null>(null)
+  const [mailBusy, setMailBusy] = useState(false)
+  const [invDraft, setInvDraft] = useState<Record<string, string>>({})
 
   // auto-detect the insurer from the selected file's name
   useEffect(() => {
@@ -84,6 +88,30 @@ export function JD1ReviewPage() {
     const copy: any = structuredClone(note)
     copy[sec][key] = { ...copy[sec][key], value }
     setNote(copy)
+  }
+
+  // JD1 corrects an invoice amount — record the original→new audit trail, then re-reconcile.
+  function commitInvoiceAmount(id: string) {
+    if (!note) return
+    const draft = invDraft[id]
+    if (draft === undefined) return
+    const copy: JD1Note = structuredClone(note)
+    const it = copy.invoices.items.find((i) => i.id === id)
+    setInvDraft((d) => { const n = { ...d }; delete n[id]; return n })
+    if (!it || it.amount === draft) return
+    it.audit = [...(it.audit || []), { field: 'amount', old: it.amount, new: draft, by: getName(), at: new Date().toISOString() }]
+    it.amount = draft
+    it.readable = /\d/.test(draft)
+    copy.invoices = reconcileInvoices(copy.invoices)
+    setNote(copy)
+  }
+
+  async function makeDraftMail() {
+    if (!note) return
+    setMailBusy(true); setFlash('')
+    try { setMail(await draftClientMail(note)) }
+    catch (e: any) { setFlash('Draft mail failed: ' + (e?.message ?? 'unknown')) }
+    finally { setMailBusy(false) }
   }
 
   function download() {
@@ -153,19 +181,104 @@ export function JD1ReviewPage() {
                 </span>
               </div>
               <p className="text-xs text-outline mt-1">{note.files_count} file(s) uploaded, containing {note.document_count} distinct document(s) detected by the AI.</p>
-              {note.checklist_missing.length > 0 && (
-                <div className="mt-3 flex items-start gap-2 text-sm text-status-rejected">
-                  <Icon name="warning" className="text-[18px]" />
-                  <span>Missing mandatory: <b>{note.checklist_missing.join(', ')}</b></span>
+
+              {/* document completeness checklist */}
+              {note.checklist_required && note.checklist_required.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-outline mb-1.5">Document completeness</div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    {note.checklist_required.map((doc) => {
+                      const missing = note.checklist_missing.includes(doc)
+                      return (
+                        <div key={doc} className="flex items-center gap-1.5 text-sm">
+                          <Icon name={missing ? 'cancel' : 'check_circle'}
+                            className={`text-[16px] ${missing ? 'text-status-rejected' : 'text-status-approved'}`} />
+                          <span className={missing ? 'text-status-rejected' : 'text-text-main'}>{doc}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {note.checklist_missing.length > 0 && (
+                    <p className="text-xs text-status-rejected mt-1.5">Missing {note.checklist_missing.length} required document(s) — request from client before adjudication.</p>
+                  )}
                 </div>
               )}
+
               <div className="mt-4 pt-3 border-t border-outline-variant/60 flex items-center gap-3 flex-wrap">
                 <Button onClick={sendToJD2} disabled={sending || note.provider === 'stub'}>
                   <Icon name="send" className="text-[16px]" />{sending ? 'Sending…' : 'Approve & send to JD2'}
                 </Button>
+                <Button variant="outline" onClick={makeDraftMail} disabled={mailBusy || note.provider === 'stub'}>
+                  <Icon name="mail" className="text-[16px]" />{mailBusy ? 'Drafting…' : 'Draft email to client'}
+                </Button>
                 <span className="text-xs text-outline">Confirm the fields above, then pass the validated note to JD2 for adjudication.</span>
               </div>
             </Card>
+
+            {/* AI summary (adjudicator brief) */}
+            {note.ai_summary && (
+              <Card className="p-5 border-l-4 border-status-ai">
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon name="auto_awesome" className="text-status-ai text-[18px]" />
+                  <h3 className="font-semibold text-sm">AI summary for JD2</h3>
+                </div>
+                <div className="text-sm text-text-main leading-relaxed space-y-1">
+                  {note.ai_summary.split('\n').filter(Boolean).map((line, i) => {
+                    const [head, ...rest] = line.split(':')
+                    const body = rest.join(':')
+                    return body
+                      ? <p key={i}><b className="text-on-surface">{head}:</b>{body}</p>
+                      : <p key={i}>{line}</p>
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {/* invoices + reconciliation */}
+            {note.invoices && note.invoices.count > 0 && (
+              <Card className="p-5">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <Icon name="receipt_long" className="text-primary text-[18px]" />
+                  <h3 className="font-semibold text-sm">Invoices ({note.invoices.count})</h3>
+                  <Badge className={note.invoices.reconciled
+                    ? 'bg-status-approved/10 text-status-approved'
+                    : note.invoices.unreadable_count > 0 ? 'bg-status-pending/10 text-status-pending' : 'bg-status-rejected/10 text-status-rejected'}>
+                    {note.invoices.reconciled ? 'Reconciled' : note.invoices.unreadable_count > 0 ? 'Verify amounts' : 'Mismatch'}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {note.invoices.items.map((it: InvoiceItem) => {
+                    const edited = it.audit && it.audit.length > 0
+                    return (
+                      <div key={it.id} className="border border-outline-variant/60 rounded-md p-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-text-main flex-1 truncate" title={it.description}>
+                            {it.description || 'Invoice'}{it.provider ? ` · ${it.provider}` : ''}{it.date ? ` · ${it.date}` : ''}
+                            {it.page ? <span className="text-outline"> · p{it.page}</span> : null}
+                          </span>
+                          <input value={invDraft[it.id] ?? it.amount}
+                            onChange={(e) => setInvDraft((d) => ({ ...d, [it.id]: e.target.value }))}
+                            onBlur={() => commitInvoiceAmount(it.id)}
+                            placeholder={it.readable ? '' : 'amount not readable — enter'}
+                            className={`w-40 text-sm text-right border rounded-md px-2 py-1 ${it.readable ? 'border-outline-variant' : 'border-status-pending bg-status-pending/5'}`} />
+                        </div>
+                        {edited && (
+                          <p className="text-[11px] text-outline mt-1">
+                            <Icon name="history" className="text-[12px] align-middle" /> original AI value: <b>{it.amount_original || '(blank)'}</b>
+                            {' · '}edited by {it.audit[it.audit.length - 1].by} at {new Date(it.audit[it.audit.length - 1].at as string).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="mt-3 pt-3 border-t border-outline-variant/60 text-sm space-y-1">
+                  <div className="flex justify-between"><span className="text-text-main">Invoices total</span><b>{note.invoices.invoices_total || '—'}</b></div>
+                  <div className="flex justify-between"><span className="text-text-main">Claim form total</span><b>{note.invoices.claim_total || '—'}</b></div>
+                  <p className={`text-xs mt-1 ${note.invoices.reconciled ? 'text-status-approved' : note.invoices.unreadable_count > 0 ? 'text-status-pending' : 'text-status-rejected'}`}>{note.invoices.note}</p>
+                </div>
+              </Card>
+            )}
 
             <Card className="p-5">
               <h3 className="font-semibold text-sm mb-3">Documents in packet</h3>
@@ -250,6 +363,34 @@ export function JD1ReviewPage() {
             mapFields={insurers.find((i) => i.id === reviewInsurerId)?.fields.map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))} />}
         </Card>
       )}
+
+      {/* draft email to client — review-and-copy, never auto-sent */}
+      {mail && (
+        <div className="fixed inset-0 bg-black/40 grid place-items-center z-50 p-4" onClick={() => setMail(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <Icon name="mail" className="text-primary text-[20px]" />
+              <h3 className="font-semibold">Draft email to client</h3>
+              <Badge className="bg-status-pending/10 text-status-pending">Draft — not sent</Badge>
+              <button onClick={() => setMail(null)} className="ml-auto text-outline hover:text-text-main"><Icon name="close" /></button>
+            </div>
+            {mail.reason && <p className="text-xs text-outline mb-2">Suggested because: {mail.reason}</p>}
+            <label className="block text-xs text-text-main mb-1">Subject</label>
+            <input value={mail.subject} onChange={(e) => setMail({ ...mail, subject: e.target.value })}
+              className="w-full text-sm border border-outline-variant rounded-md px-3 py-2 mb-3" />
+            <label className="block text-xs text-text-main mb-1">Body</label>
+            <textarea value={mail.body} onChange={(e) => setMail({ ...mail, body: e.target.value })} rows={12}
+              className="w-full text-sm border border-outline-variant rounded-md px-3 py-2 font-mono" />
+            <div className="flex items-center gap-2 mt-3">
+              <Button onClick={() => { navigator.clipboard?.writeText(`Subject: ${mail.subject}\n\n${mail.body}`); setFlash('Draft copied to clipboard.') }}>
+                <Icon name="content_copy" className="text-[16px]" />Copy
+              </Button>
+              <Button variant="outline" onClick={() => setMail(null)}>Close</Button>
+              <span className="text-xs text-outline">Review, edit, then send from your own mailbox. Ulink does not send it for you.</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -276,7 +417,16 @@ ${sec(B_LABELS, n.section_b)}
 ## C. Rule / checking (JD1 flags — JD2/JD3 decide)
 ${sec(C_LABELS, n.section_c)}
 
-## Summary
+## Invoices & reconciliation
+${n.invoices && n.invoices.count
+  ? n.invoices.items.map((i) => `- ${i.description || 'Invoice'}: ${i.amount || '(amount not readable)'}${i.audit && i.audit.length ? `  \n  _original AI value: ${i.audit[0].old || '(blank)'}, corrected by ${i.audit[i.audit.length - 1].by}_` : ''}`).join('\n')
+    + `\n\n**Invoices total:** ${n.invoices.invoices_total || '—'}  \n**Claim total:** ${n.invoices.claim_total || '—'}  \n**Reconciliation:** ${n.invoices.note}`
+  : 'No invoices detected.'}
+
+## AI summary (for JD2)
+${n.ai_summary || ''}
+
+## Notes
 ${n.notes || ''}
 `
 }

@@ -4,6 +4,10 @@ import { getJD2Queue, getJD2Item, decideJD2, type JD2Item, type NoteField, type 
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { confidenceCls } from '../lib/format'
 
+const H_LABELS: Record<string, string> = {
+  member_name: 'Member name', insurer: 'Insurer', claim_date: 'Claim date', company: 'Company / employer',
+  nrc_passport: 'NRC / Passport', total_claim_amount: 'Total claim amount', treatment_date: 'Treatment date', claim_no: 'Claim no.',
+}
 const B_LABELS: Record<string, string> = {
   policy_member_eligibility: 'Policy / member eligibility', diagnosis: 'Diagnosis',
   treatment_procedure: 'Treatment / procedure', admission_discharge_dates: 'Admission / discharge dates',
@@ -120,6 +124,55 @@ export function JD2AdjudicationPage() {
       <div className="grid grid-cols-12 gap-4">
         {/* JD1 note (read-only) */}
         <div className="col-span-7 space-y-4">
+          {n.ai_summary && (
+            <Card className="p-5 border-l-4 border-status-ai">
+              <div className="flex items-center gap-2 mb-2">
+                <Icon name="auto_awesome" className="text-status-ai text-[18px]" />
+                <h3 className="font-semibold text-sm">AI summary from JD1</h3>
+              </div>
+              <div className="text-sm text-text-main leading-relaxed space-y-1">
+                {n.ai_summary.split('\n').filter(Boolean).map((line, i) => {
+                  const [head, ...rest] = line.split(':'); const body = rest.join(':')
+                  return body ? <p key={i}><b className="text-on-surface">{head}:</b>{body}</p> : <p key={i}>{line}</p>
+                })}
+              </div>
+            </Card>
+          )}
+
+          <Card className="p-5">
+            <h3 className="font-semibold text-sm mb-3">JD1 note — header</h3>
+            <div className="grid grid-cols-2 gap-x-4">
+              {Object.keys(H_LABELS).map((k) => roRow(H_LABELS[k], (n.header as any)[k]))}
+            </div>
+          </Card>
+
+          {n.invoices && n.invoices.count > 0 && (
+            <Card className="p-5">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <Icon name="receipt_long" className="text-primary text-[18px]" />
+                <h3 className="font-semibold text-sm">Invoices ({n.invoices.count})</h3>
+                <Badge className={n.invoices.reconciled ? 'bg-status-approved/10 text-status-approved'
+                  : n.invoices.unreadable_count > 0 ? 'bg-status-pending/10 text-status-pending' : 'bg-status-rejected/10 text-status-rejected'}>
+                  {n.invoices.reconciled ? 'Reconciled' : n.invoices.unreadable_count > 0 ? 'Amounts unverified' : 'Mismatch'}
+                </Badge>
+              </div>
+              {n.invoices.items.map((it) => (
+                <div key={it.id} className="flex items-center gap-2 py-1.5 text-sm border-b border-outline-variant/40 last:border-0">
+                  <span className="flex-1 truncate" title={it.description}>{it.description || 'Invoice'}{it.provider ? ` · ${it.provider}` : ''}</span>
+                  <span className="font-medium">{it.amount || '—'}</span>
+                  {it.audit && it.audit.length > 0 && (
+                    <Badge className="bg-status-ai/10 text-status-ai" >edited</Badge>
+                  )}
+                </div>
+              ))}
+              <div className="mt-3 pt-3 border-t border-outline-variant/60 text-sm space-y-1">
+                <div className="flex justify-between"><span className="text-text-main">Invoices total</span><b>{n.invoices.invoices_total || '—'}</b></div>
+                <div className="flex justify-between"><span className="text-text-main">Claim form total</span><b>{n.invoices.claim_total || '—'}</b></div>
+                <p className={`text-xs mt-1 ${n.invoices.reconciled ? 'text-status-approved' : n.invoices.unreadable_count > 0 ? 'text-status-pending' : 'text-status-rejected'}`}>{n.invoices.note}</p>
+              </div>
+            </Card>
+          )}
+
           <Card className="p-5">
             <h3 className="font-semibold text-sm mb-3">JD1 note — claim information (B)</h3>
             {Object.keys(B_LABELS).map((k) => roRow(B_LABELS[k], (n.section_b as Section)[k]))}
