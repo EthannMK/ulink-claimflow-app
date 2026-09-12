@@ -18,7 +18,7 @@ async function renderPdfPages(file: File): Promise<string[]> {
 }
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
 
-export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: string; label: string; hint?: string }[] }) {
+export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: string; label: string; hint?: string; section?: string }[] }) {
   const [imgs, setImgs] = useState<string[]>([])
   const [res, setRes] = useState<ReviewResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,7 +36,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
       try {
         const previews = isPdf(file) ? await renderPdfPages(file) : [URL.createObjectURL(file)]
         if (!alive) return; setImgs(previews)
-        const fieldsArg = hasMap ? JSON.stringify(mapFields!.map((f) => ({ label: f.label, hint: f.hint || '' }))) : ''
+        const fieldsArg = hasMap ? JSON.stringify(mapFields!.map((f) => ({ label: f.label, hint: f.hint || '', section: f.section || '' }))) : ''
         const r = await reviewDoc(file, fieldsArg); if (!alive) return
         if (r.error) setErr(r.error)
         setRes(r)
@@ -97,7 +97,12 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
             <h4 className="font-semibold text-sm">{useMapped ? 'Insurer fields' : 'Detected fields'}</h4>
             {res && !err && <Badge className="bg-status-approved/10 text-status-approved">{display.length} field(s)</Badge>}
           </div>
-          {loading && <p className="text-xs text-text-main">Reading with Gemini + Document AI…</p>}
+          {loading && (
+            <div className="mb-2">
+              <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full animate-pulse w-2/3" /></div>
+              <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading with Gemini + Document AI… (about 10–30s)</p>
+            </div>
+          )}
           {err && <Card className="p-3 text-xs text-status-rejected">{err}</Card>}
           <div className="space-y-1.5 max-h-[32rem] overflow-y-auto pr-1">
             {display.map((f) => {

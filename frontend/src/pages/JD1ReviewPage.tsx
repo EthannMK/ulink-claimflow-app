@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { runJD1, handoffToJD2, type JD1Note, type NoteField, type Section } from '../lib/jd1'
 import { backendOn } from '../lib/auth'
@@ -47,6 +47,17 @@ export function JD1ReviewPage() {
   const [reviewIdx, setReviewIdx] = useState(0)
   const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers', DEFAULT_INSURERS)
   const [reviewInsurerId, setReviewInsurerId] = useState(insurers[0]?.id ?? '')
+
+  // auto-detect the insurer from the selected file's name
+  useEffect(() => {
+    const f = files[reviewIdx]; if (!f) return
+    const n = f.name.toLowerCase()
+    const hit = insurers.find((i) => {
+      const name = i.name.toLowerCase(); const tok = name.split(/\s+/)[0]
+      return n.includes(name) || (tok.length >= 3 && n.includes(tok))
+    })
+    if (hit) setReviewInsurerId(hit.id)
+  }, [reviewIdx, files, insurers])
 
   async function sendToJD2() {
     if (!note) return
@@ -127,7 +138,7 @@ export function JD1ReviewPage() {
 
         {/* results */}
         <div className="col-span-8 space-y-4">
-          {!note && <Card className="p-8 text-center text-sm text-text-main">Upload a claim packet and generate the JD1 note to see it here.</Card>}
+          {!note && !running && <p className="text-xs text-outline">The JD1 note will appear here after you generate it. You can also review each document's fields below.</p>}
 
           {note && (<>
             <Card className="p-5">
@@ -221,8 +232,8 @@ export function JD1ReviewPage() {
             <h3 className="font-semibold text-sm">AI field review</h3>
             <span className="text-xs text-outline">Fields follow the insurer's setup — hover to highlight, edit to correct.</span>
             <div className="ml-auto flex items-center gap-1 text-xs">
-              <span className="text-text-main">Insurer:</span>
-              <select value={reviewInsurerId} onChange={(e) => setReviewInsurerId(e.target.value)} className="border border-outline-variant rounded-md px-2 py-1">
+              <span className="text-text-main">Insurer (auto-detected):</span>
+              <select value={reviewInsurerId} onChange={(e) => setReviewInsurerId(e.target.value)} className="border border-outline-variant rounded-md px-2 py-1" title="Detected from the file name — change if wrong">
                 {insurers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
               </select>
             </div>
@@ -236,7 +247,7 @@ export function JD1ReviewPage() {
             ))}
           </div>
           {files[reviewIdx] && <DocReview key={reviewIdx + files[reviewIdx].name} file={files[reviewIdx]}
-            mapFields={insurers.find((i) => i.id === reviewInsurerId)?.fields.map((f) => ({ id: f.id, label: f.label, hint: f.aiHint }))} />}
+            mapFields={insurers.find((i) => i.id === reviewInsurerId)?.fields.map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))} />}
         </Card>
       )}
     </div>

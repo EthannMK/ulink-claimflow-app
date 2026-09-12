@@ -21,7 +21,8 @@ interface Tob { id: string; plan: string; insurer: string; benefits: Benefit[]; 
 const RULE_CATEGORIES = ['Eligibility', 'Documentation', 'Coverage', 'Payment', 'Fraud', 'Waiting period']
 const BENEFIT_CATEGORIES = ['Inpatient', 'Outpatient', 'Day Care', 'Maternity', 'Dental', 'Optical', 'Chronic', 'Other']
 
-const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits'] as const
+const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits', 'Employer mapping'] as const
+interface EmpMap { id: string; domain: string; employer: string }
 const inp = 'w-full text-sm border border-outline-variant rounded-md px-2 py-1.5'
 const FIELD_TYPES: FieldType[] = ['text', 'number', 'amount', 'date', 'select', 'textarea']
 
@@ -41,6 +42,36 @@ export function SettingsPage() {
       {tab === 'Document checklists' && <Checklists />}
       {tab === 'Adjudication Rules' && <Rules />}
       {tab === 'Tables of Benefits' && <Benefits />}
+      {tab === 'Employer mapping' && <EmployerMapping />}
+    </div>
+  )
+}
+
+// ---------- Employer mapping (email domain -> employer; auto-fill wiring comes later) ----------
+function EmployerMapping() {
+  const [saved, setSaved] = usePersistent<EmpMap[]>('settings.employerMap', [])
+  const ed = useEditable(saved, setSaved)
+  const items = ed.value; const setItems = ed.setDraft
+  return (
+    <div>
+      <div className="flex justify-between items-start gap-3 mb-3">
+        <p className="text-xs text-outline max-w-2xl">Map a company email domain to an employer. Used later to auto-fill “Name of employer” when a claimant uses a work email. Personal domains (gmail.com, etc.) are ignored — the field stays blank if the employer isn't in the document.</p>
+        <EditBar editing={ed.editing} edit={ed.edit} save={ed.save} cancel={ed.cancel} />
+      </div>
+      <Card className="p-4">
+        <div className={ed.editing ? '' : 'pointer-events-none opacity-90'}>
+          {ed.editing && <button onClick={() => setItems([...items, { id: genId(), domain: '', employer: '' }])} className="text-xs text-primary mb-2 flex items-center gap-1"><Icon name="add" className="text-[15px]" />Add mapping</button>}
+          <div className="grid grid-cols-12 gap-2 text-[11px] text-outline uppercase tracking-wide px-1"><span className="col-span-5">Email domain</span><span className="col-span-6">Employer</span><span className="col-span-1"></span></div>
+          {items.map((m) => (
+            <div key={m.id} className="grid grid-cols-12 gap-2 items-center py-0.5">
+              <input className={`${inp} col-span-5`} placeholder="care.org" value={m.domain} onChange={(e) => setItems(items.map((x) => x.id === m.id ? { ...x, domain: e.target.value } : x))} />
+              <input className={`${inp} col-span-6`} placeholder="CARE International" value={m.employer} onChange={(e) => setItems(items.map((x) => x.id === m.id ? { ...x, employer: e.target.value } : x))} />
+              <button onClick={() => setItems(items.filter((x) => x.id !== m.id))} className="col-span-1 text-xs text-status-rejected">×</button>
+            </div>
+          ))}
+          {items.length === 0 && <p className="text-xs text-outline py-2">No mappings yet{ed.editing ? ' — click “Add mapping”.' : '. Click Edit to add.'}</p>}
+        </div>
+      </Card>
     </div>
   )
 }
@@ -55,7 +86,7 @@ function Insurers() {
   const cur = items.find((i) => i.id === sel) || null
   function upd(p: Partial<InsurerConfig>) { if (!cur) return; setItems(items.map((i) => i.id === cur.id ? { ...i, ...p } : i)) }
   function addInsurer() { const c: InsurerConfig = { id: genId(), name: 'New insurer', fields: [] }; setItems([...items, c]); setSel(c.id) }
-  function addField() { if (!cur) return; upd({ fields: [...cur.fields, { id: genId(), label: '', type: 'text', required: false, aiHint: '', options: '' }] }) }
+  function addField() { if (!cur) return; upd({ fields: [...cur.fields, { id: genId(), label: '', type: 'text', required: false, aiHint: '', section: '', options: '' }] }) }
   return (
     <div>
       <div className="flex justify-end mb-3"><EditBar editing={ed.editing} edit={ed.edit} save={ed.save} cancel={ed.cancel} /></div>
@@ -73,20 +104,24 @@ function Insurers() {
           <div className={`space-y-3 ${ed.editing ? '' : 'pointer-events-none opacity-90'}`}>
             <div className="flex items-center gap-3">
               <div className="flex-1"><label className="block text-xs text-text-main mb-1">Insurer name</label><input className={inp} value={cur.name} onChange={(e) => upd({ name: e.target.value })} /></div>
+              {DEFAULT_INSURERS.find((d) => d.id === cur.id) && (
+                <button onClick={() => upd({ fields: JSON.parse(JSON.stringify(DEFAULT_INSURERS.find((d) => d.id === cur.id)!.fields)) })} className="text-xs text-primary mt-5" title="Replace with the shipped default fields">Reset fields to default</button>
+              )}
               <button onClick={() => { setItems(items.filter((i) => i.id !== cur.id)); setSel(null) }} className="text-xs text-status-rejected mt-5">Delete insurer</button>
             </div>
             <div className="flex items-center justify-between"><label className="text-xs text-text-main font-semibold">Fields the system reads from this insurer's documents</label>
               <button onClick={addField} className="text-xs text-primary">+ Add field</button></div>
             <div className="space-y-2">
               <div className="grid grid-cols-12 gap-2 text-[11px] text-outline uppercase tracking-wide px-1">
-                <span className="col-span-3">Label</span><span className="col-span-2">Type</span><span className="col-span-1">Req</span><span className="col-span-5">AI hint (where to find it)</span><span className="col-span-1"></span>
+                <span className="col-span-3">Label</span><span className="col-span-2">Section</span><span className="col-span-2">Type</span><span className="col-span-1">Req</span><span className="col-span-3">AI hint</span><span className="col-span-1"></span>
               </div>
               {cur.fields.map((fl) => (
                 <div key={fl.id} className="grid grid-cols-12 gap-2 items-center">
                   <input className={`${inp} col-span-3`} value={fl.label} placeholder="Field label" onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, label: e.target.value } : x) })} />
+                  <input className={`${inp} col-span-2`} value={fl.section || ''} placeholder="Section" onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, section: e.target.value } : x) })} />
                   <select className={`${inp} col-span-2`} value={fl.type} onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, type: e.target.value as FieldType } : x) })}>{FIELD_TYPES.map((t) => <option key={t}>{t}</option>)}</select>
                   <label className="col-span-1 grid place-items-center"><input type="checkbox" checked={fl.required} onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, required: e.target.checked } : x) })} /></label>
-                  <input className={`${inp} col-span-5`} value={fl.aiHint} placeholder="e.g. top-right of form; MMK amount" onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, aiHint: e.target.value } : x) })} />
+                  <input className={`${inp} col-span-3`} value={fl.aiHint} placeholder="where to find it" onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, aiHint: e.target.value } : x) })} />
                   <button onClick={() => upd({ fields: cur.fields.filter((x) => x.id !== fl.id) })} className="col-span-1 text-xs text-status-rejected">Remove</button>
                 </div>
               ))}

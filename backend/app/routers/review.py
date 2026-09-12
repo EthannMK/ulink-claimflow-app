@@ -20,25 +20,31 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
 
 
-def _match_box(label: str, raw: list[ReviewField]):
-    """Find the Document AI key whose printed name best matches this field label,
-    and return its answer region (page + box) for the highlight."""
-    nl = _norm(label); lw = set(nl.split())
+def _find_box(value: str, raw: list[ReviewField]):
+    """Locate the highlight by the VALUE Gemini extracted — find the Document AI
+    key/value whose read text matches that value. Returns an empty box (no highlight)
+    if there's no confident match, so we never point at the wrong place."""
+    nv = _norm(value)
+    if not nv or len(nv) < 2:
+        return 0, ReviewBox()
+    vw = set(nv.split())
     best = None; score = 0.0
     for r in raw:
-        nr = _norm(r.name)
-        if not nr:
-            continue
-        if nr == nl:
-            s = 100.0
-        elif nl in nr or nr in nl:
-            s = 60.0
-        else:
-            shared = len(set(nr.split()) & lw)
-            s = (shared * 60.0 / max(len(lw), 1)) if shared else 0.0
-        if s > score:
-            score = s; best = r
-    if best and score >= 40:
+        # compare the value against the DocAI field's value text (and its key, as backup)
+        for cand in (r.value, r.name):
+            nc = _norm(cand)
+            if not nc:
+                continue
+            if nc == nv:
+                s = 100.0
+            elif nv in nc or nc in nv:
+                s = 75.0
+            else:
+                shared = len(set(nc.split()) & vw)
+                s = (shared * 60.0 / max(len(vw), 1)) if shared else 0.0
+            if s > score:
+                score = s; best = r
+    if best and score >= 70 and best.box.w > 0:
         return best.page, best.box
     return 0, ReviewBox()
 
@@ -48,7 +54,8 @@ def _gemini_values(data: bytes, mime: str, fields: list[dict]) -> dict:
         return {}
     import httpx
     labels = "\n".join(
-        f"- {f.get('label')}" + (f" (hint: {f.get('hint')})" if f.get("hint") else "")
+        (f"- [{f.get('section')}] " if f.get("section") else "- ") + f"{f.get('label')}"
+        + (f" (hint: {f.get('hint')})" if f.get("hint") else "")
         for f in fields if f.get("label")
     )
     prompt = (
@@ -119,7 +126,7 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
         for f in req:
             g = gem.get(_norm(f["label"]), {})
             val = g.get("value", "")
-            page, box = _match_box(f["label"], raw)
+            page, box = _find_box(val, raw)
             mapped.append(ReviewField(
                 id=uuid.uuid4().hex[:8], name=f["label"], value=val,
                 confidence=(g.get("confidence", 0.0) if val else 0.0), page=page, box=box,
