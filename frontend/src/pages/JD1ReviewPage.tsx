@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { runJD1, handoffToJD2, type JD1Note, type NoteField, type Section } from '../lib/jd1'
 import { backendOn } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
+import { DocReview } from '../components/DocReview'
 import { confidenceCls } from '../lib/format'
 
 const A_LABELS: Record<string, string> = {
@@ -41,6 +42,7 @@ export function JD1ReviewPage() {
   const [running, setRunning] = useState(false)
   const [sending, setSending] = useState(false)
   const [flash, setFlash] = useState('')
+  const [reviewIdx, setReviewIdx] = useState(0)
 
   async function sendToJD2() {
     if (!note) return
@@ -108,7 +110,7 @@ export function JD1ReviewPage() {
             <div className="text-sm text-text-main mt-1">Choose all documents for one claim</div>
             <div className="text-xs text-outline">PDFs & images — forms, reports, invoices, ID</div>
             <input type="file" multiple accept="image/*,application/pdf" className="hidden"
-              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null) }} />
+              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0) }} />
           </label>
           {files.map((f) => <div key={f.name} className="text-xs flex items-center gap-2 mt-2"><Icon name="description" className="text-[15px] text-primary" />{f.name}</div>)}
           <div className="mt-4"><Button onClick={analyze}>{running ? 'Reading packet…' : 'Generate JD1 note'}</Button></div>
@@ -206,6 +208,26 @@ export function JD1ReviewPage() {
           </>)}
         </div>
       </div>
+
+      {/* per-document field review with highlights (Document AI) */}
+      {files.length > 0 && (
+        <Card className="p-5 mt-4">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <Icon name="document_scanner" className="text-[18px] text-primary" />
+            <h3 className="font-semibold text-sm">AI field review</h3>
+            <span className="text-xs text-outline">See where each field was read from — hover to highlight, edit to correct.</span>
+          </div>
+          <div className="flex gap-2 flex-wrap mb-3">
+            {files.map((f, i) => (
+              <button key={f.name + i} onClick={() => setReviewIdx(i)}
+                className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${reviewIdx === i ? 'border-primary text-primary bg-primary/5' : 'border-outline-variant text-text-main hover:bg-surface-container'}`}>
+                <Icon name="description" className="text-[14px]" />{f.name.length > 30 ? f.name.slice(0, 30) + '…' : f.name}
+              </button>
+            ))}
+          </div>
+          {files[reviewIdx] && <DocReview key={reviewIdx + files[reviewIdx].name} file={files[reviewIdx]} />}
+        </Card>
+      )}
     </div>
   )
 }

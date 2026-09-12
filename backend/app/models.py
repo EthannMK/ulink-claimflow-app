@@ -179,3 +179,22 @@ class JD2Decision(BaseModel):
 
 class JD2List(BaseModel):
     items: list[JD2Item] = []
+
+
+# ---- Document AI field-highlight review ----
+class ReviewBox(BaseModel):
+    x: float = 0.0; y: float = 0.0; w: float = 0.0; h: float = 0.0  # normalized 0..1, page-relative
+
+class ReviewField(BaseModel):
+    id: str
+    name: str
+    value: str
+    confidence: float = 0.0
+    page: int = 0
+    box: ReviewBox = Field(default_factory=ReviewBox)
+
+class ReviewResult(BaseModel):
+    pages: int = 1
+    fields: list[ReviewField] = []
+    provider: str = "docai"
+    error: str = ""

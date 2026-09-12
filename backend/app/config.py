@@ -9,5 +9,9 @@ class Settings:
     ocr_provider: str = os.getenv("OCR_PROVIDER", "stub")
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    # Google Document AI (Form Parser) — for the field-highlight review view
+    docai_project: str = os.getenv("DOCAI_PROJECT", "")
+    docai_location: str = os.getenv("DOCAI_LOCATION", "asia-southeast1")
+    docai_processor_id: str = os.getenv("DOCAI_PROCESSOR_ID", "")
 
 settings = Settings()
