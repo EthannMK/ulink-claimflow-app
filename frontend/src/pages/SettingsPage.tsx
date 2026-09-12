@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { PageTitle, Card, Badge, Icon, Button, AttachField, type Attachment } from '../components/ui'
 import { AiExtract } from '../components/AiExtract'
 import { usePersistent, useEditable, genId } from '../lib/persist'
-import { DEFAULT_INSURERS, type InsurerConfig, type FieldType } from '../lib/insurers'
+import { DEFAULT_INSURERS, FORM_LABELS, formTypesOf, type InsurerConfig, type InsurerField, type FieldType, type FormType } from '../lib/insurers'
 
 function EditBar({ editing, edit, save, cancel }: { editing: boolean; edit: () => void; save: () => void; cancel: () => void }) {
   return editing
@@ -24,7 +24,7 @@ const BENEFIT_CATEGORIES = ['Inpatient', 'Outpatient', 'Day Care', 'Maternity', 
 const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits', 'Employer mapping'] as const
 interface EmpMap { id: string; domain: string; employer: string }
 const inp = 'w-full text-sm border border-outline-variant rounded-md px-2 py-1.5'
-const FIELD_TYPES: FieldType[] = ['text', 'number', 'amount', 'date', 'select', 'textarea']
+const FIELD_TYPES: FieldType[] = ['text', 'number', 'amount', 'date', 'time', 'select', 'textarea']
 
 export function SettingsPage() {
   const [tab, setTab] = useState<(typeof SECTIONS)[number]>('Reply templates')
@@ -78,15 +78,25 @@ function EmployerMapping() {
 
 // ---------- Insurers & Fields (drives New Claim, JD1/JD2 display, AI extraction) ----------
 function Insurers() {
-  const [saved, setSaved] = usePersistent<InsurerConfig[]>('settings.insurers.v2', DEFAULT_INSURERS)
+  const [saved, setSaved] = usePersistent<InsurerConfig[]>('settings.insurers.v3', DEFAULT_INSURERS)
   const ed = useEditable(saved, setSaved)
   const items = ed.value
   const setItems = ed.setDraft
   const [sel, setSel] = useState<string | null>(saved[0]?.id ?? null)
+  const [form, setForm] = useState<FormType>('claim')
   const cur = items.find((i) => i.id === sel) || null
+  const curForms = cur ? formTypesOf(cur) : []
+  const activeForm: FormType = curForms.includes(form) ? form : (curForms[0] ?? 'claim')
+  const curFields: InsurerField[] = (cur && cur.forms[activeForm]) || []
+  const fieldCount = (i: InsurerConfig) => (i.forms.claim?.length ?? 0) + (i.forms.log?.length ?? 0)
+
   function upd(p: Partial<InsurerConfig>) { if (!cur) return; setItems(items.map((i) => i.id === cur.id ? { ...i, ...p } : i)) }
-  function addInsurer() { const c: InsurerConfig = { id: genId(), name: 'New insurer', fields: [] }; setItems([...items, c]); setSel(c.id) }
-  function addField() { if (!cur) return; upd({ fields: [...cur.fields, { id: genId(), label: '', type: 'text', required: false, aiHint: '', section: '', options: '' }] }) }
+  function setFields(next: InsurerField[]) { if (!cur) return; upd({ forms: { ...cur.forms, [activeForm]: next } }) }
+  function addInsurer() { const c: InsurerConfig = { id: genId(), name: 'New insurer', forms: { claim: [], log: [] } }; setItems([...items, c]); setSel(c.id); setForm('claim') }
+  function addField() { setFields([...curFields, { id: genId(), label: '', type: 'text', required: false, aiHint: '', section: '', options: '' }]) }
+  function addForm(t: FormType) { if (!cur) return; upd({ forms: { ...cur.forms, [t]: cur.forms[t] ?? [] } }); setForm(t) }
+  function removeForm(t: FormType) { if (!cur) return; const nf = { ...cur.forms }; delete nf[t]; upd({ forms: nf }) }
+  const allForms: FormType[] = ['claim', 'log']
   return (
     <div>
       <div className="flex justify-end mb-3"><EditBar editing={ed.editing} edit={ed.edit} save={ed.save} cancel={ed.cancel} /></div>
@@ -95,7 +105,9 @@ function Insurers() {
         <div className="flex items-center justify-between mb-2"><h3 className="font-semibold text-sm">Insurers</h3>{ed.editing && <button onClick={addInsurer} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[15px]" />New</button>}</div>
         {items.map((i) => (
           <button key={i.id} onClick={() => setSel(i.id)} className={`w-full text-left px-2 py-2 rounded-md text-sm flex items-center gap-2 ${sel === i.id ? 'bg-primary/[0.07] text-primary' : 'hover:bg-surface-container'}`}>
-            <Icon name="shield" className="text-[16px]" /><span className="flex-1 truncate">{i.name}</span><Badge className="bg-surface-container">{i.fields.length}</Badge>
+            <Icon name="shield" className="text-[16px]" /><span className="flex-1 truncate">{i.name}</span>
+            <span className="text-[10px] text-outline">{formTypesOf(i).map((t) => t === 'claim' ? 'C' : 'L').join('/')}</span>
+            <Badge className="bg-surface-container">{fieldCount(i)}</Badge>
           </button>
         ))}
       </Card>
@@ -105,29 +117,50 @@ function Insurers() {
             <div className="flex items-center gap-3">
               <div className="flex-1"><label className="block text-xs text-text-main mb-1">Insurer name</label><input className={inp} value={cur.name} onChange={(e) => upd({ name: e.target.value })} /></div>
               {DEFAULT_INSURERS.find((d) => d.id === cur.id) && (
-                <button onClick={() => upd({ fields: JSON.parse(JSON.stringify(DEFAULT_INSURERS.find((d) => d.id === cur.id)!.fields)) })} className="text-xs text-primary mt-5" title="Replace with the shipped default fields">Reset fields to default</button>
+                <button onClick={() => upd({ forms: JSON.parse(JSON.stringify(DEFAULT_INSURERS.find((d) => d.id === cur.id)!.forms)) })} className="text-xs text-primary mt-5" title="Replace with the shipped default forms & fields">Reset to default</button>
               )}
               <button onClick={() => { setItems(items.filter((i) => i.id !== cur.id)); setSel(null) }} className="text-xs text-status-rejected mt-5">Delete insurer</button>
             </div>
-            <div className="flex items-center justify-between"><label className="text-xs text-text-main font-semibold">Fields the system reads from this insurer's documents</label>
-              <button onClick={addField} className="text-xs text-primary">+ Add field</button></div>
-            <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[11px] text-outline uppercase tracking-wide px-1">
-                <span className="col-span-3">Label</span><span className="col-span-2">Section</span><span className="col-span-2">Type</span><span className="col-span-1">Req</span><span className="col-span-3">AI hint</span><span className="col-span-1"></span>
-              </div>
-              {cur.fields.map((fl) => (
-                <div key={fl.id} className="grid grid-cols-12 gap-2 items-center">
-                  <input className={`${inp} col-span-3`} value={fl.label} placeholder="Field label" onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, label: e.target.value } : x) })} />
-                  <input className={`${inp} col-span-2`} value={fl.section || ''} placeholder="Section" onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, section: e.target.value } : x) })} />
-                  <select className={`${inp} col-span-2`} value={fl.type} onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, type: e.target.value as FieldType } : x) })}>{FIELD_TYPES.map((t) => <option key={t}>{t}</option>)}</select>
-                  <label className="col-span-1 grid place-items-center"><input type="checkbox" checked={fl.required} onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, required: e.target.checked } : x) })} /></label>
-                  <input className={`${inp} col-span-3`} value={fl.aiHint} placeholder="where to find it" onChange={(e) => upd({ fields: cur.fields.map((x) => x.id === fl.id ? { ...x, aiHint: e.target.value } : x) })} />
-                  <button onClick={() => upd({ fields: cur.fields.filter((x) => x.id !== fl.id) })} className="col-span-1 text-xs text-status-rejected">Remove</button>
-                </div>
+
+            {/* form-type tabs: Claim / LOG */}
+            <div className="flex items-center gap-2 border-b border-outline-variant/60 pb-2">
+              {curForms.map((t) => (
+                <button key={t} onClick={() => setForm(t)}
+                  className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${activeForm === t ? 'bg-primary/[0.08] text-primary font-medium' : 'text-text-main hover:bg-surface-container'}`}>
+                  <Icon name={t === 'claim' ? 'description' : 'verified'} className="text-[15px]" />{FORM_LABELS[t]}
+                  <Badge className="bg-surface-container">{cur.forms[t]?.length ?? 0}</Badge>
+                  {ed.editing && curForms.length > 1 && (
+                    <span onClick={(e) => { e.stopPropagation(); removeForm(t) }} title={`Remove ${FORM_LABELS[t]}`} className="text-status-rejected ml-1"><Icon name="close" className="text-[13px]" /></span>
+                  )}
+                </button>
               ))}
-              {cur.fields.length === 0 && <p className="text-xs text-outline">No fields yet — add the ones this insurer's form contains.</p>}
+              {ed.editing && allForms.filter((t) => !curForms.includes(t)).map((t) => (
+                <button key={t} onClick={() => addForm(t)} className="text-xs text-primary flex items-center gap-1"><Icon name="add" className="text-[14px]" />Add {FORM_LABELS[t]}</button>
+              ))}
+              {curForms.length === 0 && <span className="text-xs text-outline">This insurer has no forms — add a Claim or LOG form.</span>}
             </div>
-            <p className="text-xs text-outline">These fields drive the <b>New Claim</b> form, the JD1/JD2 display, and the AI extraction prompt for this insurer.</p>
+
+            {curForms.length > 0 && (<>
+              <div className="flex items-center justify-between"><label className="text-xs text-text-main font-semibold">Fields for the {FORM_LABELS[activeForm]} — use <b>Section</b> for the bold headers on the form</label>
+                <button onClick={addField} className="text-xs text-primary">+ Add field</button></div>
+              <div className="space-y-2">
+                <div className="grid grid-cols-12 gap-2 text-[11px] text-outline uppercase tracking-wide px-1">
+                  <span className="col-span-3">Label</span><span className="col-span-2">Section</span><span className="col-span-2">Type</span><span className="col-span-1">Req</span><span className="col-span-3">AI hint</span><span className="col-span-1"></span>
+                </div>
+                {curFields.map((fl) => (
+                  <div key={fl.id} className="grid grid-cols-12 gap-2 items-center">
+                    <input className={`${inp} col-span-3`} value={fl.label} placeholder="Field label" onChange={(e) => setFields(curFields.map((x) => x.id === fl.id ? { ...x, label: e.target.value } : x))} />
+                    <input className={`${inp} col-span-2`} value={fl.section || ''} placeholder="Section" onChange={(e) => setFields(curFields.map((x) => x.id === fl.id ? { ...x, section: e.target.value } : x))} />
+                    <select className={`${inp} col-span-2`} value={fl.type} onChange={(e) => setFields(curFields.map((x) => x.id === fl.id ? { ...x, type: e.target.value as FieldType } : x))}>{FIELD_TYPES.map((t) => <option key={t}>{t}</option>)}</select>
+                    <label className="col-span-1 grid place-items-center"><input type="checkbox" checked={fl.required} onChange={(e) => setFields(curFields.map((x) => x.id === fl.id ? { ...x, required: e.target.checked } : x))} /></label>
+                    <input className={`${inp} col-span-3`} value={fl.aiHint} placeholder="where to find it" onChange={(e) => setFields(curFields.map((x) => x.id === fl.id ? { ...x, aiHint: e.target.value } : x))} />
+                    <button onClick={() => setFields(curFields.filter((x) => x.id !== fl.id))} className="col-span-1 text-xs text-status-rejected">Remove</button>
+                  </div>
+                ))}
+                {curFields.length === 0 && <p className="text-xs text-outline">No fields yet — add the ones this {FORM_LABELS[activeForm]} contains.</p>}
+              </div>
+            </>)}
+            <p className="text-xs text-outline">These fields drive the <b>New Claim</b> form, the JD1/JD2 display, and the AI extraction prompt for this insurer's {FORM_LABELS[activeForm]}.</p>
           </div>
         )}
       </Card>

@@ -6,7 +6,7 @@ import { backendOn, getName } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { DocReview } from '../components/DocReview'
 import { usePersistent } from '../lib/persist'
-import { DEFAULT_INSURERS, type InsurerConfig } from '../lib/insurers'
+import { DEFAULT_INSURERS, FORM_LABELS, formTypesOf, fieldsFor, type InsurerConfig, type FormType } from '../lib/insurers'
 import { confidenceCls } from '../lib/format'
 
 const A_LABELS: Record<string, string> = {
@@ -46,8 +46,9 @@ export function JD1ReviewPage() {
   const [sending, setSending] = useState(false)
   const [flash, setFlash] = useState('')
   const [reviewIdx, setReviewIdx] = useState(0)
-  const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers.v2', DEFAULT_INSURERS)
+  const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers.v3', DEFAULT_INSURERS)
   const [reviewInsurerId, setReviewInsurerId] = useState(insurers[0]?.id ?? '')
+  const [reviewForm, setReviewForm] = useState<FormType>('claim')
   const [mail, setMail] = useState<DraftMail | null>(null)
   const [mailBusy, setMailBusy] = useState(false)
   const [invDraft, setInvDraft] = useState<Record<string, string>>({})
@@ -62,6 +63,11 @@ export function JD1ReviewPage() {
     })
     if (hit) setReviewInsurerId(hit.id)
   }, [reviewIdx, files, insurers])
+
+  // default the form type from the detected claim type (LOG vs reimbursement/claim)
+  useEffect(() => {
+    if (note?.claim_type) setReviewForm(note.claim_type.toUpperCase() === 'LOG' ? 'log' : 'claim')
+  }, [note])
 
   async function sendToJD2() {
     if (!note) return
@@ -344,11 +350,25 @@ export function JD1ReviewPage() {
             <Icon name="document_scanner" className="text-[18px] text-primary" />
             <h3 className="font-semibold text-sm">AI field review</h3>
             <span className="text-xs text-outline">Fields follow the insurer's setup — hover to highlight, edit to correct.</span>
-            <div className="ml-auto flex items-center gap-1 text-xs">
+            <div className="ml-auto flex items-center gap-2 text-xs">
               <span className="text-text-main">Insurer (auto-detected):</span>
               <select value={reviewInsurerId} onChange={(e) => setReviewInsurerId(e.target.value)} className="border border-outline-variant rounded-md px-2 py-1" title="Detected from the file name — change if wrong">
                 {insurers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
               </select>
+              {(() => {
+                const ins = insurers.find((i) => i.id === reviewInsurerId)
+                const avail = ins ? formTypesOf(ins) : (['claim'] as FormType[])
+                if (avail.length <= 1) return avail.length === 1 ? <Badge className="bg-primary/10 text-primary">{FORM_LABELS[avail[0]]}</Badge> : null
+                const active = avail.includes(reviewForm) ? reviewForm : avail[0]
+                return (
+                  <div className="flex items-center gap-1 bg-surface-container rounded-lg p-0.5">
+                    {avail.map((t) => (
+                      <button key={t} onClick={() => setReviewForm(t)}
+                        className={`px-2 py-1 rounded-md ${active === t ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>{FORM_LABELS[t]}</button>
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
           </div>
           <div className="flex gap-2 flex-wrap mb-3">
@@ -359,8 +379,13 @@ export function JD1ReviewPage() {
               </button>
             ))}
           </div>
-          {files[reviewIdx] && <DocReview key={reviewIdx + files[reviewIdx].name} file={files[reviewIdx]}
-            mapFields={insurers.find((i) => i.id === reviewInsurerId)?.fields.map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))} />}
+          {files[reviewIdx] && (() => {
+            const ins = insurers.find((i) => i.id === reviewInsurerId)
+            const avail = ins ? formTypesOf(ins) : (['claim'] as FormType[])
+            const active = avail.includes(reviewForm) ? reviewForm : (avail[0] ?? 'claim')
+            return <DocReview key={reviewIdx + active + files[reviewIdx].name} file={files[reviewIdx]}
+              mapFields={fieldsFor(ins, active).map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))} />
+          })()}
         </Card>
       )}
 

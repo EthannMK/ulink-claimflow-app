@@ -2,17 +2,26 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageTitle, Card, Button, Icon } from '../components/ui'
 import { usePersistent } from '../lib/persist'
-import { DEFAULT_INSURERS, type InsurerConfig, type InsurerField } from '../lib/insurers'
+import { DEFAULT_INSURERS, fieldsFor, formTypesOf, type InsurerConfig, type InsurerField, type FormType } from '../lib/insurers'
 
 export function NewClaimPage() {
   const nav = useNavigate()
-  const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers.v2', DEFAULT_INSURERS)
+  const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers.v3', DEFAULT_INSURERS)
   const [insurerId, setInsurerId] = useState(insurers[0]?.id ?? '')
   const [requestType, setRequestType] = useState('New claim (reimbursement)')
   const [channel, setChannel] = useState('Email')
   const [values, setValues] = useState<Record<string, string>>({})
   const [done, setDone] = useState(false)
   const insurer = useMemo(() => insurers.find((i) => i.id === insurerId), [insurers, insurerId])
+  const formType: FormType = requestType === 'LOG request' ? 'log' : 'claim'
+  const availForms = insurer ? formTypesOf(insurer) : []
+  const hasForm = availForms.includes(formType)
+  const formFields = hasForm ? fieldsFor(insurer, formType) : []
+  const sections = useMemo(() => {
+    const order: string[] = []
+    for (const f of formFields) if (!order.includes(f.section || '')) order.push(f.section || '')
+    return order
+  }, [formFields])
   const field = 'w-full text-sm border border-outline-variant rounded-md px-3 py-2 bg-white'
 
   function renderField(f: InsurerField) {
@@ -50,10 +59,20 @@ export function NewClaimPage() {
               <select className={field} value={channel} onChange={(e) => setChannel(e.target.value)}><option>Email</option><option>Viber</option><option>Facebook</option><option>Telegram</option><option>Web form</option><option>Call Center</option></select></div>
           </div>
 
-          {insurer && insurer.fields.length > 0 ? (
-            <div className="grid grid-cols-2 gap-4">{insurer.fields.map(renderField)}</div>
+          {!insurer ? null : !hasForm ? (
+            <p className="text-sm text-outline">{insurer.name} has no {formType === 'log' ? 'LOG request' : 'claim'} form
+              {availForms.length > 0 ? <> — it supports {availForms.map((t) => t === 'log' ? 'LOG request' : 'claim').join(' & ')} only. Change the request type above.</> : <>. Add its fields in <b>Settings → Insurers & Fields</b>.</>}</p>
+          ) : formFields.length > 0 ? (
+            <div className="space-y-4">
+              {sections.map((sec) => (
+                <div key={sec || 'none'}>
+                  {sec && <div className="text-[11px] font-semibold uppercase tracking-wide text-primary/70 mb-2">{sec}</div>}
+                  <div className="grid grid-cols-2 gap-4">{formFields.filter((f) => (f.section || '') === sec).map(renderField)}</div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <p className="text-sm text-outline">No fields configured for this insurer yet. Add them in <b>Settings → Insurers & Fields</b>.</p>
+            <p className="text-sm text-outline">No fields configured for this {formType === 'log' ? 'LOG request' : 'claim'} form yet. Add them in <b>Settings → Insurers & Fields</b>.</p>
           )}
 
           <div className="mt-4 border-2 border-dashed border-outline-variant rounded-lg p-6 text-center text-sm text-text-main">
