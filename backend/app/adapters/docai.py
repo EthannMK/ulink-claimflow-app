@@ -87,16 +87,18 @@ def review(data: bytes, mime: str) -> ReviewResult:
             return ReviewResult(pages=total_pages or 1, fields=fields, error=f"Document AI error: {e}")
         for pi, page in enumerate(doc.pages):
             for ff in page.form_fields:
-                val_layout = getattr(ff.field_value, "layout", None) if ff.field_value else None
-                name_layout = getattr(ff.field_name, "layout", None) if ff.field_name else None
-                conf = float((val_layout.confidence if val_layout else 0.0) or (name_layout.confidence if name_layout else 0.0))
+                # In Document AI, field_name / field_value ARE Layout objects
+                # (they carry text_anchor, bounding_poly and confidence directly).
+                name_layout = ff.field_name
+                val_layout = ff.field_value
+                conf = float(getattr(val_layout, "confidence", 0.0) or getattr(name_layout, "confidence", 0.0) or 0.0)
                 fields.append(ReviewField(
                     id=uuid.uuid4().hex[:8],
                     name=_text(doc.text, name_layout) or "(field)",
                     value=_text(doc.text, val_layout),
                     confidence=conf,
                     page=offset + pi,
-                    box=_box(val_layout) if val_layout else _box(name_layout),
+                    box=_box(val_layout) if getattr(val_layout, "bounding_poly", None) else _box(name_layout),
                 ))
         total_pages = offset + len(doc.pages)
     return ReviewResult(pages=total_pages or 1, fields=fields, provider="docai")
