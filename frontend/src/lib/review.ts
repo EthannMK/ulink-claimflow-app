@@ -1,7 +1,7 @@
 import { apiBase, authHeaders } from './auth'
 
 export interface ReviewBox { x: number; y: number; w: number; h: number }
-export interface ReviewField { id: string; name: string; value: string; confidence: number; page: number; box: ReviewBox }
+export interface ReviewField { id: string; name: string; value: string; confidence: number; page: number; section?: string; box: ReviewBox }
 export interface ReviewResult { pages: number; fields: ReviewField[]; all_fields: ReviewField[]; provider: string; error: string }
 
 // Per-session cache keyed by file identity + requested fields.

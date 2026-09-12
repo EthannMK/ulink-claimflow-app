@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { Card, Badge, Icon } from './ui'
 import { confidenceCls } from '../lib/format'
 import { reviewDoc, type ReviewResult, type ReviewField } from '../lib/review'
@@ -105,23 +105,28 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
           )}
           {err && <Card className="p-3 text-xs text-status-rejected">{err}</Card>}
           <div className="space-y-1.5 max-h-[32rem] overflow-y-auto pr-1">
-            {display.map((f) => {
+            {(() => { let lastSec = ''; return display.map((f) => {
               const val = edits[f.id] ?? f.value
               const has = val.trim() !== ''
+              const showSec = useMapped && !!f.section && f.section !== lastSec
+              if (showSec) lastSec = f.section as string
               return (
-                <div key={f.id} onMouseEnter={() => focusField(f)} onMouseLeave={() => setHover(null)}
-                  className="p-2 rounded-md border"
-                  style={{ borderColor: hover === f.id ? 'rgba(202,138,4,0.9)' : 'rgba(0,0,0,0.08)', backgroundColor: hover === f.id ? 'rgba(254,249,195,0.6)' : 'transparent' }}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-text-main truncate">{f.name}{f.box.w > 0 && f.page !== page && <span className="text-outline"> · p{f.page + 1}</span>}</span>
-                    {has ? <Badge className={confidenceCls(f.confidence)}>{Math.round(f.confidence * 100)}%</Badge>
-                      : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">—</Badge>}
+                <Fragment key={f.id}>
+                  {showSec && <div className="text-[11px] font-semibold uppercase tracking-wide text-primary/70 pt-2 pb-0.5">{f.section}</div>}
+                  <div onMouseEnter={() => focusField(f)} onMouseLeave={() => setHover(null)}
+                    className="p-2 rounded-md border"
+                    style={{ borderColor: hover === f.id ? 'rgba(202,138,4,0.9)' : 'rgba(0,0,0,0.08)', backgroundColor: hover === f.id ? 'rgba(254,249,195,0.6)' : 'transparent' }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-text-main truncate">{f.name}{f.box.w > 0 && f.page !== page && <span className="text-outline"> · p{f.page + 1}</span>}</span>
+                      {has ? <Badge className={confidenceCls(f.confidence)}>{Math.round(f.confidence * 100)}%</Badge>
+                        : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">—</Badge>}
+                    </div>
+                    <input value={val} onChange={(e) => setEdits({ ...edits, [f.id]: e.target.value })}
+                      className="w-full text-sm border border-outline-variant rounded-md px-2 py-1 mt-1" placeholder={useMapped ? 'not found — enter manually' : ''} />
                   </div>
-                  <input value={val} onChange={(e) => setEdits({ ...edits, [f.id]: e.target.value })}
-                    className="w-full text-sm border border-outline-variant rounded-md px-2 py-1 mt-1" placeholder={useMapped ? 'not found — enter manually' : ''} />
-                </div>
+                </Fragment>
               )
-            })}
+            }) })()}
             {!loading && !err && display.length === 0 && <p className="text-xs text-outline">No fields.</p>}
           </div>
           <p className="text-[11px] text-outline mt-2">Values read by Gemini (better on handwriting & Burmese); highlight location from Document AI. Hover to locate; edit to correct.</p>

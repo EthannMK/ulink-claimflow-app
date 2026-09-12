@@ -191,6 +191,7 @@ class ReviewField(BaseModel):
     value: str
     confidence: float = 0.0
     page: int = 0
+    section: str = ""
     box: ReviewBox = Field(default_factory=ReviewBox)
 
 class ReviewResult(BaseModel):

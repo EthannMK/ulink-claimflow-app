@@ -53,20 +53,24 @@ def _gemini_values(data: bytes, mime: str, fields: list[dict]) -> dict:
     if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
         return {}
     import httpx
-    labels = "\n".join(
-        (f"- [{f.get('section')}] " if f.get("section") else "- ") + f"{f.get('label')}"
-        + (f" (hint: {f.get('hint')})" if f.get("hint") else "")
-        for f in fields if f.get("label")
-    )
+    lines = []
+    for i, f in enumerate(fields, 1):
+        if not f.get("label"):
+            continue
+        sec = f.get("section"); hint = f.get("hint")
+        lines.append(f"{i}. " + (f"[{sec}] " if sec else "") + str(f.get("label"))
+                     + (f" (hint: {hint})" if hint else ""))
+    labels = "\n".join(lines)
     prompt = (
         "Read this insurance claim document carefully, INCLUDING handwriting and Burmese text, across ALL pages. "
-        "For each requested field below, extract the applicant's answer (the value the customer FILLED IN, "
+        "For each NUMBERED field below, extract the applicant's answer (the value the customer FILLED IN, "
         "not the printed question/label). Keep numbers and IDs exactly as written. "
         "Dates in these forms are written in DD/MM/YY (or DD/MM/YYYY) format — return them as written, do not reorder. "
         "For a total claim amount, use the overall total figure even if it appears at the bottom of a table on a later page. "
         "Follow any per-field hint in parentheses. "
-        'Respond ONLY with JSON: {"fields":[{"label":"<exact label>","value":"<answer>","confidence":0.0}]}. '
-        "confidence is 0..1; if a field is blank or not present, use value \"\" and confidence 0.\n\nFields:\n" + labels
+        'Respond ONLY with JSON: {"fields":[{"n":<field number>,"value":"<answer>","confidence":0.0}]}. '
+        "Include an entry for every field number. confidence is 0..1; if a field is blank or not present, "
+        'use value "" and confidence 0.\n\nFields:\n' + labels
     )
     parts = [{"text": prompt}]
     text = ""
@@ -91,9 +95,12 @@ def _gemini_values(data: bytes, mime: str, fields: list[dict]) -> dict:
         return {}
     out = {}
     for it in d.get("fields", []):
-        if isinstance(it, dict) and it.get("label"):
-            val = str(it.get("value", "")).strip()
-            out[_norm(it["label"])] = {"value": val, "confidence": float(it.get("confidence", 0) or 0)}
+        if isinstance(it, dict) and it.get("n") is not None:
+            try:
+                n = int(it["n"])
+            except (TypeError, ValueError):
+                continue
+            out[n] = {"value": str(it.get("value", "")).strip(), "confidence": float(it.get("confidence", 0) or 0)}
     return out
 
 
@@ -121,15 +128,16 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
             req = []
 
     if req:
-        gem = _gemini_values(data, mime, req)   # accurate values (handwriting/Burmese)
+        gem = _gemini_values(data, mime, req)   # accurate values (handwriting/Burmese), keyed by field number
         mapped: list[ReviewField] = []
-        for f in req:
-            g = gem.get(_norm(f["label"]), {})
+        for i, f in enumerate(req, 1):
+            g = gem.get(i, {})
             val = g.get("value", "")
             page, box = _find_box(val, raw)
             mapped.append(ReviewField(
                 id=uuid.uuid4().hex[:8], name=f["label"], value=val,
-                confidence=(g.get("confidence", 0.0) if val else 0.0), page=page, box=box,
+                confidence=(g.get("confidence", 0.0) if val else 0.0),
+                page=page, section=str(f.get("section", "")), box=box,
             ))
         result.fields = mapped
         result.provider = "hybrid" if gem else "docai"
