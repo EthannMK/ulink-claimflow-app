@@ -4,6 +4,8 @@ import { runJD1, handoffToJD2, type JD1Note, type NoteField, type Section } from
 import { backendOn } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { DocReview } from '../components/DocReview'
+import { usePersistent } from '../lib/persist'
+import { DEFAULT_INSURERS, type InsurerConfig } from '../lib/insurers'
 import { confidenceCls } from '../lib/format'
 
 const A_LABELS: Record<string, string> = {
@@ -43,6 +45,8 @@ export function JD1ReviewPage() {
   const [sending, setSending] = useState(false)
   const [flash, setFlash] = useState('')
   const [reviewIdx, setReviewIdx] = useState(0)
+  const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers', DEFAULT_INSURERS)
+  const [reviewInsurerId, setReviewInsurerId] = useState(insurers[0]?.id ?? '')
 
   async function sendToJD2() {
     if (!note) return
@@ -215,7 +219,13 @@ export function JD1ReviewPage() {
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Icon name="document_scanner" className="text-[18px] text-primary" />
             <h3 className="font-semibold text-sm">AI field review</h3>
-            <span className="text-xs text-outline">See where each field was read from — hover to highlight, edit to correct.</span>
+            <span className="text-xs text-outline">Fields follow the insurer's setup — hover to highlight, edit to correct.</span>
+            <div className="ml-auto flex items-center gap-1 text-xs">
+              <span className="text-text-main">Insurer:</span>
+              <select value={reviewInsurerId} onChange={(e) => setReviewInsurerId(e.target.value)} className="border border-outline-variant rounded-md px-2 py-1">
+                {insurers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+              </select>
+            </div>
           </div>
           <div className="flex gap-2 flex-wrap mb-3">
             {files.map((f, i) => (
@@ -225,7 +235,8 @@ export function JD1ReviewPage() {
               </button>
             ))}
           </div>
-          {files[reviewIdx] && <DocReview key={reviewIdx + files[reviewIdx].name} file={files[reviewIdx]} />}
+          {files[reviewIdx] && <DocReview key={reviewIdx + files[reviewIdx].name} file={files[reviewIdx]}
+            mapFields={insurers.find((i) => i.id === reviewInsurerId)?.fields.map((f) => ({ id: f.id, label: f.label }))} />}
         </Card>
       )}
     </div>
