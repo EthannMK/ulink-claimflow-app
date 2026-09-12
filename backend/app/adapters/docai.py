@@ -79,7 +79,9 @@ def review(data: bytes, mime: str) -> ReviewResult:
         offset = ci * CHUNK
         try:
             raw = documentai.RawDocument(content=cdata, mime_type=mime or "application/pdf")
-            result = client.process_document(request=documentai.ProcessRequest(name=name, raw_document=raw, imageless_mode=True))
+            # normal mode (each chunk is <=15 pages, within the sync limit); imageless mode
+            # was returning an empty text layer, so field names/values came back blank.
+            result = client.process_document(request=documentai.ProcessRequest(name=name, raw_document=raw))
             doc = result.document
         except Exception as e:
             return ReviewResult(pages=total_pages or 1, fields=fields, error=f"Document AI error: {e}")
