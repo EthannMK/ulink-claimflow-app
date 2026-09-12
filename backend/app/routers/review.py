@@ -21,30 +21,32 @@ def _norm(s: str) -> str:
 
 
 def _find_box(value: str, raw: list[ReviewField]):
-    """Locate the highlight by the VALUE Gemini extracted — find the Document AI
-    key/value whose read text matches that value. Returns an empty box (no highlight)
-    if there's no confident match, so we never point at the wrong place."""
+    """Locate the highlight by the VALUE Gemini extracted, matched ONLY against the
+    Document AI field's read value (never the printed question). Strict: only returns
+    a box on a strong match, otherwise none — better no highlight than a wrong one."""
     nv = _norm(value)
-    if not nv or len(nv) < 2:
+    if not nv or len(nv) < 3:
         return 0, ReviewBox()
-    vw = set(nv.split())
+    vw = [w for w in nv.split() if w]
     best = None; score = 0.0
     for r in raw:
-        # compare the value against the DocAI field's value text (and its key, as backup)
-        for cand in (r.value, r.name):
-            nc = _norm(cand)
-            if not nc:
-                continue
-            if nc == nv:
-                s = 100.0
-            elif nv in nc or nc in nv:
-                s = 75.0
+        if not (r.box and r.box.w > 0):
+            continue
+        nc = _norm(r.value)
+        if not nc:
+            continue
+        if nc == nv:
+            s = 1.0
+        else:
+            longer, shorter = (nc, nv) if len(nc) >= len(nv) else (nv, nc)
+            if len(shorter) >= 5 and shorter in longer:
+                s = len(shorter) / len(longer)          # strong containment only
             else:
-                shared = len(set(nc.split()) & vw)
-                s = (shared * 60.0 / max(len(vw), 1)) if shared else 0.0
-            if s > score:
-                score = s; best = r
-    if best and score >= 70 and best.box.w > 0:
+                shared = len(set(nc.split()) & set(vw))
+                s = shared / max(len(vw), 1) if shared else 0.0
+        if s > score:
+            score = s; best = r
+    if best and score >= 0.8:
         return best.page, best.box
     return 0, ReviewBox()
 
