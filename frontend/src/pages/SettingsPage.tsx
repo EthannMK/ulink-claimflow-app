@@ -78,7 +78,7 @@ function EmployerMapping() {
 
 // ---------- Insurers & Fields (drives New Claim, JD1/JD2 display, AI extraction) ----------
 function Insurers() {
-  const [saved, setSaved] = usePersistent<InsurerConfig[]>('settings.insurers', DEFAULT_INSURERS)
+  const [saved, setSaved] = usePersistent<InsurerConfig[]>('settings.insurers.v2', DEFAULT_INSURERS)
   const ed = useEditable(saved, setSaved)
   const items = ed.value
   const setItems = ed.setDraft

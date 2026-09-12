@@ -45,7 +45,7 @@ export function JD1ReviewPage() {
   const [sending, setSending] = useState(false)
   const [flash, setFlash] = useState('')
   const [reviewIdx, setReviewIdx] = useState(0)
-  const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers', DEFAULT_INSURERS)
+  const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers.v2', DEFAULT_INSURERS)
   const [reviewInsurerId, setReviewInsurerId] = useState(insurers[0]?.id ?? '')
 
   // auto-detect the insurer from the selected file's name

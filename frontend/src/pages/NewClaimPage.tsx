@@ -6,7 +6,7 @@ import { DEFAULT_INSURERS, type InsurerConfig, type InsurerField } from '../lib/
 
 export function NewClaimPage() {
   const nav = useNavigate()
-  const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers', DEFAULT_INSURERS)
+  const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers.v2', DEFAULT_INSURERS)
   const [insurerId, setInsurerId] = useState(insurers[0]?.id ?? '')
   const [requestType, setRequestType] = useState('New claim (reimbursement)')
   const [channel, setChannel] = useState('Email')
