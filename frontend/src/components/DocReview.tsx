@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, Badge, Icon } from './ui'
 import { confidenceCls } from '../lib/format'
 import { reviewDoc, type ReviewResult, type ReviewField } from '../lib/review'
@@ -17,24 +17,8 @@ async function renderPdfPages(file: File): Promise<string[]> {
   return imgs
 }
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
-// best-match a configured field label to a Document-AI form key (the printed question)
-function bestMatch(label: string, raw: ReviewField[]): ReviewField | null {
-  const nl = norm(label); const lw = new Set(nl.split(' ').filter(Boolean))
-  let best: ReviewField | null = null; let score = 0
-  for (const r of raw) {
-    const nr = norm(r.name); if (!nr) continue
-    let s = 0
-    if (nr === nl) s = 100
-    else if (nr.includes(nl) || nl.includes(nr)) s = 60
-    else { const rw = nr.split(' '); const shared = rw.filter((w) => lw.has(w)).length; s = shared ? (shared * 20) / Math.max(lw.size, rw.length) * 3 : 0 }
-    if (s > score) { score = s; best = r }
-  }
-  return score >= 30 ? best : null
-}
-
-export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: string; label: string }[] }) {
+export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: string; label: string; hint?: string }[] }) {
   const [imgs, setImgs] = useState<string[]>([])
   const [res, setRes] = useState<ReviewResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -43,6 +27,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
   const [hover, setHover] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, string>>({})
   const [mapped, setMapped] = useState(true)
+  const hasMap = !!mapFields?.length
 
   useEffect(() => {
     let alive = true
@@ -51,40 +36,33 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
       try {
         const previews = isPdf(file) ? await renderPdfPages(file) : [URL.createObjectURL(file)]
         if (!alive) return; setImgs(previews)
-        const r = await reviewDoc(file); if (!alive) return
+        const fieldsArg = hasMap ? JSON.stringify(mapFields!.map((f) => ({ label: f.label, hint: f.hint || '' }))) : ''
+        const r = await reviewDoc(file, fieldsArg); if (!alive) return
         if (r.error) setErr(r.error)
         setRes(r)
       } catch (e: any) { if (alive) setErr(e?.message ?? 'Review failed') }
       finally { if (alive) setLoading(false) }
     })()
     return () => { alive = false }
-  }, [file])
+  }, [file, mapFields])
 
   const pageCount = Math.max(imgs.length, res?.pages ?? 1)
-  const useMapped = mapped && !!mapFields?.length
-
-  // display fields: either the mapped-to-insurer fields, or the raw detected ones
-  const display: ReviewField[] = useMemo(() => {
-    const raw = res?.fields || []
-    if (!useMapped) return raw
-    return (mapFields || []).map((mf) => {
-      const m = bestMatch(mf.label, raw)
-      return { id: mf.id, name: mf.label, value: m?.value || '', confidence: m?.value ? m.confidence : 0, page: m?.page ?? 0, box: m?.box || { x: 0, y: 0, w: 0, h: 0 } }
-    })
-  }, [res, mapFields, useMapped])
-
+  const useMapped = mapped && hasMap
+  const display: ReviewField[] = (useMapped ? res?.fields : res?.all_fields) || res?.fields || []
   const pageBoxes = display.filter((f) => f.page === page && f.box.w > 0)
-
   function focusField(f: ReviewField) { setHover(f.id); if (f.box.w > 0 && f.page !== page) setPage(f.page) }
 
   return (
     <div>
-      {mapFields?.length ? (
-        <div className="flex items-center gap-1 mb-3 bg-surface-container rounded-lg p-1 w-fit text-xs">
-          <button onClick={() => setMapped(true)} className={`px-2.5 py-1 rounded-md ${mapped ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>Insurer fields</button>
-          <button onClick={() => setMapped(false)} className={`px-2.5 py-1 rounded-md ${!mapped ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>All detected</button>
+      {hasMap && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <div className="flex items-center gap-1 bg-surface-container rounded-lg p-1 w-fit text-xs">
+            <button onClick={() => setMapped(true)} className={`px-2.5 py-1 rounded-md ${mapped ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>Insurer fields</button>
+            <button onClick={() => setMapped(false)} className={`px-2.5 py-1 rounded-md ${!mapped ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>All detected</button>
+          </div>
+          {res?.provider === 'hybrid' && <Badge className="bg-status-ai/10 text-status-ai">Gemini values · Document AI highlights</Badge>}
         </div>
-      ) : null}
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         {/* left: document with highlights */}
@@ -119,7 +97,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
             <h4 className="font-semibold text-sm">{useMapped ? 'Insurer fields' : 'Detected fields'}</h4>
             {res && !err && <Badge className="bg-status-approved/10 text-status-approved">{display.length} field(s)</Badge>}
           </div>
-          {loading && <p className="text-xs text-text-main">Reading the document with Document AI…</p>}
+          {loading && <p className="text-xs text-text-main">Reading with Gemini + Document AI…</p>}
           {err && <Card className="p-3 text-xs text-status-rejected">{err}</Card>}
           <div className="space-y-1.5 max-h-[32rem] overflow-y-auto pr-1">
             {display.map((f) => {
@@ -141,7 +119,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
             })}
             {!loading && !err && display.length === 0 && <p className="text-xs text-outline">No fields.</p>}
           </div>
-          <p className="text-[11px] text-outline mt-2">Hover a field to highlight where it was read from. Fields follow this insurer's setup; switch to “All detected” to see everything the parser found.</p>
+          <p className="text-[11px] text-outline mt-2">Values read by Gemini (better on handwriting & Burmese); highlight location from Document AI. Hover to locate; edit to correct.</p>
         </div>
       </div>
     </div>

@@ -195,6 +195,7 @@ class ReviewField(BaseModel):
 
 class ReviewResult(BaseModel):
     pages: int = 1
-    fields: list[ReviewField] = []
+    fields: list[ReviewField] = []       # primary (mapped to insurer fields when requested)
+    all_fields: list[ReviewField] = []   # raw Document AI key/values (for "All detected")
     provider: str = "docai"
     error: str = ""

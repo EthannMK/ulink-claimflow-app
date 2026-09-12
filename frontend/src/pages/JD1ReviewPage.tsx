@@ -236,7 +236,7 @@ export function JD1ReviewPage() {
             ))}
           </div>
           {files[reviewIdx] && <DocReview key={reviewIdx + files[reviewIdx].name} file={files[reviewIdx]}
-            mapFields={insurers.find((i) => i.id === reviewInsurerId)?.fields.map((f) => ({ id: f.id, label: f.label }))} />}
+            mapFields={insurers.find((i) => i.id === reviewInsurerId)?.fields.map((f) => ({ id: f.id, label: f.label, hint: f.aiHint }))} />}
         </Card>
       )}
     </div>
