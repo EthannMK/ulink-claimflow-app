@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getJD2Queue, getJD2Item, decideJD2, updateJD2Note, fetchDocBlobUrl, type JD2Item, type JD1Note, type NoteField } from '../lib/jd1'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
+import { SupportingReview } from '../components/SupportingReview'
 import { confidenceCls } from '../lib/format'
 
 const H_LABELS: Record<string, string> = {
@@ -239,9 +240,12 @@ export function JD2AdjudicationPage() {
           </Card>
         )}
 
-        {/* Step 5 — Documents */}
+        {/* Step 5 — Supporting-document intelligence */}
+        <SupportingReview supporting={n.supporting} step="Step 5" />
+
+        {/* Step 6 — Documents */}
         <Card className="p-5">
-          <div className="flex items-center gap-2 mb-2"><Badge className="bg-primary/10 text-primary">Step 5</Badge><h3 className="font-semibold text-sm">Uploaded documents ({item.attachments?.length ?? 0})</h3></div>
+          <div className="flex items-center gap-2 mb-2"><Badge className="bg-primary/10 text-primary">Step 6</Badge><h3 className="font-semibold text-sm">Uploaded documents ({item.attachments?.length ?? 0})</h3></div>
           {(!item.attachments || item.attachments.length === 0) ? (
             <p className="text-xs text-outline">No files were attached to this handoff.</p>
           ) : item.attachments.map((a) => (
@@ -265,7 +269,7 @@ export function JD2AdjudicationPage() {
 
         {/* Step 6 — Policy Coverage Checking */}
         <Card className="p-5">
-          <div className="flex items-center gap-2 mb-2"><Badge className="bg-primary/10 text-primary">Step 6</Badge><h3 className="font-semibold text-sm">Policy Coverage Checking</h3><Badge className="bg-status-pending/10 text-status-pending">JD2 decides</Badge></div>
+          <div className="flex items-center gap-2 mb-2"><Badge className="bg-primary/10 text-primary">Step 7</Badge><h3 className="font-semibold text-sm">Policy Coverage Checking</h3><Badge className="bg-status-pending/10 text-status-pending">JD2 decides</Badge></div>
           <div>
             {Object.keys(C_LABELS).map((k) => edRow('section_c', k, C_LABELS[k]))}
           </div>
@@ -273,7 +277,7 @@ export function JD2AdjudicationPage() {
 
         {/* Step 7 — Decision */}
         <Card className="p-5 border-l-4 border-primary">
-          <div className="flex items-center gap-2 mb-2"><Badge className="bg-primary/10 text-primary">Step 7</Badge><Icon name="gavel" className="text-primary text-[20px]" /><h3 className="font-semibold text-sm">JD2 decision</h3></div>
+          <div className="flex items-center gap-2 mb-2"><Badge className="bg-primary/10 text-primary">Step 8</Badge><Icon name="gavel" className="text-primary text-[20px]" /><h3 className="font-semibold text-sm">JD2 decision</h3></div>
           {n.checklist_missing.length > 0 && (
             <div className="text-xs text-status-rejected mb-2">JD1 flagged missing: {n.checklist_missing.join(', ')}</div>
           )}

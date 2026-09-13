@@ -170,6 +170,31 @@ class InvoiceSummary(BaseModel):
     unreadable_count: int = 0      # invoices whose amount the AI could not read
     note: str = ""                 # human-readable reconciliation note
 
+
+# ---- supporting-document intelligence (medical reports, prescriptions, labs, IDs, ...) ----
+class SupportingDoc(BaseModel):
+    name: str = ""
+    doc_type: str = "Other"        # Invoice / Medical report / Prescription / Lab report / Discharge summary / ID / Other
+    summary: str = ""              # 1–2 line plain-English summary of the document
+    provider: str = ""            # hospital / clinic / lab if present
+    date: str = ""                # DD/MM/YY as written
+    amount: str = ""              # total if it's a bill/invoice
+    diagnosis: str = ""           # diagnosis / findings if a medical doc
+    person_name: str = ""         # name on an ID or the patient name on a report
+    flags: list[str] = []          # per-document issues the officer should look at
+    confidence: float = 0.0
+    page: int = 0
+
+class ConsistencyCheck(BaseModel):
+    label: str = ""
+    status: str = "unclear"        # ok / warning / fail / unclear
+    detail: str = ""
+
+class SupportingAnalysis(BaseModel):
+    documents: list[SupportingDoc] = []   # one entry per supporting document
+    checks: list[ConsistencyCheck] = []   # cross-document consistency checks
+    summary: str = ""                      # short overall read of the supporting evidence
+
 class JD1Note(BaseModel):
     claim_type: str = ""        # reimbursement / LOG / API-eclaim
     header: JD1Header = Field(default_factory=JD1Header)
@@ -180,6 +205,7 @@ class JD1Note(BaseModel):
     checklist_required: list[str] = []   # every mandatory doc type for this claim type
     checklist_missing: list[str] = []    # subset of required that is absent
     invoices: InvoiceSummary = Field(default_factory=InvoiceSummary)
+    supporting: SupportingAnalysis = Field(default_factory=SupportingAnalysis)
     ai_summary: str = ""        # adjudicator-facing brief composed for the JD2 handoff
     files_count: int = 0        # physical files uploaded (a file may bundle several documents)
     document_count: int = 0     # logical documents detected across all files

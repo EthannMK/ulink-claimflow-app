@@ -20,6 +20,13 @@ export interface InvoiceSummary {
   reconciled: boolean; difference: string; unreadable_count: number; note: string
 }
 
+export interface SupportingDoc {
+  name: string; doc_type: string; summary: string; provider: string; date: string
+  amount: string; diagnosis: string; person_name: string; flags: string[]; confidence: number; page: number
+}
+export interface ConsistencyCheck { label: string; status: 'ok' | 'warning' | 'fail' | 'unclear'; detail: string }
+export interface SupportingAnalysis { documents: SupportingDoc[]; checks: ConsistencyCheck[]; summary: string }
+
 export interface JD1Note {
   claim_type: string
   header: JD1Header
@@ -30,6 +37,7 @@ export interface JD1Note {
   checklist_required: string[]
   checklist_missing: string[]
   invoices: InvoiceSummary
+  supporting: SupportingAnalysis
   ai_summary: string
   files_count: number
   document_count: number

@@ -5,6 +5,7 @@ import { runJD1, handoffToJD2, draftClientMail, reconcileInvoices, createTicketF
 import { backendOn, getName } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { DocReview } from '../components/DocReview'
+import { SupportingReview } from '../components/SupportingReview'
 import { usePersistent } from '../lib/persist'
 import { DEFAULT_INSURERS, FORM_LABELS, formTypesOf, fieldsFor, type InsurerConfig, type FormType } from '../lib/insurers'
 import { confidenceCls } from '../lib/format'
@@ -402,6 +403,8 @@ export function JD1ReviewPage() {
               </Card>
             )}
 
+            <SupportingReview supporting={note.supporting} />
+
             <Card className="p-5">
               <h3 className="font-semibold text-sm mb-3">Documents in packet</h3>
               {note.documents.map((d, i) => (
@@ -526,6 +529,14 @@ ${n.invoices && n.invoices.count
   ? n.invoices.items.map((i) => `- ${i.description || 'Invoice'}: ${i.amount || '(amount not readable)'}${i.audit && i.audit.length ? `  \n  _original AI value: ${i.audit[0].old || '(blank)'}, corrected by ${i.audit[i.audit.length - 1].by}_` : ''}`).join('\n')
     + `\n\n**Invoices total:** ${n.invoices.invoices_total || '—'}  \n**Claim total:** ${n.invoices.claim_total || '—'}  \n**Reconciliation:** ${n.invoices.note}`
   : 'No invoices detected.'}
+
+## Supporting documents
+${n.supporting && (n.supporting.documents.length || n.supporting.checks.length)
+  ? [
+      ...n.supporting.checks.map((c) => `- [${c.status}] ${c.label}: ${c.detail}`),
+      ...n.supporting.documents.map((d) => `- ${d.doc_type}${d.name ? ` (${d.name})` : ''}: ${d.summary}${d.flags.length ? `  \n  _flags: ${d.flags.join(', ')}_` : ''}`),
+    ].join('\n')
+  : 'No supporting documents analysed.'}
 
 ## AI summary (for JD2)
 ${n.ai_summary || ''}

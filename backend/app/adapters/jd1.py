@@ -10,6 +10,7 @@ from app.models import (
     JD1Note, NoteField, ClassifiedDoc,
     JD1Header, JD1SectionA, JD1SectionB, JD1SectionC,
     InvoiceItem, InvoiceSummary,
+    SupportingDoc, ConsistencyCheck, SupportingAnalysis,
 )
 
 # ---- document classification ---------------------------------------------------
@@ -88,8 +89,13 @@ Produce a JD1 Process Note as STRICT JSON with this exact shape (every leaf is {
  "doc_types_present": ["Claim form","Invoice / bill","Medical report","ID copy","LOG / pre-authorization form","Policy wording","Table of Benefits","Provider CSR"],
  "document_count": <integer>,
  "invoices": [{"description":"what this invoice/bill/receipt is for (e.g. in-patient bill, pharmacy, endoscopy, consultation)","provider":"hospital/clinic name if visible","date":"DD/MM/YY as written","amount":"<the invoice total as written, digits only e.g. 255300 — leave \"\" if you cannot read it clearly>","confidence":0.0,"page":<page number, 1-based>}],
+ "supporting_documents": [{"name":"<source file name if known>","type":"Invoice|Medical report|Prescription|Lab report|Discharge summary|ID|Other","summary":"1-2 line plain-English summary of what this document is and says","provider":"hospital/clinic/lab if present","date":"DD/MM/YY","amount":"<total if it is a bill, digits only, else \"\">","diagnosis":"diagnosis/findings if a medical doc, else \"\"","person_name":"name on an ID or patient name on a report, else \"\"","flags":["any issue an officer should look at, e.g. unsigned, illegible, date mismatch"],"confidence":0.0,"page":<page number>}],
+ "consistency_checks": [{"label":"short name of the check","status":"ok|warning|fail|unclear","detail":"one line explaining the result"}],
  "notes": "brief free-text summary"
 }
+
+For "supporting_documents": list every NON-FORM document in the packet — medical reports, prescriptions, lab/endoscopy results, discharge summaries, invoices/bills, ID copies. Do NOT include the insurer's own claim/LOG form here. Give a genuinely useful 1-2 line summary of each so an officer does not have to open it.
+For "consistency_checks": cross-check the whole packet and report findings, e.g.: does the diagnosis on the medical report match the claim form; are all treatment/visit dates consistent; do the invoices add up to the claimed amount; are there duplicate invoices (same provider, date and amount); does the ID name match the claimant. Use status "fail" for a clear mismatch, "warning" for something to verify, "ok" when it checks out, "unclear" when the documents don't allow a conclusion.
 
 For "doc_types_present": list every document TYPE you can actually see anywhere in the packet (including inside scanned images — e.g. a hospital invoice or endoscopy report is a "Medical report" or "Invoice / bill" even if the filename is meaningless). Use only the exact labels shown above.
 For "document_count": the total number of DISTINCT documents you can identify across the whole packet. A single uploaded/scanned file can contain several distinct documents (e.g. one PDF holding a claim form + an invoice + a medical report counts as 3). Count every distinct document, not the number of files.
@@ -279,6 +285,17 @@ def _compose_summary(note: JD1Note) -> str:
     else:
         parts.append(f"Preliminary flags: none raised — coverage {cov} (JD2/JD3 decide).")
 
+    # supporting-document consistency
+    if note.supporting and note.supporting.checks:
+        fails = [c.label for c in note.supporting.checks if c.status == "fail"]
+        warns = [c.label for c in note.supporting.checks if c.status == "warning"]
+        if fails:
+            parts.append("Consistency: FAILED — " + ", ".join(fails) + ".")
+        elif warns:
+            parts.append("Consistency: verify — " + ", ".join(warns) + ".")
+        else:
+            parts.append("Consistency: all checks passed.")
+
     # recommended action
     if note.checklist_missing:
         parts.append("Recommended action: return to client for the missing documents before adjudication.")
@@ -393,6 +410,7 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
     )
     claim_total = note.header.total_claim_amount.value or note.section_b.claim_amount.value
     note.invoices = _build_invoices(d.get("invoices"), claim_total, files)
+    note.supporting = _build_supporting(d.get("supporting_documents"), d.get("consistency_checks"), note)
     note.ai_summary = _compose_summary(note)
     return note
 
@@ -409,6 +427,60 @@ def _missing_docs(docs: list[ClassifiedDoc], claim_type: str) -> list[str]:
     present = {d.doc_type for d in docs}
     req = MANDATORY.get(claim_type, MANDATORY["reimbursement"])
     return [t for t in req if t not in present]
+
+def _build_supporting(raw_docs, raw_checks, note: JD1Note) -> SupportingAnalysis:
+    """Turn the model's supporting-doc analysis into structured cards + consistency
+    checks, and prepend the deterministic invoice reconciliation as the authoritative
+    numbers check."""
+    docs: list[SupportingDoc] = []
+    for it in (raw_docs or []):
+        if not isinstance(it, dict):
+            continue
+        try:
+            page = int(it.get("page") or 0)
+        except (TypeError, ValueError):
+            page = 0
+        docs.append(SupportingDoc(
+            name=str(it.get("name", "")).strip(),
+            doc_type=str(it.get("type", "Other")).strip() or "Other",
+            summary=str(it.get("summary", "")).strip(),
+            provider=str(it.get("provider", "")).strip(),
+            date=str(it.get("date", "")).strip(),
+            amount=str(it.get("amount", "")).strip(),
+            diagnosis=str(it.get("diagnosis", "")).strip(),
+            person_name=str(it.get("person_name", "")).strip(),
+            flags=[str(x).strip() for x in (it.get("flags") or []) if str(x).strip()],
+            confidence=float(it.get("confidence", 0) or 0),
+            page=page,
+        ))
+
+    checks: list[ConsistencyCheck] = []
+    for c in (raw_checks or []):
+        if not isinstance(c, dict):
+            continue
+        status = str(c.get("status", "unclear")).strip().lower()
+        if status not in ("ok", "warning", "fail", "unclear"):
+            status = "unclear"
+        checks.append(ConsistencyCheck(label=str(c.get("label", "")).strip() or "Check",
+                                       status=status, detail=str(c.get("detail", "")).strip()))
+
+    # authoritative invoice reconciliation (computed, not model-guessed)
+    inv = note.invoices
+    if inv and inv.count:
+        st = "ok" if inv.reconciled else ("warning" if inv.unreadable_count > 0 else "fail")
+        checks.insert(0, ConsistencyCheck(label="Invoice totals vs claim", status=st, detail=inv.note))
+
+    n_docs = len(docs)
+    fails = sum(1 for c in checks if c.status == "fail")
+    warns = sum(1 for c in checks if c.status == "warning")
+    if fails:
+        overall = f"{n_docs} supporting document(s); {fails} consistency issue(s) need attention."
+    elif warns:
+        overall = f"{n_docs} supporting document(s); {warns} item(s) to verify."
+    else:
+        overall = f"{n_docs} supporting document(s); no consistency issues detected."
+    return SupportingAnalysis(documents=docs, checks=checks, summary=overall)
+
 
 def draft_client_mail(note: JD1Note, sender: str = "") -> tuple[str, str, str]:
     """Compose (subject, body, reason) for a client email requesting missing
