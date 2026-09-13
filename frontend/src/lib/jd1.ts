@@ -116,7 +116,7 @@ export async function createTicketFromJD1(note: JD1Note, channel = 'webform'): P
   if (!r.ok) throw new Error(`Ticket create failed (${r.status})`)
   return r.json()
 }
-export async function updateTicket(id: string, patch: { status?: string; documentsComplete?: boolean; summary?: string; assignee?: string }): Promise<Ticket> {
+export async function updateTicket(id: string, patch: { status?: string; documentsComplete?: boolean; summary?: string; assignee?: string; jd2_item_id?: string }): Promise<Ticket> {
   const r = await fetch(`${apiBase()}/api/claims/${id}`, { method: 'PATCH', headers: jsonHeaders(), body: JSON.stringify(patch) })
   if (!r.ok) throw new Error(`Ticket update failed (${r.status})`)
   return r.json()

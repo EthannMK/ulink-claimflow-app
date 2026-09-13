@@ -78,6 +78,7 @@ class Claim(BaseModel):
     assignee: str | None = None; suggestedAssignee: str | None = None
     receivedAt: datetime; documentsComplete: bool = False
     amount: float | None = None; summary: str | None = None
+    jd2_item_id: str | None = None    # set when the ticket is handed to JD2
     extracted: list[ExtractedField] = []; documents: list[DocumentFile] = []
 
 class ClaimList(BaseModel):

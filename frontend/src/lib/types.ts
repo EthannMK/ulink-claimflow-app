@@ -12,6 +12,7 @@ export interface Claim {
   insurer: string; memberName: string; policyNumber?: string;
   assignee?: string | null; suggestedAssignee?: string | null;
   receivedAt: string; documentsComplete: boolean; amount?: number | null; summary?: string | null;
+  jd2_item_id?: string | null;
   extracted: ExtractedField[]; documents: DocumentFile[];
 }
 export interface ClaimList { items: Claim[]; page: number; total: number; }

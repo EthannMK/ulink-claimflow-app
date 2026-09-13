@@ -97,7 +97,7 @@ export function JD1ReviewPage() {
     setSending(true); setFlash('')
     try {
       const item = await handoffToJD2(note, files)
-      if (ticketId) { try { await updateTicket(ticketId, { status: 'ready_for_review' }) } catch { /* ignore */ } }
+      if (ticketId) { try { await updateTicket(ticketId, { status: 'ready_for_review', jd2_item_id: item.id }) } catch { /* ignore */ } }
       localStorage.removeItem('jd1.note.draft'); nav(`/jd2/${item.id}`)
     }
     catch (e: any) { setFlash('Send to JD2 failed: ' + (e?.message ?? 'unknown')) }

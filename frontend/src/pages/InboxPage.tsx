@@ -22,7 +22,7 @@ export function InboxPage() {
       && (status === 'all' || c.status === status)
       && (q.trim() === '' || `${c.reference} ${c.memberName} ${c.insurer} ${c.policyNumber ?? ''}`.toLowerCase().includes(q.toLowerCase()))
   ), [data, tab, channel, status, q])
-  const routeFor = (c: any) => c.category === 'log_request' ? `/log/${c.id}` : `/claim/${c.id}`
+  const routeFor = (c: any) => c.jd2_item_id ? `/jd2/${c.jd2_item_id}` : c.category === 'log_request' ? `/log/${c.id}` : `/claim/${c.id}`
 
   return (
     <div>

@@ -30,6 +30,7 @@ class TicketUpdate(BaseModel):
     assignee: str | None = None
     documentsComplete: bool | None = None
     summary: str | None = None
+    jd2_item_id: str | None = None
 
 
 @router.get("/claims", response_model=ClaimList)
@@ -93,5 +94,7 @@ def update_claim(claim_id: str, body: TicketUpdate, user=Depends(get_current_use
         c.documentsComplete = body.documentsComplete
     if body.summary is not None:
         c.summary = body.summary
+    if body.jd2_item_id is not None:
+        c.jd2_item_id = body.jd2_item_id
     _CLAIMS[claim_id] = c
     return c
