@@ -93,7 +93,7 @@ export function JD1ReviewPage() {
   async function sendToJD2() {
     if (!note) return
     setSending(true); setFlash('')
-    try { const item = await handoffToJD2(note); localStorage.removeItem('jd1.note.draft'); nav(`/jd2/${item.id}`) }
+    try { const item = await handoffToJD2(note, files); localStorage.removeItem('jd1.note.draft'); nav(`/jd2/${item.id}`) }
     catch (e: any) { setFlash('Send to JD2 failed: ' + (e?.message ?? 'unknown')) }
     finally { setSending(false) }
   }
@@ -400,7 +400,7 @@ export function JD1ReviewPage() {
             </Card>
 
             <Card className="p-5">
-              <h3 className="font-semibold text-sm mb-3">Header</h3>
+              <h3 className="font-semibold text-sm mb-3">Claimant Information</h3>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 {Object.keys(H_LABELS).map((k) => {
                   const f = (note.header as any)[k] as NoteField
@@ -422,16 +422,16 @@ export function JD1ReviewPage() {
             </Card>
 
             <Card className="p-5">
-              <h3 className="font-semibold text-sm mb-1">A · Document checking</h3>
+              <h3 className="font-semibold text-sm mb-1">Document Checking</h3>
               {fieldRow('section_a', note.section_a, A_LABELS)}
             </Card>
             <Card className="p-5">
-              <h3 className="font-semibold text-sm mb-1">B · Claim information</h3>
+              <h3 className="font-semibold text-sm mb-1">Claim Information</h3>
               {fieldRow('section_b', note.section_b, B_LABELS)}
             </Card>
             <Card className="p-5">
               <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-semibold text-sm">C · Rule checking</h3>
+                <h3 className="font-semibold text-sm">Policy Coverage Checking</h3>
                 <Badge className="bg-status-pending/10 text-status-pending">JD1 flags · JD2/JD3 decide</Badge>
               </div>
               {fieldRow('section_c', note.section_c, C_LABELS)}

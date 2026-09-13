@@ -1,7 +1,8 @@
-import uuid
+import base64, uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
-from app.models import JD1Note, JD2Item, JD2List, JD2Decision, JD2Status
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Response
+from app.models import JD1Note, JD2Item, JD2List, JD2Decision, JD2Status, StoredDoc
 from app.security import get_current_user
 from app import jd2_store
 
@@ -13,11 +14,33 @@ _DECISION_STATUS = {
     "reject": JD2Status.rejected,
 }
 
+
+class HandoffAttachment(BaseModel):
+    name: str
+    mime: str = "application/octet-stream"
+    data: str = ""   # base64-encoded file bytes
+
+class HandoffRequest(BaseModel):
+    note: JD1Note
+    attachments: list[HandoffAttachment] = []
+
+
 @router.post("/handoff", response_model=JD2Item)
-async def handoff(note: JD1Note, user=Depends(get_current_user)):
-    """JD1 sends a completed Process Note to the JD2 queue."""
+async def handoff(body: HandoffRequest, user=Depends(get_current_user)):
+    """JD1 sends a completed Process Note (plus the uploaded documents) to the JD2 queue."""
+    note = body.note
+    item_id = uuid.uuid4().hex[:12]
+    stored: list[StoredDoc] = []
+    for att in body.attachments:
+        try:
+            raw = base64.b64decode(att.data) if att.data else b""
+        except Exception:
+            raw = b""
+        doc_id = uuid.uuid4().hex[:8]
+        jd2_store.put_blob(item_id, doc_id, att.name, att.mime, raw)
+        stored.append(StoredDoc(id=doc_id, name=att.name, mime=att.mime, size=len(raw)))
     item = JD2Item(
-        id=uuid.uuid4().hex[:12],
+        id=item_id,
         created_at=datetime.now(timezone.utc),
         handed_by=user.get("name") or user.get("username", ""),
         member_name=note.header.member_name.value,
@@ -26,8 +49,20 @@ async def handoff(note: JD1Note, user=Depends(get_current_user)):
         claim_amount=note.header.total_claim_amount.value or note.section_b.claim_amount.value,
         status=JD2Status.pending,
         note=note,
+        attachments=stored,
     )
     return jd2_store.add(item)
+
+
+@router.get("/{item_id}/documents/{doc_id}")
+async def download_document(item_id: str, doc_id: str, user=Depends(get_current_user)):
+    """Return the raw bytes of a JD1-uploaded document so JD2 can preview or download it."""
+    blob = jd2_store.get_blob(item_id, doc_id)
+    if not blob:
+        raise HTTPException(status_code=404, detail="Document not found")
+    name, mime, data = blob
+    return Response(content=data, media_type=mime or "application/octet-stream",
+                    headers={"Content-Disposition": f'inline; filename="{name}"'})
 
 @router.get("/queue", response_model=JD2List)
 async def queue(user=Depends(get_current_user)):

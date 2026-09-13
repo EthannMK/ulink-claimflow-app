@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getJD2Queue, getJD2Item, decideJD2, type JD2Item, type NoteField, type Section } from '../lib/jd1'
+import { getJD2Queue, getJD2Item, decideJD2, fetchDocBlobUrl, type JD2Item, type NoteField, type Section } from '../lib/jd1'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { confidenceCls } from '../lib/format'
 
@@ -64,6 +64,20 @@ export function JD2AdjudicationPage() {
     try { const updated = await decideJD2(item.id, decision, reasons); setItem(updated) }
     catch (e: any) { setFlash('Decision failed: ' + (e?.message ?? 'unknown')) }
     finally { setBusy(false) }
+  }
+
+  async function previewDoc(docId: string) {
+    if (!item) return
+    try { const { url } = await fetchDocBlobUrl(item.id, docId); window.open(url, '_blank', 'noopener') }
+    catch (e: any) { setFlash('Could not open document: ' + (e?.message ?? 'unknown')) }
+  }
+  async function downloadDoc(docId: string, name: string) {
+    if (!item) return
+    try {
+      const { url, revoke } = await fetchDocBlobUrl(item.id, docId)
+      const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(revoke, 5000)
+    } catch (e: any) { setFlash('Could not download: ' + (e?.message ?? 'unknown')) }
   }
 
   // ---- queue view ----
@@ -140,7 +154,7 @@ export function JD2AdjudicationPage() {
           )}
 
           <Card className="p-5">
-            <h3 className="font-semibold text-sm mb-3">JD1 note — header</h3>
+            <h3 className="font-semibold text-sm mb-3">Claimant Information</h3>
             <div className="grid grid-cols-2 gap-x-4">
               {Object.keys(H_LABELS).map((k) => roRow(H_LABELS[k], (n.header as any)[k]))}
             </div>
@@ -174,12 +188,12 @@ export function JD2AdjudicationPage() {
           )}
 
           <Card className="p-5">
-            <h3 className="font-semibold text-sm mb-3">JD1 note — claim information (B)</h3>
+            <h3 className="font-semibold text-sm mb-3">Claim Information</h3>
             {Object.keys(B_LABELS).map((k) => roRow(B_LABELS[k], (n.section_b as Section)[k]))}
           </Card>
           <Card className="p-5">
             <div className="flex items-center gap-2 mb-2">
-              <h3 className="font-semibold text-sm">JD1 flags — rule checking (C)</h3>
+              <h3 className="font-semibold text-sm">Policy Coverage Checking</h3>
               <Badge className="bg-status-pending/10 text-status-pending">JD2 decides</Badge>
             </div>
             {Object.keys(C_LABELS).map((k) => roRow(C_LABELS[k], (n.section_c as Section)[k]))}
@@ -225,6 +239,21 @@ export function JD2AdjudicationPage() {
                 <Icon name="description" className="text-[14px] text-primary" />
                 <span className="truncate flex-1" title={d.name}>{d.name}</span>
                 <Badge className="bg-on-surface-variant/10 text-on-surface-variant">{d.doc_type}</Badge>
+              </div>
+            ))}
+          </Card>
+
+          <Card className="p-5">
+            <h3 className="font-semibold text-sm mb-2">Uploaded documents ({item.attachments?.length ?? 0})</h3>
+            {(!item.attachments || item.attachments.length === 0) ? (
+              <p className="text-xs text-outline">No files were attached to this handoff.</p>
+            ) : item.attachments.map((a) => (
+              <div key={a.id} className="flex items-center gap-2 py-1.5 text-xs border-b border-outline-variant/40 last:border-0">
+                <Icon name="description" className="text-[15px] text-primary" />
+                <span className="truncate flex-1" title={a.name}>{a.name}</span>
+                <span className="text-outline">{a.size ? `${Math.max(1, Math.round(a.size / 1024))} KB` : ''}</span>
+                <button onClick={() => previewDoc(a.id)} className="text-primary flex items-center gap-0.5" title="Preview in new tab"><Icon name="visibility" className="text-[15px]" />Preview</button>
+                <button onClick={() => downloadDoc(a.id, a.name)} className="text-primary flex items-center gap-0.5" title="Download"><Icon name="download" className="text-[15px]" />Download</button>
               </div>
             ))}
           </Card>

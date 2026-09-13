@@ -84,19 +84,38 @@ export async function draftClientMail(note: JD1Note): Promise<DraftMail> {
 
 // ---- JD2 queue (JD1 -> JD2 handoff) ----
 export type JD2Status = 'pending' | 'approved' | 'partially_approved' | 'rejected'
+export interface StoredDoc { id: string; name: string; mime: string; size: number }
 export interface JD2Item {
   id: string; created_at: string; handed_by: string
   member_name: string; insurer: string; claim_type: string; claim_amount: string
-  status: JD2Status; note: JD1Note
+  status: JD2Status; note: JD1Note; attachments: StoredDoc[]
   decision: string | null; reasons: string; decided_by: string | null; decided_at: string | null
 }
 
 function jsonHeaders(): Record<string, string> { return { ...authHeaders(), 'Content-Type': 'application/json' } }
 
-export async function handoffToJD2(note: JD1Note): Promise<JD2Item> {
-  const r = await fetch(`${apiBase()}/api/jd2/handoff`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(note) })
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  return btoa(binary)
+}
+
+export async function handoffToJD2(note: JD1Note, files: File[] = []): Promise<JD2Item> {
+  const attachments = await Promise.all(files.map(async (f) => ({ name: f.name, mime: f.type || 'application/octet-stream', data: await fileToBase64(f) })))
+  const r = await fetch(`${apiBase()}/api/jd2/handoff`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ note, attachments }) })
   if (!r.ok) throw new Error(`Handoff failed (${r.status})`)
   return r.json()
+}
+
+/** Fetch a JD2 attachment with auth and return an object URL (caller revokes when done). */
+export async function fetchDocBlobUrl(itemId: string, docId: string): Promise<{ url: string; revoke: () => void }> {
+  const r = await fetch(`${apiBase()}/api/jd2/${itemId}/documents/${docId}`, { headers: authHeaders() })
+  if (!r.ok) throw new Error(`Download failed (${r.status})`)
+  const blob = await r.blob()
+  const url = URL.createObjectURL(blob)
+  return { url, revoke: () => URL.revokeObjectURL(url) }
 }
 export async function getJD2Queue(): Promise<JD2Item[]> {
   const r = await fetch(`${apiBase()}/api/jd2/queue`, { headers: authHeaders() })

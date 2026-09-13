@@ -193,6 +193,12 @@ class JD2Status(str, Enum):
     partially_approved = "partially_approved"
     rejected = "rejected"
 
+class StoredDoc(BaseModel):
+    id: str
+    name: str
+    mime: str = "application/octet-stream"
+    size: int = 0
+
 class JD2Item(BaseModel):
     id: str
     created_at: datetime
@@ -203,6 +209,7 @@ class JD2Item(BaseModel):
     claim_amount: str = ""
     status: JD2Status = JD2Status.pending
     note: JD1Note                # the full JD1 Process Note
+    attachments: list[StoredDoc] = []   # the JD1-uploaded documents (bytes served separately)
     decision: str | None = None  # approve / partial / reject
     reasons: str = ""
     decided_by: str | None = None
