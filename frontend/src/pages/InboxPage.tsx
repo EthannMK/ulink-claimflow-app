@@ -15,11 +15,13 @@ export function InboxPage() {
   const nav = useNavigate()
   const [tab, setTab] = useState('all')
   const [channel, setChannel] = useState('all')
+  const [status, setStatus] = useState('all')
   const [q, setQ] = useState('')
   const items = useMemo(() => (data?.items ?? []).filter(
     (c) => (tab === 'all' || c.category === tab) && (channel === 'all' || c.channel === channel)
+      && (status === 'all' || c.status === status)
       && (q.trim() === '' || `${c.reference} ${c.memberName} ${c.insurer} ${c.policyNumber ?? ''}`.toLowerCase().includes(q.toLowerCase()))
-  ), [data, tab, channel, q])
+  ), [data, tab, channel, status, q])
   const routeFor = (c: any) => c.category === 'log_request' ? `/log/${c.id}` : `/claim/${c.id}`
 
   return (
@@ -44,6 +46,13 @@ export function InboxPage() {
         <select value={channel} onChange={(e) => setChannel(e.target.value)} className="text-sm bg-white border border-outline-variant rounded-lg px-3 py-2">
           <option value="all">All channels</option><option value="email">Email</option><option value="facebook">Facebook</option>
           <option value="viber">Viber</option><option value="webform">Web form</option><option value="phone">Phone</option>
+        </select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="text-sm bg-white border border-outline-variant rounded-lg px-3 py-2">
+          <option value="all">All statuses</option>
+          <option value="new">New</option><option value="in_progress">In progress</option>
+          <option value="awaiting_docs">Awaiting documents</option><option value="ready_for_review">Ready for review</option>
+          <option value="approved">Approved</option><option value="partially_approved">Partially approved</option>
+          <option value="rejected">Rejected</option><option value="closed">Closed</option>
         </select>
         <div className="flex items-center gap-2 bg-white border border-outline-variant rounded-lg px-3 py-2 text-sm text-outline">
           <Icon name="search" className="text-[18px]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search ref, member, insurer…" className="outline-none w-48 text-text-main" />

@@ -109,6 +109,19 @@ export async function handoffToJD2(note: JD1Note, files: File[] = []): Promise<J
   return r.json()
 }
 
+// ---- tickets (Inbox) ----
+export interface Ticket { id: string; reference: string; status: string; category: string; insurer: string; memberName: string }
+export async function createTicketFromJD1(note: JD1Note, channel = 'webform'): Promise<Ticket> {
+  const r = await fetch(`${apiBase()}/api/claims/from-jd1`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ note, channel }) })
+  if (!r.ok) throw new Error(`Ticket create failed (${r.status})`)
+  return r.json()
+}
+export async function updateTicket(id: string, patch: { status?: string; documentsComplete?: boolean; summary?: string; assignee?: string }): Promise<Ticket> {
+  const r = await fetch(`${apiBase()}/api/claims/${id}`, { method: 'PATCH', headers: jsonHeaders(), body: JSON.stringify(patch) })
+  if (!r.ok) throw new Error(`Ticket update failed (${r.status})`)
+  return r.json()
+}
+
 /** Fetch a JD2 attachment with auth and return an object URL (caller revokes when done). */
 export async function fetchDocBlobUrl(itemId: string, docId: string): Promise<{ url: string; revoke: () => void }> {
   const r = await fetch(`${apiBase()}/api/jd2/${itemId}/documents/${docId}`, { headers: authHeaders() })

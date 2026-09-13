@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { runJD1, handoffToJD2, draftClientMail, reconcileInvoices,
+import { runJD1, handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, updateTicket,
   type JD1Note, type NoteField, type Section, type InvoiceItem, type DraftMail } from '../lib/jd1'
 import { backendOn, getName } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
@@ -56,6 +56,8 @@ export function JD1ReviewPage() {
   const [templates] = usePersistent<{ id: string; name: string; channel: string; subject: string; bodyEn: string; bodyMm: string }[]>('settings.templates', [])
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState('')
+  const [ticketId, setTicketId] = useState<string | null>(null)
+  const [ticketRef, setTicketRef] = useState('')
 
   // restore a locally-saved draft note on first load (survives refresh / navigation)
   useEffect(() => {
@@ -93,7 +95,11 @@ export function JD1ReviewPage() {
   async function sendToJD2() {
     if (!note) return
     setSending(true); setFlash('')
-    try { const item = await handoffToJD2(note, files); localStorage.removeItem('jd1.note.draft'); nav(`/jd2/${item.id}`) }
+    try {
+      const item = await handoffToJD2(note, files)
+      if (ticketId) { try { await updateTicket(ticketId, { status: 'ready_for_review' }) } catch { /* ignore */ } }
+      localStorage.removeItem('jd1.note.draft'); nav(`/jd2/${item.id}`)
+    }
     catch (e: any) { setFlash('Send to JD2 failed: ' + (e?.message ?? 'unknown')) }
     finally { setSending(false) }
   }
@@ -105,6 +111,13 @@ export function JD1ReviewPage() {
       if (!backendOn()) { setFlash('Backend is off — start the API and set VITE_USE_MOCKS=false to run the JD1 assistant.'); return }
       const n = await runJD1(files)
       setNote(n); setDirty(false); setSavedAt(''); localStorage.removeItem('jd1.note.draft')
+      // auto-create (or update) the Inbox ticket — best-effort, never blocks the note
+      try {
+        const complete = n.checklist_missing.length === 0
+        const summary = (n.ai_summary || n.notes || '').split('\n')[0].slice(0, 200)
+        if (ticketId) { await updateTicket(ticketId, { documentsComplete: complete, summary }) }
+        else { const t = await createTicketFromJD1(n); setTicketId(t.id); setTicketRef(t.reference) }
+      } catch { /* ignore ticket errors */ }
       if (n.notes && n.provider !== 'stub' && /error|HTTP \d/i.test(n.notes)) setFlash(n.notes)
     } catch (e: any) { setFlash('JD1 failed: ' + (e?.message ?? 'unknown')) }
     finally { setRunning(false) }
@@ -136,7 +149,10 @@ export function JD1ReviewPage() {
   async function makeDraftMail() {
     if (!note) return
     setMailBusy(true); setFlash('')
-    try { setMail(await draftClientMail(note)) }
+    try {
+      setMail(await draftClientMail(note))
+      if (ticketId) { try { await updateTicket(ticketId, { status: 'awaiting_docs' }) } catch { /* ignore */ } }
+    }
     catch (e: any) { setFlash('Draft mail failed: ' + (e?.message ?? 'unknown')) }
     finally { setMailBusy(false) }
   }
@@ -178,9 +194,10 @@ export function JD1ReviewPage() {
             <Icon name="upload_file" className="text-[20px] text-primary" />
             <span className="text-text-main">{files.length ? 'Change files' : 'Upload claim packet (PDFs & images)'}</span>
             <input type="file" multiple accept="image/*,application/pdf" className="hidden"
-              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0) }} />
+              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef('') }} />
           </label>
           {files.length > 0 && <span className="text-xs text-outline">{files.length} file(s)</span>}
+          {ticketRef && <span className="text-xs text-primary flex items-center gap-1"><Icon name="confirmation_number" className="text-[14px]" />Ticket {ticketRef}</span>}
           <div className="flex-1" />
           <Button onClick={analyze} disabled={!files.length || running}>{running ? 'Reading packet…' : note ? 'Re-generate JD1 note' : 'Generate JD1 note'}</Button>
         </div>
