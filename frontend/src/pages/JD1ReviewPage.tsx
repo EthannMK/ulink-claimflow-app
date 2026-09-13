@@ -54,6 +54,25 @@ export function JD1ReviewPage() {
   const [invDraft, setInvDraft] = useState<Record<string, string>>({})
   const [menuOpen, setMenuOpen] = useState(false)
   const [templates] = usePersistent<{ id: string; name: string; channel: string; subject: string; bodyEn: string; bodyMm: string }[]>('settings.templates', [])
+  const [dirty, setDirty] = useState(false)
+  const [savedAt, setSavedAt] = useState('')
+
+  // restore a locally-saved draft note on first load (survives refresh / navigation)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('jd1.note.draft')
+      if (raw) { setNote(JSON.parse(raw)); setSavedAt('restored'); setDirty(false) }
+    } catch { /* ignore corrupt draft */ }
+  }, [])
+
+  function saveDraft() {
+    if (!note) return
+    try { localStorage.setItem('jd1.note.draft', JSON.stringify(note)); setDirty(false); setSavedAt(new Date().toLocaleTimeString()) }
+    catch { setFlash('Could not save draft (storage full).') }
+  }
+  function discardDraft() {
+    localStorage.removeItem('jd1.note.draft'); setDirty(false); setSavedAt(''); setNote(null)
+  }
 
   // auto-detect the insurer from the selected file's name
   useEffect(() => {
@@ -74,7 +93,7 @@ export function JD1ReviewPage() {
   async function sendToJD2() {
     if (!note) return
     setSending(true); setFlash('')
-    try { const item = await handoffToJD2(note); nav(`/jd2/${item.id}`) }
+    try { const item = await handoffToJD2(note); localStorage.removeItem('jd1.note.draft'); nav(`/jd2/${item.id}`) }
     catch (e: any) { setFlash('Send to JD2 failed: ' + (e?.message ?? 'unknown')) }
     finally { setSending(false) }
   }
@@ -85,7 +104,7 @@ export function JD1ReviewPage() {
     try {
       if (!backendOn()) { setFlash('Backend is off — start the API and set VITE_USE_MOCKS=false to run the JD1 assistant.'); return }
       const n = await runJD1(files)
-      setNote(n)
+      setNote(n); setDirty(false); setSavedAt(''); localStorage.removeItem('jd1.note.draft')
       if (n.notes && n.provider !== 'stub' && /error|HTTP \d/i.test(n.notes)) setFlash(n.notes)
     } catch (e: any) { setFlash('JD1 failed: ' + (e?.message ?? 'unknown')) }
     finally { setRunning(false) }
@@ -95,7 +114,7 @@ export function JD1ReviewPage() {
     if (!note) return
     const copy: any = structuredClone(note)
     copy[sec][key] = { ...copy[sec][key], value }
-    setNote(copy)
+    setNote(copy); setDirty(true)
   }
 
   // JD1 corrects an invoice amount — record the original→new audit trail, then re-reconcile.
@@ -111,7 +130,7 @@ export function JD1ReviewPage() {
     it.amount = draft
     it.readable = /\d/.test(draft)
     copy.invoices = reconcileInvoices(copy.invoices)
-    setNote(copy)
+    setNote(copy); setDirty(true)
   }
 
   async function makeDraftMail() {
@@ -228,6 +247,14 @@ export function JD1ReviewPage() {
             <Icon name="bolt" className="text-primary text-[18px]" />
             <div className="text-sm font-semibold">Next step</div>
             <span className="text-xs text-outline flex-1">Fields stay editable until you send. {note ? 'Choose where this claim goes.' : 'Generate the JD1 note to enable Send to JD2.'}</span>
+            {note && (
+              <div className="flex items-center gap-2">
+                {dirty ? <span className="text-xs text-status-pending flex items-center gap-1"><Icon name="edit" className="text-[13px]" />Unsaved changes</span>
+                  : savedAt ? <span className="text-xs text-status-approved flex items-center gap-1"><Icon name="check_circle" className="text-[13px]" />{savedAt === 'restored' ? 'Restored draft' : `Saved · ${savedAt}`}</span> : null}
+                <Button variant="outline" onClick={saveDraft} disabled={!dirty}><Icon name="save" className="text-[16px]" />Save</Button>
+                {(savedAt || dirty) && <button onClick={discardDraft} className="text-xs text-status-rejected" title="Discard the saved draft and clear the note">Discard</button>}
+              </div>
+            )}
             <div className="relative">
               <Button onClick={() => setMenuOpen((o) => !o)}>
                 <Icon name="alt_route" className="text-[16px]" />Choose action<Icon name="expand_more" className="text-[16px]" />
