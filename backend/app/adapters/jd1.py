@@ -399,7 +399,10 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
 def _header(d: dict) -> JD1Header:
     d = d or {}
     h = JD1Header(**{k: _nf(d.get(k)) for k in JD1Header.model_fields if k != "ias_note"})
-    h.ias_note = str(d.get("ias_note", ""))
+    ias = d.get("ias_note", "")
+    if isinstance(ias, dict):        # model sometimes returns an object — keep only the text
+        ias = ias.get("value", "") or ias.get("remark", "") or ""
+    h.ias_note = str(ias)
     return h
 
 def _missing_docs(docs: list[ClassifiedDoc], claim_type: str) -> list[str]:

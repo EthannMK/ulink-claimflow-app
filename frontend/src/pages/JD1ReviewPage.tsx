@@ -34,8 +34,8 @@ const H_LABELS: Record<string, string> = {
 function ConfBadge({ f }: { f: NoteField }) {
   const has = (f?.value ?? '').trim() !== ''
   return has
-    ? <Badge className={confidenceCls(f.confidence)}>{Math.round(f.confidence * 100)}%</Badge>
-    : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">—</Badge>
+    ? <Badge className={`shrink-0 ${confidenceCls(f.confidence)}`}>{Math.round(f.confidence * 100)}%</Badge>
+    : <Badge className="shrink-0 bg-on-surface-variant/10 text-on-surface-variant">—</Badge>
 }
 
 export function JD1ReviewPage() {
@@ -157,7 +157,7 @@ export function JD1ReviewPage() {
           <div className="flex items-center gap-2">
             <label className="text-xs text-text-main w-52 shrink-0">{labels[k]}</label>
             <input value={f.value} onChange={(e) => editField(sec, k, e.target.value)}
-              className="flex-1 text-sm border border-outline-variant rounded-md px-2 py-1" />
+              className="flex-1 min-w-0 text-sm border border-outline-variant rounded-md px-2 py-1" />
             <ConfBadge f={f} />
           </div>
           {f.remark && <p className="text-xs text-outline mt-1 pl-1">{f.remark}</p>}
@@ -408,17 +408,12 @@ export function JD1ReviewPage() {
                     <div key={k} className="flex items-center gap-2">
                       <label className="text-xs text-text-main w-32 shrink-0">{H_LABELS[k]}</label>
                       <input value={f.value} onChange={(e) => editField('header', k, e.target.value)}
-                        className="flex-1 text-sm border border-outline-variant rounded-md px-2 py-1" />
+                        className="flex-1 min-w-0 text-sm border border-outline-variant rounded-md px-2 py-1" />
                       <ConfBadge f={f} />
                     </div>
                   )
                 })}
               </div>
-              {note.header.ias_note && (
-                <div className="mt-3 text-xs bg-surface-container rounded-md p-3">
-                  <b className="text-text-main">iAS check:</b> <span className="text-text-main">{note.header.ias_note}</span>
-                </div>
-              )}
             </Card>
 
             <Card className="p-5">
@@ -496,8 +491,6 @@ function toMarkdown(n: JD1Note): string {
 
 **Claim type:** ${n.claim_type}
 ${Object.keys(H_LABELS).map((k) => row(H_LABELS[k], (n.header as any)[k])).join('\n')}
-
-_iAS check: ${n.header.ias_note || '—'}_
 
 **Documents:** ${n.documents.map((d) => `${d.name} (${d.doc_type})`).join('; ')}
 **Missing mandatory:** ${n.checklist_missing.join(', ') || 'none'}

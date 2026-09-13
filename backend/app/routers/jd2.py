@@ -75,6 +75,21 @@ async def get_item(item_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Not found")
     return item
 
+@router.put("/{item_id}/note", response_model=JD2Item)
+async def update_note(item_id: str, note: JD1Note, user=Depends(get_current_user)):
+    """JD2 corrects fields on the note before deciding; save the edits back to the ticket."""
+    item = jd2_store.get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Not found")
+    if item.status != JD2Status.pending:
+        raise HTTPException(status_code=400, detail="Cannot edit a claim that has already been decided")
+    item.note = note
+    item.member_name = note.header.member_name.value
+    item.insurer = note.header.insurer.value
+    item.claim_type = note.claim_type
+    item.claim_amount = note.header.total_claim_amount.value or note.section_b.claim_amount.value
+    return jd2_store.save(item)
+
 @router.post("/{item_id}/decision", response_model=JD2Item)
 async def decide(item_id: str, body: JD2Decision, user=Depends(get_current_user)):
     item = jd2_store.get(item_id)
