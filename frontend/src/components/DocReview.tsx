@@ -60,7 +60,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
             <button onClick={() => setMapped(true)} className={`px-2.5 py-1 rounded-md ${mapped ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>Insurer fields</button>
             <button onClick={() => setMapped(false)} className={`px-2.5 py-1 rounded-md ${!mapped ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>All detected</button>
           </div>
-          {res?.provider === 'hybrid' && <Badge className="bg-status-ai/10 text-status-ai">Gemini values · Document AI highlights</Badge>}
+          {res?.provider === 'hybrid' && <Badge className="bg-status-ai/10 text-status-ai">AI-assisted</Badge>}
         </div>
       )}
 
@@ -100,7 +100,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
           {loading && (
             <div className="mb-2">
               <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full animate-pulse w-2/3" /></div>
-              <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading with Gemini + Document AI… (about 10–30s)</p>
+              <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading the document… (about 10–30s)</p>
             </div>
           )}
           {err && <Card className="p-3 text-xs text-status-rejected">{err}</Card>}
@@ -129,7 +129,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
             }) })()}
             {!loading && !err && display.length === 0 && <p className="text-xs text-outline">No fields.</p>}
           </div>
-          <p className="text-[11px] text-outline mt-2">Values read by Gemini (better on handwriting & Burmese); highlight location from Document AI. Hover to locate; edit to correct.</p>
+          <p className="text-[11px] text-outline mt-2">AI-extracted values — hover to locate on the page; edit to correct.</p>
         </div>
       </div>
     </div>

@@ -52,6 +52,8 @@ export function JD1ReviewPage() {
   const [mail, setMail] = useState<DraftMail | null>(null)
   const [mailBusy, setMailBusy] = useState(false)
   const [invDraft, setInvDraft] = useState<Record<string, string>>({})
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [templates] = usePersistent<{ id: string; name: string; channel: string; subject: string; bodyEn: string; bodyMm: string }[]>('settings.templates', [])
 
   // auto-detect the insurer from the selected file's name
   useEffect(() => {
@@ -150,29 +152,108 @@ export function JD1ReviewPage() {
       <PageTitle title="JD1 Assistant" sub="Upload a full claim packet. The AI classifies each document, reads digital and scanned pages, and drafts the JD1 Process Note (A / B / C) for review."
         action={note ? <Button variant="outline" onClick={download}><Icon name="download" className="text-[16px]" />Download note</Button> : undefined} />
 
-      <div className="grid grid-cols-12 gap-4">
-        {/* upload */}
-        <Card className="col-span-4 p-5 h-fit">
-          <h3 className="font-semibold text-sm mb-2">Claim packet</h3>
-          <label className="border-2 border-dashed border-outline-variant rounded-lg p-6 text-center block cursor-pointer hover:bg-surface-container/50">
-            <Icon name="upload_file" className="text-[28px] text-outline" />
-            <div className="text-sm text-text-main mt-1">Choose all documents for one claim</div>
-            <div className="text-xs text-outline">PDFs & images — forms, reports, invoices, ID</div>
+      {/* compact upload bar */}
+      <Card className="p-4 mb-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-dashed border-outline-variant cursor-pointer hover:bg-surface-container/50 text-sm">
+            <Icon name="upload_file" className="text-[20px] text-primary" />
+            <span className="text-text-main">{files.length ? 'Change files' : 'Upload claim packet (PDFs & images)'}</span>
             <input type="file" multiple accept="image/*,application/pdf" className="hidden"
               onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0) }} />
           </label>
-          {files.map((f) => <div key={f.name} className="text-xs flex items-center gap-2 mt-2"><Icon name="description" className="text-[15px] text-primary" />{f.name}</div>)}
-          <div className="mt-4"><Button onClick={analyze}>{running ? 'Reading packet…' : 'Generate JD1 note'}</Button></div>
-          {running && <p className="text-xs text-text-main mt-2">Classifying, reading digital + scanned pages, drafting the note… (can take up to a minute)</p>}
-          {flash && <p className="text-xs text-status-rejected mt-2">{flash}</p>}
-          {backendOn()
-            ? <p className="text-xs text-status-approved mt-2 flex items-center gap-1"><Icon name="verified" className="text-[14px]" />Live AI — vision model reads scanned & Burmese pages.</p>
-            : <p className="text-xs text-outline mt-2">Connect the backend to run the JD1 assistant.</p>}
-        </Card>
+          {files.length > 0 && <span className="text-xs text-outline">{files.length} file(s)</span>}
+          <div className="flex-1" />
+          <Button onClick={analyze} disabled={!files.length || running}>{running ? 'Reading packet…' : note ? 'Re-generate JD1 note' : 'Generate JD1 note'}</Button>
+        </div>
+        {files.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {files.map((f) => <span key={f.name} className="text-xs flex items-center gap-1 bg-surface-container rounded px-2 py-0.5"><Icon name="description" className="text-[13px] text-primary" />{f.name.length > 34 ? f.name.slice(0, 34) + '…' : f.name}</span>)}
+          </div>
+        )}
+        {running && <p className="text-xs text-text-main mt-2">Reading the packet — classifying documents and drafting the note…</p>}
+        {flash && <p className="text-xs text-status-rejected mt-2">{flash}</p>}
+        {!backendOn() && <p className="text-xs text-outline mt-2">Connect the backend to run the JD1 assistant.</p>}
+      </Card>
 
-        {/* results */}
-        <div className="col-span-8 space-y-4">
-          {!note && !running && <p className="text-xs text-outline">The JD1 note will appear here after you generate it. You can also review each document's fields below.</p>}
+      {/* render + populated fields (half/half) — the primary review surface */}
+      {files.length > 0 && (
+        <Card className="p-5 mb-4">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <Icon name="document_scanner" className="text-[18px] text-primary" />
+            <h3 className="font-semibold text-sm">Document &amp; extracted fields</h3>
+            <span className="text-xs text-outline">Rendering on the left, populated fields on the right — hover to highlight, edit to correct.</span>
+            <div className="ml-auto flex items-center gap-2 text-xs">
+              <span className="text-text-main">Insurer (auto-detected):</span>
+              <select value={reviewInsurerId} onChange={(e) => setReviewInsurerId(e.target.value)} className="border border-outline-variant rounded-md px-2 py-1" title="Detected from the file name — change if wrong">
+                {insurers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+              </select>
+              {(() => {
+                const ins = insurers.find((i) => i.id === reviewInsurerId)
+                const avail = ins ? formTypesOf(ins) : (['claim'] as FormType[])
+                if (avail.length <= 1) return avail.length === 1 ? <Badge className="bg-primary/10 text-primary">{FORM_LABELS[avail[0]]}</Badge> : null
+                const active = avail.includes(reviewForm) ? reviewForm : avail[0]
+                return (
+                  <div className="flex items-center gap-1 bg-surface-container rounded-lg p-0.5">
+                    {avail.map((t) => (
+                      <button key={t} onClick={() => setReviewForm(t)}
+                        className={`px-2 py-1 rounded-md ${active === t ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>{FORM_LABELS[t]}</button>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+          <div className="flex gap-2 flex-wrap mb-3">
+            {files.map((f, i) => (
+              <button key={f.name + i} onClick={() => setReviewIdx(i)}
+                className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${reviewIdx === i ? 'border-primary text-primary bg-primary/5' : 'border-outline-variant text-text-main hover:bg-surface-container'}`}>
+                <Icon name="description" className="text-[14px]" />{f.name.length > 30 ? f.name.slice(0, 30) + '…' : f.name}
+              </button>
+            ))}
+          </div>
+          {files[reviewIdx] && (() => {
+            const ins = insurers.find((i) => i.id === reviewInsurerId)
+            const avail = ins ? formTypesOf(ins) : (['claim'] as FormType[])
+            const active = avail.includes(reviewForm) ? reviewForm : (avail[0] ?? 'claim')
+            return <DocReview key={reviewIdx + active + files[reviewIdx].name} file={files[reviewIdx]}
+              mapFields={fieldsFor(ins, active).map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))} />
+          })()}
+        </Card>
+      )}
+
+      {/* next-step action bar */}
+      {files.length > 0 && (
+        <Card className="p-4 mb-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Icon name="bolt" className="text-primary text-[18px]" />
+            <div className="text-sm font-semibold">Next step</div>
+            <span className="text-xs text-outline flex-1">Fields stay editable until you send. {note ? 'Choose where this claim goes.' : 'Generate the JD1 note to enable Send to JD2.'}</span>
+            <div className="relative">
+              <Button onClick={() => setMenuOpen((o) => !o)}>
+                <Icon name="alt_route" className="text-[16px]" />Choose action<Icon name="expand_more" className="text-[16px]" />
+              </Button>
+              {menuOpen && (
+                <div className="absolute right-0 mt-1 w-64 bg-white border border-outline-variant rounded-lg shadow-lg z-20 overflow-hidden">
+                  <button disabled={!note || sending} onClick={() => { setMenuOpen(false); sendToJD2() }}
+                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-surface-container flex items-start gap-2 disabled:opacity-40">
+                    <Icon name="send" className="text-[16px] text-status-approved mt-0.5" />
+                    <span><span className="font-medium block">Send to JD2</span><span className="text-xs text-outline">Pass the validated note for adjudication</span></span>
+                  </button>
+                  <button disabled={!note || mailBusy} onClick={() => { setMenuOpen(false); makeDraftMail() }}
+                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-surface-container flex items-start gap-2 border-t border-outline-variant/60 disabled:opacity-40">
+                    <Icon name="mail" className="text-[16px] text-primary mt-0.5" />
+                    <span><span className="font-medium block">Return to client</span><span className="text-xs text-outline">Draft an email requesting documents</span></span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* JD1 note details */}
+      <div className="space-y-4">
+          {!note && !running && <p className="text-xs text-outline">The JD1 note will appear here after you generate it. The document and its extracted fields are shown above.</p>}
 
           {note && (<>
             <Card className="p-5">
@@ -210,15 +291,6 @@ export function JD1ReviewPage() {
                 </div>
               )}
 
-              <div className="mt-4 pt-3 border-t border-outline-variant/60 flex items-center gap-3 flex-wrap">
-                <Button onClick={sendToJD2} disabled={sending || note.provider === 'stub'}>
-                  <Icon name="send" className="text-[16px]" />{sending ? 'Sending…' : 'Approve & send to JD2'}
-                </Button>
-                <Button variant="outline" onClick={makeDraftMail} disabled={mailBusy || note.provider === 'stub'}>
-                  <Icon name="mail" className="text-[16px]" />{mailBusy ? 'Drafting…' : 'Draft email to client'}
-                </Button>
-                <span className="text-xs text-outline">Confirm the fields above, then pass the validated note to JD2 for adjudication.</span>
-              </div>
             </Card>
 
             {/* AI summary (adjudicator brief) */}
@@ -340,54 +412,7 @@ export function JD1ReviewPage() {
 
             {note.notes && <Card className="p-5"><h3 className="font-semibold text-sm mb-2">Summary</h3><p className="text-sm text-text-main leading-relaxed">{note.notes}</p></Card>}
           </>)}
-        </div>
       </div>
-
-      {/* per-document field review with highlights (Document AI) */}
-      {files.length > 0 && (
-        <Card className="p-5 mt-4">
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <Icon name="document_scanner" className="text-[18px] text-primary" />
-            <h3 className="font-semibold text-sm">AI field review</h3>
-            <span className="text-xs text-outline">Fields follow the insurer's setup — hover to highlight, edit to correct.</span>
-            <div className="ml-auto flex items-center gap-2 text-xs">
-              <span className="text-text-main">Insurer (auto-detected):</span>
-              <select value={reviewInsurerId} onChange={(e) => setReviewInsurerId(e.target.value)} className="border border-outline-variant rounded-md px-2 py-1" title="Detected from the file name — change if wrong">
-                {insurers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-              </select>
-              {(() => {
-                const ins = insurers.find((i) => i.id === reviewInsurerId)
-                const avail = ins ? formTypesOf(ins) : (['claim'] as FormType[])
-                if (avail.length <= 1) return avail.length === 1 ? <Badge className="bg-primary/10 text-primary">{FORM_LABELS[avail[0]]}</Badge> : null
-                const active = avail.includes(reviewForm) ? reviewForm : avail[0]
-                return (
-                  <div className="flex items-center gap-1 bg-surface-container rounded-lg p-0.5">
-                    {avail.map((t) => (
-                      <button key={t} onClick={() => setReviewForm(t)}
-                        className={`px-2 py-1 rounded-md ${active === t ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>{FORM_LABELS[t]}</button>
-                    ))}
-                  </div>
-                )
-              })()}
-            </div>
-          </div>
-          <div className="flex gap-2 flex-wrap mb-3">
-            {files.map((f, i) => (
-              <button key={f.name + i} onClick={() => setReviewIdx(i)}
-                className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${reviewIdx === i ? 'border-primary text-primary bg-primary/5' : 'border-outline-variant text-text-main hover:bg-surface-container'}`}>
-                <Icon name="description" className="text-[14px]" />{f.name.length > 30 ? f.name.slice(0, 30) + '…' : f.name}
-              </button>
-            ))}
-          </div>
-          {files[reviewIdx] && (() => {
-            const ins = insurers.find((i) => i.id === reviewInsurerId)
-            const avail = ins ? formTypesOf(ins) : (['claim'] as FormType[])
-            const active = avail.includes(reviewForm) ? reviewForm : (avail[0] ?? 'claim')
-            return <DocReview key={reviewIdx + active + files[reviewIdx].name} file={files[reviewIdx]}
-              mapFields={fieldsFor(ins, active).map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))} />
-          })()}
-        </Card>
-      )}
 
       {/* draft email to client — review-and-copy, never auto-sent */}
       {mail && (
@@ -400,6 +425,23 @@ export function JD1ReviewPage() {
               <button onClick={() => setMail(null)} className="ml-auto text-outline hover:text-text-main"><Icon name="close" /></button>
             </div>
             {mail.reason && <p className="text-xs text-outline mb-2">Suggested because: {mail.reason}</p>}
+            {templates.length > 0 && (
+              <div className="mb-3">
+                <label className="block text-xs text-text-main mb-1">Apply a reply template</label>
+                <select className="w-full text-sm border border-outline-variant rounded-md px-3 py-2"
+                  onChange={(e) => {
+                    const t = templates.find((x) => x.id === e.target.value); if (!t) return
+                    const fill = (s: string) => (s || '')
+                      .replace(/\{\{\s*member\s*\}\}/gi, note?.header.member_name.value || '')
+                      .replace(/\{\{\s*claim_no\s*\}\}/gi, note?.header.claim_no.value || '')
+                      .replace(/\{\{\s*insurer\s*\}\}/gi, note?.header.insurer.value || '')
+                    setMail({ ...mail, subject: fill(t.subject) || mail.subject, body: fill(t.bodyEn) || mail.body })
+                  }}>
+                  <option value="">— choose a template —</option>
+                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.channel ? ` (${t.channel})` : ''}</option>)}
+                </select>
+              </div>
+            )}
             <label className="block text-xs text-text-main mb-1">Subject</label>
             <input value={mail.subject} onChange={(e) => setMail({ ...mail, subject: e.target.value })}
               className="w-full text-sm border border-outline-variant rounded-md px-3 py-2 mb-3" />
