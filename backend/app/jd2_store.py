@@ -1,13 +1,12 @@
 """JD2 queue — Firestore-backed with in-memory fallback (app/db.py).
-Item metadata + the JD1 note persist; document bytes (blobs) stay in memory only,
-because Firestore documents can't hold file payloads (Cloud Storage is the durable home)."""
+Item metadata + the JD1 note persist in Firestore; the uploaded document bytes go to
+Cloud Storage (app/storage.py), so previews/downloads also survive redeploys."""
 from __future__ import annotations
 from app.models import JD2Item
 from app.db import Collection
+from app import storage
 
 _items = Collection("jd2_items")
-# document bytes for each item: _BLOBS[item_id][doc_id] = (name, mime, bytes) — in-memory only
-_BLOBS: dict[str, dict[str, tuple[str, str, bytes]]] = {}
 
 
 def add(item: JD2Item) -> JD2Item:
@@ -26,8 +25,11 @@ def save(item: JD2Item) -> JD2Item:
     _items.put(item.id, item.model_dump(mode="json"))
     return item
 
+def _blob_key(item_id: str, doc_id: str) -> str:
+    return f"jd2/{item_id}/{doc_id}"
+
 def put_blob(item_id: str, doc_id: str, name: str, mime: str, data: bytes) -> None:
-    _BLOBS.setdefault(item_id, {})[doc_id] = (name, mime, data)
+    storage.put(_blob_key(item_id, doc_id), name, mime, data)
 
 def get_blob(item_id: str, doc_id: str) -> tuple[str, str, bytes] | None:
-    return _BLOBS.get(item_id, {}).get(doc_id)
+    return storage.get(_blob_key(item_id, doc_id))
