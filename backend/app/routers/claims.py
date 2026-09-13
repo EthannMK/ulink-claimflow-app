@@ -1,24 +1,32 @@
-"""Tickets (claims) store. A ticket is auto-created when JD1 generates a note, and it
-flows through the Inbox by status. In-memory for the POC — swap for Firestore later."""
+"""Tickets (claims). A ticket is auto-created when JD1 generates a note, then flows
+through the Inbox by status. Firestore-backed with in-memory fallback (app/db.py)."""
 import re, uuid
 from datetime import datetime, timezone
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from app.models import Claim, ClaimList, Channel, Category, Status, JD1Note
 from app.security import get_current_user
+from app.db import Collection
 
 router = APIRouter(prefix="/api")
 
-_CLAIMS: dict[str, Claim] = {}
-_SEQ = {"n": 0}
+_claims = Collection("claims")
+
 
 def _make_ref() -> str:
-    _SEQ["n"] += 1
-    return f"UL-{datetime.now().strftime('%Y%m%d')}-{_SEQ['n']:04d}"
+    return f"UL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
 def _amount(s: str) -> float | None:
     digits = re.sub(r"[^\d]", "", s or "")
     return float(digits) if digits else None
+
+def _get(claim_id: str) -> Claim | None:
+    d = _claims.get(claim_id)
+    return Claim.model_validate(d) if d else None
+
+def _put(c: Claim) -> Claim:
+    _claims.put(c.id, c.model_dump(mode="json"))
+    return c
 
 
 class TicketFromJD1(BaseModel):
@@ -35,7 +43,7 @@ class TicketUpdate(BaseModel):
 
 @router.get("/claims", response_model=ClaimList)
 def list_claims(status: str = "", category: str = "", page: int = 1):
-    items = list(_CLAIMS.values())
+    items = [Claim.model_validate(d) for d in _claims.all()]
     if status:
         items = [c for c in items if c.status == status]
     if category:
@@ -45,7 +53,7 @@ def list_claims(status: str = "", category: str = "", page: int = 1):
 
 @router.get("/claims/{claim_id}", response_model=Claim)
 def get_claim(claim_id: str):
-    c = _CLAIMS.get(claim_id)
+    c = _get(claim_id)
     if not c:
         raise HTTPException(status_code=404, detail="Claim not found")
     return c
@@ -78,12 +86,11 @@ def create_from_jd1(body: TicketFromJD1, user=Depends(get_current_user)):
         amount=_amount(note.header.total_claim_amount.value or note.section_b.claim_amount.value),
         summary=summary,
     )
-    _CLAIMS[claim.id] = claim
-    return claim
+    return _put(claim)
 
 @router.patch("/claims/{claim_id}", response_model=Claim)
 def update_claim(claim_id: str, body: TicketUpdate, user=Depends(get_current_user)):
-    c = _CLAIMS.get(claim_id)
+    c = _get(claim_id)
     if not c:
         raise HTTPException(status_code=404, detail="Claim not found")
     if body.status is not None:
@@ -96,5 +103,4 @@ def update_claim(claim_id: str, body: TicketUpdate, user=Depends(get_current_use
         c.summary = body.summary
     if body.jd2_item_id is not None:
         c.jd2_item_id = body.jd2_item_id
-    _CLAIMS[claim_id] = c
-    return c
+    return _put(c)
