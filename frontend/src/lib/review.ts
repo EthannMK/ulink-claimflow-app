@@ -23,3 +23,24 @@ export function reviewDoc(file: File, fields = ''): Promise<ReviewResult> {
   cache.set(key, p)
   return p
 }
+
+// ---- page-by-page "Full detection" ----
+export interface PageItem { label: string; value: string }
+export interface PageDetail { page: number; title: string; summary: string; items: PageItem[] }
+export interface PageAnalysis { pages: PageDetail[]; provider: string; error: string }
+
+const pageCache = new Map<string, Promise<PageAnalysis>>()
+
+export function reviewDocPages(file: File): Promise<PageAnalysis> {
+  const key = `pages:${file.name}:${file.size}:${file.lastModified}`
+  const hit = pageCache.get(key)
+  if (hit) return hit
+  const p = (async () => {
+    const fd = new FormData(); fd.append('file', file, file.name)
+    const r = await fetch(`${apiBase()}/api/review/pages`, { method: 'POST', headers: authHeaders(), body: fd })
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Page analysis failed (${r.status})`) }
+    return r.json() as Promise<PageAnalysis>
+  })().catch((e) => { pageCache.delete(key); throw e })
+  pageCache.set(key, p)
+  return p
+}

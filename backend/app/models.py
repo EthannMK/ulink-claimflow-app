@@ -269,3 +269,20 @@ class ReviewResult(BaseModel):
     all_fields: list[ReviewField] = []   # raw Document AI key/values (for "All detected")
     provider: str = "docai"
     error: str = ""
+
+
+# ---- page-by-page "Full detection" (summary + important data per page) ----
+class PageItem(BaseModel):
+    label: str = ""
+    value: str = ""
+
+class PageDetail(BaseModel):
+    page: int = 0
+    title: str = ""
+    summary: str = ""
+    items: list[PageItem] = []
+
+class PageAnalysis(BaseModel):
+    pages: list[PageDetail] = []
+    provider: str = "gemini"
+    error: str = ""

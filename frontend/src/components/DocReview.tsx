@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react'
 import { Card, Badge, Icon } from './ui'
 import { confidenceCls } from '../lib/format'
-import { reviewDoc, type ReviewResult, type ReviewField } from '../lib/review'
+import { reviewDoc, reviewDocPages, type ReviewResult, type ReviewField, type PageAnalysis } from '../lib/review'
 
 async function renderPdfPages(file: File): Promise<string[]> {
   const pdfjs: any = await import('pdfjs-dist')
@@ -18,6 +18,13 @@ async function renderPdfPages(file: File): Promise<string[]> {
 }
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
 
+function pageToText(p: { page: number; title: string; summary: string; items: { label: string; value: string }[] }): string {
+  const lines = [`Page ${p.page}${p.title ? ` — ${p.title}` : ''}`, '']
+  if (p.summary) { lines.push(p.summary, '') }
+  for (const it of p.items) lines.push(`${it.label}: ${it.value}`)
+  return lines.join('\n').trim()
+}
+
 export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: string; label: string; hint?: string; section?: string }[] }) {
   const [imgs, setImgs] = useState<string[]>([])
   const [res, setRes] = useState<ReviewResult | null>(null)
@@ -26,46 +33,77 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
   const [page, setPage] = useState(0)
   const [hover, setHover] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, string>>({})
-  const [mapped, setMapped] = useState(true)
   const hasMap = !!mapFields?.length
+  const [mapped, setMapped] = useState(hasMap)                 // Required fields vs Full detection
+  const [pageRes, setPageRes] = useState<PageAnalysis | null>(null)
+  const [pageLoading, setPageLoading] = useState(false)
+  const [pageErr, setPageErr] = useState('')
+  const [copied, setCopied] = useState<number | null>(null)   // page number just copied
 
+  const useMapped = mapped && hasMap
+  const full = !useMapped
+
+  // load previews + (when there are insurer fields) the mapped extraction with highlights
   useEffect(() => {
     let alive = true
     setLoading(true); setErr(''); setRes(null); setImgs([]); setPage(0); setEdits({}); setHover(null)
+    setPageRes(null); setPageErr(''); setPageLoading(false); setMapped(hasMap)
     ;(async () => {
       try {
         const previews = isPdf(file) ? await renderPdfPages(file) : [URL.createObjectURL(file)]
         if (!alive) return; setImgs(previews)
-        const fieldsArg = hasMap ? JSON.stringify(mapFields!.map((f) => ({ label: f.label, hint: f.hint || '', section: f.section || '' }))) : ''
-        const r = await reviewDoc(file, fieldsArg); if (!alive) return
-        if (r.error) setErr(r.error)
-        setRes(r)
+        if (hasMap) {
+          const fieldsArg = JSON.stringify(mapFields!.map((f) => ({ label: f.label, hint: f.hint || '', section: f.section || '' })))
+          const r = await reviewDoc(file, fieldsArg); if (!alive) return
+          if (r.error) setErr(r.error)
+          setRes(r)
+        }
       } catch (e: any) { if (alive) setErr(e?.message ?? 'Review failed') }
       finally { if (alive) setLoading(false) }
     })()
     return () => { alive = false }
   }, [file, mapFields])
 
+  // lazily load the page-by-page analysis the first time Full detection is shown
+  useEffect(() => {
+    if (!full || pageRes || pageLoading) return
+    let alive = true
+    setPageLoading(true); setPageErr('')
+    reviewDocPages(file)
+      .then((p) => { if (alive) { setPageRes(p); if (p.error) setPageErr(p.error) } })
+      .catch((e) => { if (alive) setPageErr(e?.message ?? 'Page analysis failed') })
+      .finally(() => { if (alive) setPageLoading(false) })
+    return () => { alive = false }
+  }, [full, file, pageRes, pageLoading])
+
   const pageCount = Math.max(imgs.length, res?.pages ?? 1)
-  const useMapped = mapped && hasMap
-  const display: ReviewField[] = (useMapped ? res?.fields : res?.all_fields) || res?.fields || []
-  const pageBoxes = display.filter((f) => f.page === page && f.box.w > 0)
+  const display: ReviewField[] = res?.fields || []
+  const pageBoxes = useMapped ? display.filter((f) => f.page === page && f.box.w > 0) : []
   function focusField(f: ReviewField) { setHover(f.id); if (f.box.w > 0 && f.page !== page) setPage(f.page) }
+
+  async function copyPage(p: { page: number; title: string; summary: string; items: { label: string; value: string }[] }) {
+    try { await navigator.clipboard.writeText(pageToText(p)); setCopied(p.page); setTimeout(() => setCopied(null), 1500) } catch { /* ignore */ }
+  }
+  async function copyAll() {
+    if (!pageRes) return
+    try { await navigator.clipboard.writeText(pageRes.pages.map(pageToText).join('\n\n——————————\n\n')); setCopied(-1); setTimeout(() => setCopied(null), 1500) } catch { /* ignore */ }
+  }
 
   return (
     <div>
       {hasMap && (
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <div className="flex items-center gap-1 bg-surface-container rounded-lg p-1 w-fit text-xs">
-            <button onClick={() => setMapped(true)} className={`px-2.5 py-1 rounded-md ${mapped ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>Insurer fields</button>
-            <button onClick={() => setMapped(false)} className={`px-2.5 py-1 rounded-md ${!mapped ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>All detected</button>
+            <button onClick={() => setMapped(true)} className={`px-2.5 py-1 rounded-md ${useMapped ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>Required fields</button>
+            <button onClick={() => setMapped(false)} className={`px-2.5 py-1 rounded-md ${full ? 'bg-white text-primary shadow-sm' : 'text-text-main'}`}>Full detection</button>
           </div>
-          {res?.provider === 'hybrid' && <Badge className="bg-status-ai/10 text-status-ai">AI-assisted</Badge>}
+          {useMapped && res?.provider === 'hybrid' && <Badge className="bg-status-ai/10 text-status-ai">AI-assisted</Badge>}
+          {full && <Badge className="bg-status-ai/10 text-status-ai">Page-by-page summary &amp; data</Badge>}
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        {/* left: document with highlights */}
+        {/* left: document preview (highlights only in Required-fields mode) */}
         <div>
           {pageCount > 1 && (
             <div className="flex items-center gap-2 mb-2 text-xs">
@@ -91,45 +129,95 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
           </div>
         </div>
 
-        {/* right: fields */}
+        {/* right: fields (Required) OR page-by-page analysis (Full) */}
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <h4 className="font-semibold text-sm">{useMapped ? 'Insurer fields' : 'Detected fields'}</h4>
-            {res && !err && <Badge className="bg-status-approved/10 text-status-approved">{display.length} field(s)</Badge>}
-          </div>
-          {loading && (
-            <div className="mb-2">
-              <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full animate-pulse w-2/3" /></div>
-              <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading the document… (about 10–30s)</p>
-            </div>
-          )}
-          {err && <Card className="p-3 text-xs text-status-rejected">{err}</Card>}
-          <div className="space-y-1.5 max-h-[32rem] overflow-y-auto pr-1">
-            {(() => { let lastSec = ''; return display.map((f) => {
-              const val = edits[f.id] ?? f.value
-              const has = val.trim() !== ''
-              const showSec = useMapped && !!f.section && f.section !== lastSec
-              if (showSec) lastSec = f.section as string
-              return (
-                <Fragment key={f.id}>
-                  {showSec && <div className="text-[11px] font-semibold uppercase tracking-wide text-primary/70 pt-2 pb-0.5">{f.section}</div>}
-                  <div onMouseEnter={() => focusField(f)} onMouseLeave={() => setHover(null)}
-                    className="p-2 rounded-md border"
-                    style={{ borderColor: hover === f.id ? 'rgba(202,138,4,0.9)' : 'rgba(0,0,0,0.08)', backgroundColor: hover === f.id ? 'rgba(254,249,195,0.6)' : 'transparent' }}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-text-main truncate">{f.name}{f.box.w > 0 && f.page !== page && <span className="text-outline"> · p{f.page + 1}</span>}</span>
-                      {has ? <Badge className={confidenceCls(f.confidence)}>{Math.round(f.confidence * 100)}%</Badge>
-                        : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">—</Badge>}
+          {useMapped ? (
+            <>
+              <div className="flex items-center gap-2 mb-2">
+                <h4 className="font-semibold text-sm">Required fields</h4>
+                {res && !err && <Badge className="bg-status-approved/10 text-status-approved">{display.length} field(s)</Badge>}
+              </div>
+              {loading && (
+                <div className="mb-2">
+                  <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full animate-pulse w-2/3" /></div>
+                  <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading the document… (about 10–30s)</p>
+                </div>
+              )}
+              {err && <Card className="p-3 text-xs text-status-rejected">{err}</Card>}
+              <div className="space-y-1.5 max-h-[32rem] overflow-y-auto pr-1">
+                {(() => { let lastSec = ''; return display.map((f) => {
+                  const val = edits[f.id] ?? f.value
+                  const has = val.trim() !== ''
+                  const showSec = !!f.section && f.section !== lastSec
+                  if (showSec) lastSec = f.section as string
+                  return (
+                    <Fragment key={f.id}>
+                      {showSec && <div className="text-[11px] font-semibold uppercase tracking-wide text-primary/70 pt-2 pb-0.5">{f.section}</div>}
+                      <div onMouseEnter={() => focusField(f)} onMouseLeave={() => setHover(null)}
+                        className="p-2 rounded-md border"
+                        style={{ borderColor: hover === f.id ? 'rgba(202,138,4,0.9)' : 'rgba(0,0,0,0.08)', backgroundColor: hover === f.id ? 'rgba(254,249,195,0.6)' : 'transparent' }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-text-main truncate">{f.name}{f.box.w > 0 && f.page !== page && <span className="text-outline"> · p{f.page + 1}</span>}</span>
+                          {has ? <Badge className={confidenceCls(f.confidence)}>{Math.round(f.confidence * 100)}%</Badge>
+                            : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">—</Badge>}
+                        </div>
+                        <input value={val} onChange={(e) => setEdits({ ...edits, [f.id]: e.target.value })}
+                          className="w-full text-sm border border-outline-variant rounded-md px-2 py-1 mt-1" placeholder="not found — enter manually" />
+                      </div>
+                    </Fragment>
+                  )
+                }) })()}
+                {!loading && !err && display.length === 0 && <p className="text-xs text-outline">No fields.</p>}
+              </div>
+              <p className="text-[11px] text-outline mt-2">AI-extracted values — hover to locate on the page; edit to correct.</p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-2">
+                <h4 className="font-semibold text-sm">Full detection — page by page</h4>
+                {pageRes && !pageErr && <Badge className="bg-status-approved/10 text-status-approved">{pageRes.pages.length} page(s)</Badge>}
+                {pageRes && pageRes.pages.length > 0 && (
+                  <button onClick={copyAll} className="ml-auto text-xs text-primary flex items-center gap-1">
+                    <Icon name={copied === -1 ? 'check' : 'content_copy'} className="text-[14px]" />{copied === -1 ? 'Copied' : 'Copy all'}
+                  </button>
+                )}
+              </div>
+              {pageLoading && (
+                <div className="mb-2">
+                  <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full animate-pulse w-2/3" /></div>
+                  <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading every page in detail… (can take up to a minute)</p>
+                </div>
+              )}
+              {pageErr && <Card className="p-3 text-xs text-status-rejected">{pageErr}</Card>}
+              <div className="space-y-2 max-h-[32rem] overflow-y-auto pr-1">
+                {pageRes?.pages.map((pg) => (
+                  <div key={pg.page} className="border border-outline-variant/70 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <button onClick={() => { if (pg.page >= 1) setPage(pg.page - 1) }} title="Show this page" className="text-xs font-semibold text-primary flex items-center gap-1">
+                        <Icon name="description" className="text-[14px]" />Page {pg.page}{pg.title ? ` · ${pg.title}` : ''}
+                      </button>
+                      <button onClick={() => copyPage(pg)} className="ml-auto text-xs text-primary flex items-center gap-1" title="Copy this page">
+                        <Icon name={copied === pg.page ? 'check' : 'content_copy'} className="text-[14px]" />{copied === pg.page ? 'Copied' : 'Copy'}
+                      </button>
                     </div>
-                    <input value={val} onChange={(e) => setEdits({ ...edits, [f.id]: e.target.value })}
-                      className="w-full text-sm border border-outline-variant rounded-md px-2 py-1 mt-1" placeholder={useMapped ? 'not found — enter manually' : ''} />
+                    {pg.summary && <p className="text-xs text-text-main mb-2 leading-relaxed">{pg.summary}</p>}
+                    {pg.items.length > 0 && (
+                      <div className="space-y-0.5">
+                        {pg.items.map((it, j) => (
+                          <div key={j} className="flex gap-2 text-xs">
+                            <span className="text-outline w-40 shrink-0">{it.label}</span>
+                            <span className="text-on-surface min-w-0 break-words">{it.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </Fragment>
-              )
-            }) })()}
-            {!loading && !err && display.length === 0 && <p className="text-xs text-outline">No fields.</p>}
-          </div>
-          <p className="text-[11px] text-outline mt-2">AI-extracted values — hover to locate on the page; edit to correct.</p>
+                ))}
+                {!pageLoading && !pageErr && pageRes && pageRes.pages.length === 0 && <p className="text-xs text-outline">No page detail returned.</p>}
+              </div>
+              <p className="text-[11px] text-outline mt-2">Each page summarised with its key data — click a page to view it, or copy to paste elsewhere.</p>
+            </>
+          )}
         </div>
       </div>
     </div>
