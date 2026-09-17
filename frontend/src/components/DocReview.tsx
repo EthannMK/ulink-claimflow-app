@@ -1,7 +1,14 @@
-import { useEffect, useState, Fragment } from 'react'
+import { useEffect, useState, useRef, Fragment } from 'react'
 import { Card, Badge, Icon } from './ui'
 import { confidenceCls } from '../lib/format'
-import { reviewDoc, reviewDocPages, type ReviewResult, type ReviewField, type PageAnalysis } from '../lib/review'
+import { reviewDoc, reviewDocPagesRange, type ReviewResult, type ReviewField, type PageDetail } from '../lib/review'
+
+function mergePages(prev: PageDetail[], incoming: PageDetail[]): PageDetail[] {
+  const map = new Map<number, PageDetail>()
+  for (const p of prev) map.set(p.page, p)
+  for (const p of incoming) map.set(p.page, p)
+  return Array.from(map.values()).sort((a, b) => a.page - b.page)
+}
 
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
 
@@ -28,11 +35,13 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
   const [hover, setHover] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, string>>({})
 
-  // full detection (page-by-page)
-  const [pageRes, setPageRes] = useState<PageAnalysis | null>(null)
+  // full detection (page-by-page, streamed in ranges)
+  const [pageItems, setPageItems] = useState<PageDetail[]>([])
+  const [pageProgress, setPageProgress] = useState({ done: 0, total: 0 })
   const [pageLoading, setPageLoading] = useState(false)
   const [pageErr, setPageErr] = useState('')
   const [copied, setCopied] = useState<number | null>(null)
+  const startedRef = useRef('')
 
   const hasMap = !!mapFields?.length
   const [mapped, setMapped] = useState(hasMap)
@@ -44,7 +53,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
     let alive = true
     setPdfDoc(null); setImgCache({}); setImgUrl(''); setNumPages(1); setPage(0)
     setRes(null); setErr(''); setEdits({}); setHover(null)
-    setPageRes(null); setPageErr(''); setPageLoading(false); setMapped(hasMap)
+    setPageItems([]); setPageProgress({ done: 0, total: 0 }); setPageErr(''); setPageLoading(false); setMapped(hasMap); startedRef.current = ''
     ;(async () => {
       try {
         if (isPdf(file)) {
@@ -95,17 +104,34 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
     return () => { alive = false }
   }, [file, mapFields, hasMap])
 
-  // ---- full detection: load page-by-page lazily the first time it's shown ----
+  // ---- full detection: stream page ranges in parallel, show each batch as it lands ----
   useEffect(() => {
-    if (!full || pageRes || pageLoading) return
+    if (!full) return
+    const fileKey = `${file.name}:${file.size}:${file.lastModified}`
+    if (startedRef.current === fileKey) return
+    if (isPdf(file) && !pdfDoc) return                 // wait until we know the page count
+    const total = isPdf(file) ? numPages : 1
+    startedRef.current = fileKey
     let alive = true
-    setPageLoading(true); setPageErr('')
-    reviewDocPages(file)
-      .then((p) => { if (alive) { setPageRes(p); if (p.error) setPageErr(p.error) } })
-      .catch((e) => { if (alive) setPageErr(e?.message ?? 'Page analysis failed') })
-      .finally(() => { if (alive) setPageLoading(false) })
+    setPageItems([]); setPageErr(''); setPageLoading(true); setPageProgress({ done: 0, total })
+    const CH = 8
+    const ranges: [number, number][] = []
+    if (total <= 1) ranges.push([1, 1])
+    else for (let s = 1; s <= total; s += CH) ranges.push([s, Math.min(CH, total - s + 1)])
+    let remaining = ranges.length
+    let anyOk = false
+    ranges.forEach(([s, c]) => {
+      reviewDocPagesRange(file, s, c)
+        .then((r) => {
+          if (!alive) return
+          if (r.pages && r.pages.length) { anyOk = true; setPageItems((prev) => mergePages(prev, r.pages)) }
+          setPageProgress((p) => ({ done: Math.min(p.done + c, total), total }))
+        })
+        .catch(() => {})
+        .finally(() => { remaining -= 1; if (remaining === 0 && alive) { setPageLoading(false); if (!anyOk) setPageErr('No page detail returned — try again.') } })
+    })
     return () => { alive = false }
-  }, [full, file, pageRes, pageLoading])
+  }, [full, file, pdfDoc, numPages])
 
   const curImg = imgUrl || imgCache[page]
   const display: ReviewField[] = res?.fields || []
@@ -116,8 +142,8 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
     try { await navigator.clipboard.writeText(pageToText(p)); setCopied(p.page); setTimeout(() => setCopied(null), 1500) } catch { /* ignore */ }
   }
   async function copyAll() {
-    if (!pageRes) return
-    try { await navigator.clipboard.writeText(pageRes.pages.map(pageToText).join('\n\n——————————\n\n')); setCopied(-1); setTimeout(() => setCopied(null), 1500) } catch { /* ignore */ }
+    if (!pageItems.length) return
+    try { await navigator.clipboard.writeText(pageItems.map(pageToText).join('\n\n——————————\n\n')); setCopied(-1); setTimeout(() => setCopied(null), 1500) } catch { /* ignore */ }
   }
 
   return (
@@ -209,8 +235,8 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
             <>
               <div className="flex items-center gap-2 mb-2">
                 <h4 className="font-semibold text-sm">Full detection — page by page</h4>
-                {pageRes && !pageErr && !pageLoading && <Badge className="bg-status-approved/10 text-status-approved">{pageRes.pages.length} page(s)</Badge>}
-                {pageRes && pageRes.pages.length > 0 && (
+                {pageItems.length > 0 && <Badge className="bg-status-approved/10 text-status-approved">{pageItems.length}{pageProgress.total ? ` / ${pageProgress.total}` : ''} page(s)</Badge>}
+                {pageItems.length > 0 && (
                   <button onClick={copyAll} className="ml-auto text-xs text-primary flex items-center gap-1">
                     <Icon name={copied === -1 ? 'check' : 'content_copy'} className="text-[14px]" />{copied === -1 ? 'Copied' : 'Copy all'}
                   </button>
@@ -218,14 +244,13 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
               </div>
               {pageLoading && (
                 <div className="mb-2">
-                  <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full animate-pulse w-2/3" /></div>
-                  <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading every page in detail… (can take up to a minute)</p>
+                  <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pageProgress.total ? Math.max(8, Math.round((pageProgress.done / pageProgress.total) * 100)) : 30}%` }} /></div>
+                  <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading pages…{pageProgress.total ? ` ${pageProgress.done} / ${pageProgress.total}` : ''} (results appear as each batch finishes)</p>
                 </div>
               )}
-              {pageErr && <Card className="p-3 text-xs text-status-rejected">{pageErr}</Card>}
-              {!pageLoading && (
+              {pageErr && pageItems.length === 0 && <Card className="p-3 text-xs text-status-rejected">{pageErr}</Card>}
               <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1">
-                {pageRes?.pages.map((pg) => (
+                {pageItems.map((pg) => (
                   <div key={pg.page} className="border border-outline-variant/70 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <button onClick={() => { if (pg.page >= 1) setPage(pg.page - 1) }} title="Show this page" className="text-xs font-semibold text-primary flex items-center gap-1">
@@ -248,9 +273,8 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
                     )}
                   </div>
                 ))}
-                {!pageErr && pageRes && pageRes.pages.length === 0 && <p className="text-xs text-outline">No page detail returned.</p>}
+                {!pageLoading && !pageErr && pageItems.length === 0 && <p className="text-xs text-outline">No page detail returned.</p>}
               </div>
-              )}
               <p className="text-[11px] text-outline mt-2">Each page summarised with its key data — click a page to view it, or copy to paste elsewhere.</p>
             </>
           )}

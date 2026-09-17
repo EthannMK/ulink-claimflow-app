@@ -164,43 +164,51 @@ def _pages_from_raw(raw: list, offset: int) -> list[PageDetail]:
     return out
 
 
-def _page_analysis(data: bytes, mime: str) -> PageAnalysis:
-    """Page-by-page 'Full detection', run in PARALLEL over page chunks for speed.
-    Digital PDFs → page-text chunks (fast, cheap). Scanned PDFs → PDF sliced into
-    page-range chunks sent as images concurrently. Same tokens, far lower wall-clock."""
+def _page_analysis(data: bytes, mime: str, start: int = 0, count: int = 0) -> PageAnalysis:
+    """Page-by-page 'Full detection'. With start/count, analyses only that page range
+    (the frontend fires ranges in parallel and streams them in). Without a range, it
+    chunks the whole document and runs the chunks concurrently."""
     if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
         return PageAnalysis(pages=[], provider="stub", error="AI not configured")
 
     is_pdf_doc = is_pdf("doc", mime) or (mime or "").startswith("application/pdf")
     page_texts = pdf_text_by_page(data) if is_pdf_doc else []
     total_text = sum(len(t) for t in page_texts)
+    ranged = count and count > 0
+    a0 = max(start - 1, 0)
 
     tasks: list[tuple[list, int]] = []   # (parts, page-offset)
     if page_texts and total_text > 200:
-        CH = 10
-        for a in range(0, len(page_texts), CH):
-            chunk = page_texts[a:a + CH]
-            joined = "\n\n".join(f"[PAGE {a + i + 1}]\n{t}" for i, t in enumerate(chunk) if t.strip())
+        if ranged:
+            chunk = page_texts[a0:a0 + count]
+            joined = "\n\n".join(f"[PAGE {a0 + i + 1}]\n{t}" for i, t in enumerate(chunk) if t.strip())
             if joined.strip():
                 tasks.append(([{"text": _PAGE_ABS}, {"text": "[DOCUMENT TEXT BY PAGE]\n" + joined[:20000]}], 0))
+        else:
+            CH = 10
+            for a in range(0, len(page_texts), CH):
+                chunk = page_texts[a:a + CH]
+                joined = "\n\n".join(f"[PAGE {a + i + 1}]\n{t}" for i, t in enumerate(chunk) if t.strip())
+                if joined.strip():
+                    tasks.append(([{"text": _PAGE_ABS}, {"text": "[DOCUMENT TEXT BY PAGE]\n" + joined[:20000]}], 0))
     elif is_pdf_doc and len(data) <= 25_000_000:
         try:
             from pypdf import PdfReader, PdfWriter
             import io
             reader = PdfReader(io.BytesIO(data))
             n = len(reader.pages)
-            CH = 6
-            for a in range(0, n, CH):
+            spans = [(a0, min(a0 + count, n))] if ranged else [(a, min(a + 6, n)) for a in range(0, n, 6)]
+            for (lo, hi) in spans:
                 w = PdfWriter()
-                for i in range(a, min(a + CH, n)):
+                for i in range(lo, hi):
                     w.add_page(reader.pages[i])
                 buf = io.BytesIO(); w.write(buf); b = buf.getvalue()
                 if len(b) <= 18_000_000:
                     tasks.append(([{"text": _PAGE_REL},
-                                   {"inline_data": {"mime_type": "application/pdf", "data": base64.b64encode(b).decode()}}], a))
+                                   {"inline_data": {"mime_type": "application/pdf", "data": base64.b64encode(b).decode()}}], lo))
         except Exception:
             tasks = []
-        if not tasks and len(data) <= 18_000_000:
+        if not tasks and not ranged and len(data) <= 18_000_000:
             tasks = [([{"text": _PAGE_ABS}, {"inline_data": {"mime_type": mime or "application/pdf", "data": base64.b64encode(data).decode()}}], 0)]
     elif len(data) <= 18_000_000:
         tasks = [([{"text": _PAGE_ABS}, {"inline_data": {"mime_type": mime or "image/jpeg", "data": base64.b64encode(data).decode()}}], 0)]
@@ -232,16 +240,16 @@ def _page_analysis(data: bytes, mime: str) -> PageAnalysis:
 
 
 @router.post("/review/pages", response_model=PageAnalysis)
-async def review_pages(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def review_pages(file: UploadFile = File(...), start: int = Form(0), count: int = Form(0), user=Depends(get_current_user)):
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
     mime = file.content_type or "application/pdf"
-    key = hashlib.sha256(data + b"::pages").hexdigest()
+    key = hashlib.sha256(data + f"::pages:{start}:{count}".encode()).hexdigest()
     cached = _PAGE_CACHE.get(key)
     if cached is not None:
         return cached
-    res = _page_analysis(data, mime)
+    res = _page_analysis(data, mime, start, count)
     if not res.error:
         if len(_PAGE_CACHE) >= _MAX:
             _PAGE_CACHE.pop(next(iter(_PAGE_CACHE)))

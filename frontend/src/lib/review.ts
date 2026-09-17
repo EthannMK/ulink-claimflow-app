@@ -32,11 +32,17 @@ export interface PageAnalysis { pages: PageDetail[]; provider: string; error: st
 const pageCache = new Map<string, Promise<PageAnalysis>>()
 
 export function reviewDocPages(file: File): Promise<PageAnalysis> {
-  const key = `pages:${file.name}:${file.size}:${file.lastModified}`
+  return reviewDocPagesRange(file, 0, 0)
+}
+
+/** Analyse a page range (start is 1-based; count 0 = whole document). Cached per range. */
+export function reviewDocPagesRange(file: File, start: number, count: number): Promise<PageAnalysis> {
+  const key = `pages:${file.name}:${file.size}:${file.lastModified}:${start}:${count}`
   const hit = pageCache.get(key)
   if (hit) return hit
   const p = (async () => {
     const fd = new FormData(); fd.append('file', file, file.name)
+    fd.append('start', String(start)); fd.append('count', String(count))
     const r = await fetch(`${apiBase()}/api/review/pages`, { method: 'POST', headers: authHeaders(), body: fd })
     if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Page analysis failed (${r.status})`) }
     return r.json() as Promise<PageAnalysis>
