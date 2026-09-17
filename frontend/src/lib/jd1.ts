@@ -96,7 +96,7 @@ export interface StoredDoc { id: string; name: string; mime: string; size: numbe
 export interface JD2Item {
   id: string; created_at: string; handed_by: string
   member_name: string; insurer: string; claim_type: string; claim_amount: string
-  status: JD2Status; note: JD1Note; attachments: StoredDoc[]
+  status: JD2Status; assignee?: string | null; note: JD1Note; attachments: StoredDoc[]
   decision: string | null; reasons: string; decided_by: string | null; decided_at: string | null
 }
 
@@ -151,6 +151,11 @@ export async function getJD2Item(id: string): Promise<JD2Item> {
 export async function updateJD2Note(id: string, note: JD1Note): Promise<JD2Item> {
   const r = await fetch(`${apiBase()}/api/jd2/${id}/note`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(note) })
   if (!r.ok) throw new Error(`Save failed (${r.status})`)
+  return r.json()
+}
+export async function assignJD2(id: string, assignee: string): Promise<JD2Item> {
+  const r = await fetch(`${apiBase()}/api/jd2/${id}/assign`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ assignee }) })
+  if (!r.ok) throw new Error(`Reassign failed (${r.status})`)
   return r.json()
 }
 export async function deleteJD2Item(id: string): Promise<void> {

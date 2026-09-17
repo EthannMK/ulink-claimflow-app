@@ -55,6 +55,25 @@ async def handoff(body: HandoffRequest, user=Depends(get_current_user)):
     return jd2_store.add(item)
 
 
+class AssignBody(BaseModel):
+    assignee: str = ""
+
+@router.put("/{item_id}/assign", response_model=JD2Item)
+async def assign_item(item_id: str, body: AssignBody, user=Depends(get_current_user)):
+    """Reassign a claim to a team member (any active user, either team)."""
+    item = jd2_store.get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Not found")
+    item.assignee = body.assignee or None
+    # keep the linked Inbox ticket in sync
+    claims = Collection("claims")
+    for c in claims.all():
+        if c.get("jd2_item_id") == item_id:
+            c["assignee"] = body.assignee or None
+            claims.put(c.get("id"), c)
+    return jd2_store.save(item)
+
+
 @router.delete("/{item_id}")
 async def delete_item(item_id: str, user=Depends(get_current_user)):
     """Delete a claim from JD2. Super admin only, and recorded in the audit log."""

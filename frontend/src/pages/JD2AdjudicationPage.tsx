@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getJD2Queue, getJD2Item, decideJD2, updateJD2Note, deleteJD2Item, fetchDocBlobUrl, type JD2Item, type JD1Note, type NoteField } from '../lib/jd1'
+import { getJD2Queue, getJD2Item, decideJD2, updateJD2Note, deleteJD2Item, assignJD2, fetchDocBlobUrl, type JD2Item, type JD1Note, type NoteField } from '../lib/jd1'
+import { listUsers } from '../lib/api'
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { SupportingReview } from '../components/SupportingReview'
@@ -56,12 +57,33 @@ export function JD2AdjudicationPage() {
   const [draft, setDraft] = useState<JD1Note | null>(null)
   const [noteDirty, setNoteDirty] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
+  const [users, setUsers] = useState<{ id: string; name: string; username: string; role: string; active: boolean }[]>([])
+  const [sel, setSel] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    setFlash(''); setNoteDirty(false)
+    setFlash(''); setNoteDirty(false); setSel(new Set())
     if (id) { getJD2Item(id).then((it) => { setItem(it); setDraft(it.note); setReasons(it.reasons || '') }).catch((e) => setFlash(String(e?.message ?? e))) }
     else { getJD2Queue().then(setQueue).catch((e) => setFlash(String(e?.message ?? e))) }
   }, [id])
+
+  useEffect(() => { listUsers().then((u: any) => setUsers(u || [])).catch(() => {}) }, [])
+
+  async function reassign(assignee: string) {
+    if (!item) return
+    try { const up = await assignJD2(item.id, assignee); setItem(up) }
+    catch (e: any) { setFlash('Reassign failed: ' + (e?.message ?? 'unknown')) }
+  }
+  function toggleSel(id2: string) {
+    setSel((s) => { const n = new Set(s); n.has(id2) ? n.delete(id2) : n.add(id2); return n })
+  }
+  async function bulkDelete() {
+    if (sel.size === 0) return
+    if (!window.confirm(`Delete ${sel.size} claim(s) permanently? This is recorded in the audit log.`)) return
+    try {
+      await Promise.all(Array.from(sel).map((x) => deleteJD2Item(x)))
+      setSel(new Set()); getJD2Queue().then(setQueue).catch(() => {})
+    } catch (e: any) { setFlash('Bulk delete failed: ' + (e?.message ?? 'unknown')) }
+  }
 
   function editJD2(sec: 'header' | 'section_b' | 'section_c', key: string, value: string) {
     setDraft((d) => { if (!d) return d; const c: any = structuredClone(d); c[sec][key] = { ...c[sec][key], value }; return c })
@@ -111,26 +133,40 @@ export function JD2AdjudicationPage() {
   if (!id) {
     return (
       <div>
-        <PageTitle title="JD2 · Adjudication" sub="Claims validated by JD1, waiting for the coverage decision. Open one to review the JD1 note and decide." />
+        <PageTitle title="JD2 · Review & Approve" sub="Claims validated by JD1, waiting for the coverage decision. Open one to review and decide." />
         {flash && <p className="text-sm text-status-rejected mb-3">{flash}</p>}
+        {isSuper && sel.size > 0 && (
+          <div className="flex items-center gap-3 mb-3 bg-surface-container/60 rounded-lg px-3 py-2">
+            <span className="text-sm text-text-main">{sel.size} selected</span>
+            <Button variant="outline" size="sm" onClick={bulkDelete}><Icon name="delete" className="text-[16px] text-status-rejected" />Delete selected</Button>
+            <button onClick={() => setSel(new Set())} className="text-xs text-outline">Clear</button>
+          </div>
+        )}
         {!queue && <Card className="p-8 text-center text-sm text-text-main">Loading queue…</Card>}
         {queue && queue.length === 0 && (
           <Card className="p-10 text-center">
             <Icon name="inbox" className="text-[32px] text-outline" />
-            <p className="text-sm text-text-main mt-2">Nothing in the JD2 queue yet. Complete a note in <b>JD1 · Intake & Validation</b> and click <b>Approve &amp; send to JD2</b>.</p>
+            <p className="text-sm text-text-main mt-2">Nothing in the JD2 queue yet. Complete a note in <b>JD1 · Doc Scan & Validation</b> and click <b>Approve &amp; send to JD2</b>.</p>
           </Card>
         )}
         {queue && queue.length > 0 && (
           <Card className="p-0 overflow-hidden">
             <div className="grid grid-cols-12 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-outline bg-surface-container">
-              <div className="col-span-3">Member</div><div className="col-span-2">Insurer</div>
+              <div className="col-span-3 flex items-center gap-2">
+                {isSuper && <input type="checkbox" checked={queue.length > 0 && sel.size === queue.length} onChange={(e) => setSel(e.target.checked ? new Set(queue.map((q) => q.id)) : new Set())} />}
+                Member
+              </div>
+              <div className="col-span-2">Insurer</div>
               <div className="col-span-2">Type</div><div className="col-span-2">Amount</div>
               <div className="col-span-2">Status</div><div className="col-span-1"></div>
             </div>
             {queue.map((q) => (
               <div key={q.id} role="button" onClick={() => nav(`/jd2/${q.id}`)}
                 className="grid grid-cols-12 px-4 py-3 text-sm items-center w-full text-left border-b border-outline-variant/40 last:border-0 hover:bg-surface-container/50 cursor-pointer">
-                <div className="col-span-3 font-medium truncate">{q.member_name || '—'}</div>
+                <div className="col-span-3 font-medium truncate flex items-center gap-2">
+                  {isSuper && <input type="checkbox" checked={sel.has(q.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleSel(q.id)} />}
+                  <span className="truncate">{q.member_name || '—'}{q.assignee && <span className="block text-[11px] text-outline font-normal">→ {q.assignee}</span>}</span>
+                </div>
                 <div className="col-span-2 text-text-main truncate">{q.insurer || '—'}</div>
                 <div className="col-span-2 text-text-main">{q.claim_type || '—'}</div>
                 <div className="col-span-2 text-text-main">{q.claim_amount || '—'}</div>
@@ -180,12 +216,21 @@ export function JD2AdjudicationPage() {
         <Badge className="bg-status-approved/10 text-status-approved">{item.insurer || 'Insurer'}</Badge>
         <Badge className={STATUS_META[item.status]?.cls}>{STATUS_META[item.status]?.label}</Badge>
         <span className="text-sm text-text-main">{item.member_name} · {amount}</span>
-        <span className="text-xs text-outline ml-auto">From JD1: {item.handed_by || '—'}</span>
-        {isSuper && (
-          <Button variant="ghost" size="sm" onClick={() => removeClaim(item.id, true)}>
-            <Icon name="delete" className="text-[16px] text-status-rejected" />Delete
-          </Button>
-        )}
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-xs text-outline">From JD1: {item.handed_by || '—'}</span>
+          <div className="flex items-center gap-1 text-xs">
+            <Icon name="person" className="text-[15px] text-outline" />
+            <select value={item.assignee || ''} onChange={(e) => reassign(e.target.value)} className="border border-outline-variant rounded-md px-2 py-1 text-xs" title="Reassign to a team member" disabled={decided}>
+              <option value="">Unassigned</option>
+              {users.filter((u) => u.active).map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+            </select>
+          </div>
+          {isSuper && (
+            <Button variant="ghost" size="sm" onClick={() => removeClaim(item.id, true)}>
+              <Icon name="delete" className="text-[16px] text-status-rejected" />Delete
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-4">

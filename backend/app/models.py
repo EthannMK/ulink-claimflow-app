@@ -235,6 +235,7 @@ class JD2Item(BaseModel):
     claim_type: str = ""
     claim_amount: str = ""
     status: JD2Status = JD2Status.pending
+    assignee: str | None = None         # user this claim is reassigned to (name or username)
     note: JD1Note                # the full JD1 Process Note
     attachments: list[StoredDoc] = []   # the JD1-uploaded documents (bytes served separately)
     decision: str | None = None  # approve / partial / reject
