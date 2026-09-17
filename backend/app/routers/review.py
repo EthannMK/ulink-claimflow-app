@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from app.models import ReviewResult, ReviewField, ReviewBox, PageAnalysis, PageDetail, PageItem
 from app.security import get_current_user
 from app.adapters.docai import review as docai_review
-from app.adapters.jd1 import pdf_text_and_pages, is_pdf
+from app.adapters.jd1 import pdf_text_and_pages, pdf_text_by_page, is_pdf
 from app.config import settings
 
 router = APIRouter(prefix="/api", tags=["review"])
@@ -129,7 +129,15 @@ def _page_analysis(data: bytes, mime: str) -> PageAnalysis:
         'Respond ONLY with JSON: {"pages":[{"page":1,"title":"...","summary":"...","items":[{"label":"...","value":"..."}]}]}'
     )
     parts = [{"text": prompt}]
-    if len(data) <= 18_000_000:
+    is_pdf_doc = is_pdf("doc", mime) or (mime or "").startswith("application/pdf")
+    page_texts = pdf_text_by_page(data) if is_pdf_doc else []
+    total_text = sum(len(t) for t in page_texts)
+    if page_texts and total_text > 200:
+        # digital PDF: send page-marked text — much faster (and cheaper) than sending images
+        joined = "\n\n".join(f"[PAGE {i + 1}]\n{t}" for i, t in enumerate(page_texts) if t.strip())
+        parts.append({"text": "[DOCUMENT TEXT BY PAGE]\n" + joined[:40000]})
+    elif len(data) <= 18_000_000:
+        # scanned / image-only: send the file so the model can read each page visually
         parts.append({"inline_data": {"mime_type": mime or "application/pdf", "data": base64.b64encode(data).decode()}})
     else:
         text, _ = pdf_text_and_pages(data)
@@ -193,9 +201,21 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
     if cached is not None:
         return cached
 
-    docres = docai_review(data, mime)          # raw key/values + boxes
-    raw = docres.fields
-    result = ReviewResult(pages=docres.pages, fields=raw, all_fields=raw, provider="docai", error=docres.error)
+    # Document AI is only needed for highlight boxes; skip it unless USE_DOCAI is set (much faster).
+    raw: list[ReviewField] = []
+    pages = 1
+    error = ""
+    if settings.use_docai:
+        docres = docai_review(data, mime)          # raw key/values + boxes
+        raw = docres.fields; pages = docres.pages; error = docres.error
+    else:
+        try:
+            _, n = pdf_text_and_pages(data)
+            pages = n or 1
+        except Exception:
+            pages = 1
+    result = ReviewResult(pages=pages, fields=raw, all_fields=raw,
+                          provider=("docai" if settings.use_docai else "gemini"), error=error)
 
     req = []
     if fields:
@@ -210,14 +230,14 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
         for i, f in enumerate(req, 1):
             g = gem.get(i, {})
             val = g.get("value", "")
-            page, box = _find_box(val, raw)
+            page, box = _find_box(val, raw) if settings.use_docai else (0, ReviewBox())
             mapped.append(ReviewField(
                 id=uuid.uuid4().hex[:8], name=f["label"], value=val,
                 confidence=(g.get("confidence", 0.0) if val else 0.0),
                 page=page, section=str(f.get("section", "")), box=box,
             ))
         result.fields = mapped
-        result.provider = "hybrid" if gem else "docai"
+        result.provider = ("hybrid" if (settings.use_docai and gem) else ("gemini" if gem else result.provider))
 
     if not result.error:
         if len(_CACHE) >= _MAX:

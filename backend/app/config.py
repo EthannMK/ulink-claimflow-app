@@ -13,5 +13,8 @@ class Settings:
     docai_project: str = os.getenv("DOCAI_PROJECT", "")
     docai_location: str = os.getenv("DOCAI_LOCATION", "asia-southeast1")
     docai_processor_id: str = os.getenv("DOCAI_PROCESSOR_ID", "")
+    # Document AI is only used for field-highlight boxes; OFF by default for speed.
+    # Set USE_DOCAI=1 to re-enable on-document highlighting.
+    use_docai: bool = os.getenv("USE_DOCAI", "0").lower() in ("1", "true", "yes")
 
 settings = Settings()

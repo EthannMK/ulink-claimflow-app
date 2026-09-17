@@ -62,6 +62,16 @@ def pdf_text_and_pages(data: bytes) -> tuple[str, int]:
     except Exception:
         return "", 0
 
+def pdf_text_by_page(data: bytes, max_pages: int = 40) -> list[str]:
+    """Extracted text per page (for fast, page-aware analysis of digital PDFs)."""
+    try:
+        from pypdf import PdfReader
+        import io
+        r = PdfReader(io.BytesIO(data))
+        return [(p.extract_text() or "") for p in r.pages[:max_pages]]
+    except Exception:
+        return []
+
 def is_pdf(name: str, mime: str) -> bool:
     return mime == "application/pdf" or name.lower().endswith(".pdf")
 
