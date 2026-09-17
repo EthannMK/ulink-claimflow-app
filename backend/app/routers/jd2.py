@@ -4,7 +4,8 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Response
 from app.models import JD1Note, JD2Item, JD2List, JD2Decision, JD2Status, StoredDoc
 from app.security import get_current_user
-from app import jd2_store
+from app import jd2_store, storage, audit
+from app.db import Collection
 
 router = APIRouter(prefix="/api/jd2", tags=["jd2"])
 
@@ -52,6 +53,29 @@ async def handoff(body: HandoffRequest, user=Depends(get_current_user)):
         attachments=stored,
     )
     return jd2_store.add(item)
+
+
+@router.delete("/{item_id}")
+async def delete_item(item_id: str, user=Depends(get_current_user)):
+    """Delete a claim from JD2. Super admin only, and recorded in the audit log."""
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Only a super admin can delete a claim")
+    item = jd2_store.get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Not found")
+    # remove stored document files
+    for att in (item.attachments or []):
+        storage.delete(f"jd2/{item_id}/{att.id}")
+    # remove any linked Inbox ticket(s)
+    claims = Collection("claims")
+    for c in claims.all():
+        if c.get("jd2_item_id") == item_id:
+            claims.delete(c.get("id"))
+    jd2_store.delete(item_id)
+    audit.record("delete_claim", user.get("name") or user.get("username", ""),
+                 detail=f"Deleted JD2 claim — {item.member_name or '—'} · {item.insurer or '—'} · {item.claim_amount or '—'}",
+                 ref=item_id)
+    return {"ok": True}
 
 
 @router.get("/{item_id}/documents/{doc_id}")

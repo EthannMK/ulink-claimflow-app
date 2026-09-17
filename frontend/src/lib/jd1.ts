@@ -153,6 +153,10 @@ export async function updateJD2Note(id: string, note: JD1Note): Promise<JD2Item>
   if (!r.ok) throw new Error(`Save failed (${r.status})`)
   return r.json()
 }
+export async function deleteJD2Item(id: string): Promise<void> {
+  const r = await fetch(`${apiBase()}/api/jd2/${id}`, { method: 'DELETE', headers: authHeaders() })
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Delete failed (${r.status})`) }
+}
 export async function decideJD2(id: string, decision: 'approve' | 'partial' | 'reject', reasons: string): Promise<JD2Item> {
   const r = await fetch(`${apiBase()}/api/jd2/${id}/decision`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ decision, reasons }) })
   if (!r.ok) throw new Error(`Decision failed (${r.status})`)

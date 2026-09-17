@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getJD2Queue, getJD2Item, decideJD2, updateJD2Note, fetchDocBlobUrl, type JD2Item, type JD1Note, type NoteField } from '../lib/jd1'
+import { getJD2Queue, getJD2Item, decideJD2, updateJD2Note, deleteJD2Item, fetchDocBlobUrl, type JD2Item, type JD1Note, type NoteField } from '../lib/jd1'
+import { getRole } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { SupportingReview } from '../components/SupportingReview'
 import { confidenceCls } from '../lib/format'
@@ -96,6 +97,16 @@ export function JD2AdjudicationPage() {
     } catch (e: any) { setFlash('Could not download: ' + (e?.message ?? 'unknown')) }
   }
 
+  const isSuper = getRole() === 'super_admin'
+  async function removeClaim(claimId: string, goBack: boolean) {
+    if (!window.confirm('Delete this claim permanently? This action is recorded in the audit log.')) return
+    try {
+      await deleteJD2Item(claimId)
+      if (goBack) nav('/jd2')
+      else getJD2Queue().then(setQueue).catch(() => {})
+    } catch (e: any) { setFlash('Delete failed: ' + (e?.message ?? 'unknown')) }
+  }
+
   // ---- queue view ----
   if (!id) {
     return (
@@ -117,15 +128,18 @@ export function JD2AdjudicationPage() {
               <div className="col-span-2">Status</div><div className="col-span-1"></div>
             </div>
             {queue.map((q) => (
-              <button key={q.id} onClick={() => nav(`/jd2/${q.id}`)}
-                className="grid grid-cols-12 px-4 py-3 text-sm items-center w-full text-left border-b border-outline-variant/40 last:border-0 hover:bg-surface-container/50">
+              <div key={q.id} role="button" onClick={() => nav(`/jd2/${q.id}`)}
+                className="grid grid-cols-12 px-4 py-3 text-sm items-center w-full text-left border-b border-outline-variant/40 last:border-0 hover:bg-surface-container/50 cursor-pointer">
                 <div className="col-span-3 font-medium truncate">{q.member_name || '—'}</div>
                 <div className="col-span-2 text-text-main truncate">{q.insurer || '—'}</div>
                 <div className="col-span-2 text-text-main">{q.claim_type || '—'}</div>
                 <div className="col-span-2 text-text-main">{q.claim_amount || '—'}</div>
                 <div className="col-span-2"><Badge className={STATUS_META[q.status]?.cls}>{STATUS_META[q.status]?.label}</Badge></div>
-                <div className="col-span-1 text-right text-primary"><Icon name="chevron_right" /></div>
-              </button>
+                <div className="col-span-1 flex items-center justify-end gap-1.5">
+                  {isSuper && <button onClick={(e) => { e.stopPropagation(); removeClaim(q.id, false) }} title="Delete claim" className="text-status-rejected hover:opacity-70"><Icon name="delete" className="text-[16px]" /></button>}
+                  <Icon name="chevron_right" className="text-primary" />
+                </div>
+              </div>
             ))}
           </Card>
         )}
@@ -167,6 +181,11 @@ export function JD2AdjudicationPage() {
         <Badge className={STATUS_META[item.status]?.cls}>{STATUS_META[item.status]?.label}</Badge>
         <span className="text-sm text-text-main">{item.member_name} · {amount}</span>
         <span className="text-xs text-outline ml-auto">From JD1: {item.handed_by || '—'}</span>
+        {isSuper && (
+          <Button variant="ghost" size="sm" onClick={() => removeClaim(item.id, true)}>
+            <Icon name="delete" className="text-[16px] text-status-rejected" />Delete
+          </Button>
+        )}
       </div>
 
       <div className="space-y-4">

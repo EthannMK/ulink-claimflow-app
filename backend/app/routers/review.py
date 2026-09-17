@@ -121,6 +121,9 @@ def _page_analysis(data: bytes, mime: str) -> PageAnalysis:
         "a 2-4 sentence plain-English summary of what that page contains, and the important data points on that "
         "page as label/value pairs — names, NRC/passport, policy numbers, dates, diagnosis, treatment, "
         "hospital/provider, amounts, bank details, phone, email, and anything else useful. "
+        "If a page is an INVOICE, BILL or RECEIPT, do not just give its name — extract the details: "
+        "provider/hospital, date, invoice/receipt number, the notable line items with their amounts, "
+        "the total amount, and any tax or discount. Put the total as an item like {\"label\":\"Total amount\",\"value\":\"...\"}. "
         "Read handwriting and Burmese too; keep numbers and IDs exactly as written. "
         "Include every page, even near-empty ones (brief summary, empty items). "
         'Respond ONLY with JSON: {"pages":[{"page":1,"title":"...","summary":"...","items":[{"label":"...","value":"..."}]}]}'

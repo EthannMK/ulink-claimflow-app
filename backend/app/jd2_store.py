@@ -21,6 +21,9 @@ def get(item_id: str) -> JD2Item | None:
     d = _items.get(item_id)
     return JD2Item.model_validate(d) if d else None
 
+def delete(item_id: str) -> None:
+    _items.delete(item_id)
+
 def save(item: JD2Item) -> JD2Item:
     _items.put(item.id, item.model_dump(mode="json"))
     return item

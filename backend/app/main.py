@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from app.routers import health, claims, auth, users, scan, jd1, jd2, assistant, extract, review
+from app.routers import health, claims, auth, users, scan, jd1, jd2, assistant, extract, review, audit
 
 app = FastAPI(title="Ulink ClaimFlow API", version="0.2.0")
 app.add_middleware(
@@ -21,6 +21,7 @@ app.include_router(assistant.router)
 app.include_router(extract.router)
 app.include_router(review.router)
 app.include_router(claims.router)
+app.include_router(audit.router)
 
 # ---- serve the built frontend (single Cloud Run URL = API + web app) ----
 # The Docker build drops the Vite build into /app/static. If present, serve it with SPA fallback.

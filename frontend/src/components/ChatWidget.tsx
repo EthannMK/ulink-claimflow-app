@@ -35,9 +35,8 @@ export function ChatWidget() {
     <>
       {!open && (
         <button onClick={() => setOpen(true)} title="Ask the ClaimFlow assistant"
-          className="fixed bottom-5 right-5 z-30 h-14 pl-4 pr-5 rounded-full bg-gradient-to-br from-primary to-brand-accent text-white shadow-xl ring-4 ring-primary/15 flex items-center gap-2 hover:scale-[1.03] transition-transform">
-          <Icon name="auto_awesome" className="text-[22px]" />
-          <span className="text-sm font-semibold">Ask AI</span>
+          className="fixed bottom-5 right-5 z-30 w-12 h-12 rounded-full bg-primary text-white shadow-lg grid place-items-center hover:scale-[1.05] transition-transform">
+          <Icon name="chat_bubble" className="text-[22px]" />
         </button>
       )}
       {open && (

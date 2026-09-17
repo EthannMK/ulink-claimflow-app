@@ -14,8 +14,8 @@ export function Sidebar() {
     { to: '/notifications', label: 'Notifications', icon: 'notifications' },
   ]
   const pipeline = [
-    { to: '/jd1', label: 'JD1 · Intake & Validation', icon: 'assignment_turned_in' },
-    { to: '/jd2', label: 'JD2 · Adjudication', icon: 'rule' },
+    { to: '/jd1', label: 'JD1 · Doc Scan & Validation', icon: 'assignment_turned_in' },
+    { to: '/jd2', label: 'JD2 · Review & Approve', icon: 'rule' },
   ]
   const admin = [
     ...(isSuper ? [{ to: '/admin/users', label: 'Users & Teams', icon: 'group' }] : []),

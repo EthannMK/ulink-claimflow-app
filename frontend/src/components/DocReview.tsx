@@ -3,19 +3,6 @@ import { Card, Badge, Icon } from './ui'
 import { confidenceCls } from '../lib/format'
 import { reviewDoc, reviewDocPages, type ReviewResult, type ReviewField, type PageAnalysis } from '../lib/review'
 
-async function renderPdfPages(file: File): Promise<string[]> {
-  const pdfjs: any = await import('pdfjs-dist')
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
-  const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
-  const n = Math.min(pdf.numPages, 30); const imgs: string[] = []
-  for (let i = 1; i <= n; i++) {
-    const page = await pdf.getPage(i); const vp = page.getViewport({ scale: 2 })
-    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height
-    await page.render({ canvasContext: c.getContext('2d')!, viewport: vp }).promise
-    imgs.push(c.toDataURL('image/png'))
-  }
-  return imgs
-}
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
 
 function pageToText(p: { page: number; title: string; summary: string; items: { label: string; value: string }[] }): string {
@@ -26,45 +13,89 @@ function pageToText(p: { page: number; title: string; summary: string; items: { 
 }
 
 export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: string; label: string; hint?: string; section?: string }[] }) {
-  const [imgs, setImgs] = useState<string[]>([])
-  const [res, setRes] = useState<ReviewResult | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState('')
+  // preview (rendered lazily — only the page being viewed)
+  const [pdfDoc, setPdfDoc] = useState<any>(null)
+  const [imgCache, setImgCache] = useState<Record<number, string>>({})
+  const [imgUrl, setImgUrl] = useState('')       // for non-PDF image files
+  const [numPages, setNumPages] = useState(1)
   const [page, setPage] = useState(0)
+  const [rendering, setRendering] = useState(false)
+
+  // extraction
+  const [res, setRes] = useState<ReviewResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState('')
   const [hover, setHover] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, string>>({})
-  const hasMap = !!mapFields?.length
-  const [mapped, setMapped] = useState(hasMap)                 // Required fields vs Full detection
+
+  // full detection (page-by-page)
   const [pageRes, setPageRes] = useState<PageAnalysis | null>(null)
   const [pageLoading, setPageLoading] = useState(false)
   const [pageErr, setPageErr] = useState('')
-  const [copied, setCopied] = useState<number | null>(null)   // page number just copied
+  const [copied, setCopied] = useState<number | null>(null)
 
+  const hasMap = !!mapFields?.length
+  const [mapped, setMapped] = useState(hasMap)
   const useMapped = mapped && hasMap
   const full = !useMapped
 
-  // load previews + (when there are insurer fields) the mapped extraction with highlights
+  // ---- load the document (metadata only — pages render on demand) ----
   useEffect(() => {
     let alive = true
-    setLoading(true); setErr(''); setRes(null); setImgs([]); setPage(0); setEdits({}); setHover(null)
+    setPdfDoc(null); setImgCache({}); setImgUrl(''); setNumPages(1); setPage(0)
+    setRes(null); setErr(''); setEdits({}); setHover(null)
     setPageRes(null); setPageErr(''); setPageLoading(false); setMapped(hasMap)
     ;(async () => {
       try {
-        const previews = isPdf(file) ? await renderPdfPages(file) : [URL.createObjectURL(file)]
-        if (!alive) return; setImgs(previews)
-        if (hasMap) {
-          const fieldsArg = JSON.stringify(mapFields!.map((f) => ({ label: f.label, hint: f.hint || '', section: f.section || '' })))
-          const r = await reviewDoc(file, fieldsArg); if (!alive) return
-          if (r.error) setErr(r.error)
-          setRes(r)
+        if (isPdf(file)) {
+          const pdfjs: any = await import('pdfjs-dist')
+          pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+          const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
+          if (!alive) return
+          setPdfDoc(doc); setNumPages(doc.numPages)
+        } else {
+          const u = URL.createObjectURL(file); if (!alive) return
+          setImgUrl(u); setNumPages(1)
         }
-      } catch (e: any) { if (alive) setErr(e?.message ?? 'Review failed') }
-      finally { if (alive) setLoading(false) }
+      } catch { if (alive) setErr('Could not open the document preview.') }
     })()
     return () => { alive = false }
-  }, [file, mapFields])
+  }, [file])
 
-  // lazily load the page-by-page analysis the first time Full detection is shown
+  // ---- render only the current page, cache it ----
+  useEffect(() => {
+    if (!pdfDoc || imgCache[page]) return
+    let alive = true
+    setRendering(true)
+    ;(async () => {
+      try {
+        const pg = await pdfDoc.getPage(page + 1)
+        const vp = pg.getViewport({ scale: 1.5 })
+        const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height
+        await pg.render({ canvasContext: c.getContext('2d')!, viewport: vp }).promise
+        if (!alive) return
+        const url = c.toDataURL('image/jpeg', 0.82)
+        setImgCache((m) => ({ ...m, [page]: url }))
+      } catch { /* ignore a single page render failure */ }
+      finally { if (alive) setRendering(false) }
+    })()
+    return () => { alive = false }
+  }, [pdfDoc, page, imgCache])
+
+  // ---- required-fields extraction (independent of preview so its bar clears on its own) ----
+  useEffect(() => {
+    if (!hasMap) { setLoading(false); return }
+    let alive = true
+    setLoading(true); setErr(''); setRes(null); setEdits({})
+    const fieldsArg = JSON.stringify(mapFields!.map((f) => ({ label: f.label, hint: f.hint || '', section: f.section || '' })))
+    reviewDoc(file, fieldsArg)
+      .then((r) => { if (alive) { if (r.error) setErr(r.error); setRes(r) } })
+      .catch((e) => { if (alive) setErr(e?.message ?? 'Review failed') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [file, mapFields, hasMap])
+
+  // ---- full detection: load page-by-page lazily the first time it's shown ----
   useEffect(() => {
     if (!full || pageRes || pageLoading) return
     let alive = true
@@ -76,7 +107,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
     return () => { alive = false }
   }, [full, file, pageRes, pageLoading])
 
-  const pageCount = Math.max(imgs.length, res?.pages ?? 1)
+  const curImg = imgUrl || imgCache[page]
   const display: ReviewField[] = res?.fields || []
   const pageBoxes = useMapped ? display.filter((f) => f.page === page && f.box.w > 0) : []
   function focusField(f: ReviewField) { setHover(f.id); if (f.box.w > 0 && f.page !== page) setPage(f.page) }
@@ -103,17 +134,18 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        {/* left: document preview (highlights only in Required-fields mode) */}
+        {/* left: document preview (only the current page is rendered) */}
         <div>
-          {pageCount > 1 && (
+          {numPages > 1 && (
             <div className="flex items-center gap-2 mb-2 text-xs">
               <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-40"><Icon name="chevron_left" className="text-[18px]" /></button>
-              <span>Page {page + 1} / {pageCount}</span>
-              <button disabled={page >= pageCount - 1} onClick={() => setPage((p) => p + 1)} className="disabled:opacity-40"><Icon name="chevron_right" className="text-[18px]" /></button>
+              <span>Page {page + 1} / {numPages}</span>
+              <button disabled={page >= numPages - 1} onClick={() => setPage((p) => p + 1)} className="disabled:opacity-40"><Icon name="chevron_right" className="text-[18px]" /></button>
+              {rendering && <Icon name="autorenew" className="text-[14px] animate-spin text-outline" />}
             </div>
           )}
           <div className="relative border border-outline-variant rounded-lg overflow-hidden bg-surface-container">
-            {imgs[page] ? <img src={imgs[page]} className="w-full block" alt="document" /> : <div className="h-64 grid place-items-center text-xs text-outline">Rendering…</div>}
+            {curImg ? <img src={curImg} className="w-full block" alt="document" /> : <div className="h-64 grid place-items-center text-xs text-outline"><Icon name="autorenew" className="text-[16px] animate-spin mr-1" />Rendering page…</div>}
             {pageBoxes.map((f) => {
               const on = hover === f.id
               return (
@@ -135,7 +167,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
             <>
               <div className="flex items-center gap-2 mb-2">
                 <h4 className="font-semibold text-sm">Required fields</h4>
-                {res && !err && <Badge className="bg-status-approved/10 text-status-approved">{display.length} field(s)</Badge>}
+                {res && !err && !loading && <Badge className="bg-status-approved/10 text-status-approved">{display.length} field(s)</Badge>}
               </div>
               {loading && (
                 <div className="mb-2">
@@ -144,6 +176,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
                 </div>
               )}
               {err && <Card className="p-3 text-xs text-status-rejected">{err}</Card>}
+              {!loading && (
               <div className="space-y-1.5 max-h-[32rem] overflow-y-auto pr-1">
                 {(() => { let lastSec = ''; return display.map((f) => {
                   const val = edits[f.id] ?? f.value
@@ -167,15 +200,16 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
                     </Fragment>
                   )
                 }) })()}
-                {!loading && !err && display.length === 0 && <p className="text-xs text-outline">No fields.</p>}
+                {!err && display.length === 0 && <p className="text-xs text-outline">No fields.</p>}
               </div>
+              )}
               <p className="text-[11px] text-outline mt-2">AI-extracted values — hover to locate on the page; edit to correct.</p>
             </>
           ) : (
             <>
               <div className="flex items-center gap-2 mb-2">
                 <h4 className="font-semibold text-sm">Full detection — page by page</h4>
-                {pageRes && !pageErr && <Badge className="bg-status-approved/10 text-status-approved">{pageRes.pages.length} page(s)</Badge>}
+                {pageRes && !pageErr && !pageLoading && <Badge className="bg-status-approved/10 text-status-approved">{pageRes.pages.length} page(s)</Badge>}
                 {pageRes && pageRes.pages.length > 0 && (
                   <button onClick={copyAll} className="ml-auto text-xs text-primary flex items-center gap-1">
                     <Icon name={copied === -1 ? 'check' : 'content_copy'} className="text-[14px]" />{copied === -1 ? 'Copied' : 'Copy all'}
@@ -189,6 +223,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
                 </div>
               )}
               {pageErr && <Card className="p-3 text-xs text-status-rejected">{pageErr}</Card>}
+              {!pageLoading && (
               <div className="space-y-2 max-h-[32rem] overflow-y-auto pr-1">
                 {pageRes?.pages.map((pg) => (
                   <div key={pg.page} className="border border-outline-variant/70 rounded-lg p-3">
@@ -213,8 +248,9 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
                     )}
                   </div>
                 ))}
-                {!pageLoading && !pageErr && pageRes && pageRes.pages.length === 0 && <p className="text-xs text-outline">No page detail returned.</p>}
+                {!pageErr && pageRes && pageRes.pages.length === 0 && <p className="text-xs text-outline">No page detail returned.</p>}
               </div>
+              )}
               <p className="text-[11px] text-outline mt-2">Each page summarised with its key data — click a page to view it, or copy to paste elsewhere.</p>
             </>
           )}

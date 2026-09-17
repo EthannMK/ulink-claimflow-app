@@ -48,6 +48,15 @@ def put(key: str, filename: str, mime: str, data: bytes) -> None:
     _MEM[key] = (filename, mime or "application/octet-stream", data)
 
 
+def delete(key: str) -> None:
+    _MEM.pop(key, None)
+    if mode() == "gcs":
+        try:
+            _BUCKET.blob(key).delete()
+        except Exception:
+            pass
+
+
 def get(key: str) -> tuple[str, str, bytes] | None:
     if mode() == "gcs":
         try:
