@@ -132,7 +132,7 @@ def _gemini_pages_call(parts: list) -> list:
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
            f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}")
     try:
-        r = httpx.post(url, json={"contents": [{"parts": parts}]}, timeout=180)
+        r = httpx.post(url, json={"contents": [{"parts": parts}]}, timeout=90)
         r.raise_for_status()
         txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
     except Exception:

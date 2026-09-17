@@ -109,12 +109,29 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
     if (!full) return
     const fileKey = `${file.name}:${file.size}:${file.lastModified}`
     if (startedRef.current === fileKey) return
-    if (isPdf(file) && !pdfDoc) return                 // wait until we know the page count
+    let alive = true
+
+    // Whole-document fallback (used when we can't get a page count from PDF.js).
+    const wholeDoc = () => {
+      if (startedRef.current === fileKey) return
+      startedRef.current = fileKey
+      setPageItems([]); setPageErr(''); setPageLoading(true); setPageProgress({ done: 0, total: 0 })
+      reviewDocPagesRange(file, 0, 0)
+        .then((r) => { if (alive) { if (r.pages?.length) setPageItems((p) => mergePages(p, r.pages)); else if (r.error) setPageErr(r.error) } })
+        .catch((e) => { if (alive) setPageErr(e?.message ?? 'Page analysis failed') })
+        .finally(() => { if (alive) setPageLoading(false) })
+    }
+
+    // If PDF.js hasn't reported the page count yet, wait briefly, then fall back.
+    if (isPdf(file) && !pdfDoc) {
+      const t = setTimeout(() => { if (alive) wholeDoc() }, 6000)
+      return () => { alive = false; clearTimeout(t) }
+    }
+
     const total = isPdf(file) ? numPages : 1
     startedRef.current = fileKey
-    let alive = true
     setPageItems([]); setPageErr(''); setPageLoading(true); setPageProgress({ done: 0, total })
-    const CH = 8
+    const CH = 6
     const ranges: [number, number][] = []
     if (total <= 1) ranges.push([1, 1])
     else for (let s = 1; s <= total; s += CH) ranges.push([s, Math.min(CH, total - s + 1)])

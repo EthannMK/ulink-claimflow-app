@@ -43,9 +43,13 @@ export function reviewDocPagesRange(file: File, start: number, count: number): P
   const p = (async () => {
     const fd = new FormData(); fd.append('file', file, file.name)
     fd.append('start', String(start)); fd.append('count', String(count))
-    const r = await fetch(`${apiBase()}/api/review/pages`, { method: 'POST', headers: authHeaders(), body: fd })
-    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Page analysis failed (${r.status})`) }
-    return r.json() as Promise<PageAnalysis>
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 120_000)   // never hang a batch > 2 min
+    try {
+      const r = await fetch(`${apiBase()}/api/review/pages`, { method: 'POST', headers: authHeaders(), body: fd, signal: ctrl.signal })
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Page analysis failed (${r.status})`) }
+      return await (r.json() as Promise<PageAnalysis>)
+    } finally { clearTimeout(timer) }
   })().catch((e) => { pageCache.delete(key); throw e })
   pageCache.set(key, p)
   return p
