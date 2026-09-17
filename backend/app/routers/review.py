@@ -109,65 +109,125 @@ def _gemini_values(data: bytes, mime: str, fields: list[dict]) -> dict:
 _PAGE_CACHE: dict[str, PageAnalysis] = {}
 
 
-def _page_analysis(data: bytes, mime: str) -> PageAnalysis:
-    """Page-by-page 'Full detection': for every page, a short title, a plain-English
-    summary, and the important data points as label/value pairs (copyable)."""
-    if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
-        return PageAnalysis(pages=[], provider="stub", error="AI not configured")
+_PAGE_BASE = (
+    "You are analysing an insurance claim document for a health-insurance TPA in Myanmar. "
+    "Go through it PAGE BY PAGE. For EACH page return: the page number, a short title, "
+    "a 2-4 sentence plain-English summary of what that page contains, and the important data points on that "
+    "page as label/value pairs — names, NRC/passport, policy numbers, dates, diagnosis, treatment, "
+    "hospital/provider, amounts, bank details, phone, email, and anything else useful. "
+    "If a page is an INVOICE, BILL or RECEIPT, do not just give its name — extract the details: "
+    "provider/hospital, date, invoice/receipt number, the notable line items with their amounts, "
+    "the total amount, and any tax or discount. Put the total as an item like {\"label\":\"Total amount\",\"value\":\"...\"}. "
+    "Read handwriting and Burmese too; keep numbers and IDs exactly as written. "
+    "Include every page, even near-empty ones (brief summary, empty items). "
+    'Respond ONLY with JSON: {"pages":[{"page":1,"title":"...","summary":"...","items":[{"label":"...","value":"..."}]}]}'
+)
+_PAGE_ABS = _PAGE_BASE + " For \"page\", use the [PAGE n] number shown, or the page's position starting at 1."
+_PAGE_REL = _PAGE_BASE + " This is a slice of a larger document — number the pages 1, 2, 3… in the order they appear here."
+
+
+def _gemini_pages_call(parts: list) -> list:
+    """One Gemini call; returns the raw 'pages' list (or [])."""
     import httpx
-    prompt = (
-        "You are analysing an insurance claim document for a health-insurance TPA in Myanmar. "
-        "Go through the document PAGE BY PAGE. For EACH page return: the page number, a short title, "
-        "a 2-4 sentence plain-English summary of what that page contains, and the important data points on that "
-        "page as label/value pairs — names, NRC/passport, policy numbers, dates, diagnosis, treatment, "
-        "hospital/provider, amounts, bank details, phone, email, and anything else useful. "
-        "If a page is an INVOICE, BILL or RECEIPT, do not just give its name — extract the details: "
-        "provider/hospital, date, invoice/receipt number, the notable line items with their amounts, "
-        "the total amount, and any tax or discount. Put the total as an item like {\"label\":\"Total amount\",\"value\":\"...\"}. "
-        "Read handwriting and Burmese too; keep numbers and IDs exactly as written. "
-        "Include every page, even near-empty ones (brief summary, empty items). "
-        'Respond ONLY with JSON: {"pages":[{"page":1,"title":"...","summary":"...","items":[{"label":"...","value":"..."}]}]}'
-    )
-    parts = [{"text": prompt}]
-    is_pdf_doc = is_pdf("doc", mime) or (mime or "").startswith("application/pdf")
-    page_texts = pdf_text_by_page(data) if is_pdf_doc else []
-    total_text = sum(len(t) for t in page_texts)
-    if page_texts and total_text > 200:
-        # digital PDF: send page-marked text — much faster (and cheaper) than sending images
-        joined = "\n\n".join(f"[PAGE {i + 1}]\n{t}" for i, t in enumerate(page_texts) if t.strip())
-        parts.append({"text": "[DOCUMENT TEXT BY PAGE]\n" + joined[:40000]})
-    elif len(data) <= 18_000_000:
-        # scanned / image-only: send the file so the model can read each page visually
-        parts.append({"inline_data": {"mime_type": mime or "application/pdf", "data": base64.b64encode(data).decode()}})
-    else:
-        text, _ = pdf_text_and_pages(data)
-        parts.append({"text": "[DOCUMENT TEXT]\n" + text[:30000]})
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
            f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}")
     try:
         r = httpx.post(url, json={"contents": [{"parts": parts}]}, timeout=180)
         r.raise_for_status()
         txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception as e:
-        return PageAnalysis(pages=[], provider="gemini", error=f"AI error: {str(e)[:200]}")
+    except Exception:
+        return []
     m = re.search(r"\{.*\}", txt, re.S)
     try:
         d = json.loads(m.group(0) if m else txt)
     except Exception:
-        return PageAnalysis(pages=[], provider="gemini", error="Could not parse the AI response.")
-    pages: list[PageDetail] = []
-    for it in d.get("pages", []):
+        return []
+    return d.get("pages", []) if isinstance(d, dict) else []
+
+
+def _pages_from_raw(raw: list, offset: int) -> list[PageDetail]:
+    out: list[PageDetail] = []
+    for it in raw:
         if not isinstance(it, dict):
             continue
         try:
             pg = int(it.get("page") or 0)
         except (TypeError, ValueError):
             pg = 0
+        if offset:
+            pg += offset
         items = [PageItem(label=str(x.get("label", "")).strip(), value=str(x.get("value", "")).strip())
                  for x in (it.get("items") or [])
                  if isinstance(x, dict) and (str(x.get("label", "")).strip() or str(x.get("value", "")).strip())]
-        pages.append(PageDetail(page=pg, title=str(it.get("title", "")).strip(),
-                                summary=str(it.get("summary", "")).strip(), items=items))
+        out.append(PageDetail(page=pg, title=str(it.get("title", "")).strip(),
+                              summary=str(it.get("summary", "")).strip(), items=items))
+    return out
+
+
+def _page_analysis(data: bytes, mime: str) -> PageAnalysis:
+    """Page-by-page 'Full detection', run in PARALLEL over page chunks for speed.
+    Digital PDFs → page-text chunks (fast, cheap). Scanned PDFs → PDF sliced into
+    page-range chunks sent as images concurrently. Same tokens, far lower wall-clock."""
+    if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
+        return PageAnalysis(pages=[], provider="stub", error="AI not configured")
+
+    is_pdf_doc = is_pdf("doc", mime) or (mime or "").startswith("application/pdf")
+    page_texts = pdf_text_by_page(data) if is_pdf_doc else []
+    total_text = sum(len(t) for t in page_texts)
+
+    tasks: list[tuple[list, int]] = []   # (parts, page-offset)
+    if page_texts and total_text > 200:
+        CH = 10
+        for a in range(0, len(page_texts), CH):
+            chunk = page_texts[a:a + CH]
+            joined = "\n\n".join(f"[PAGE {a + i + 1}]\n{t}" for i, t in enumerate(chunk) if t.strip())
+            if joined.strip():
+                tasks.append(([{"text": _PAGE_ABS}, {"text": "[DOCUMENT TEXT BY PAGE]\n" + joined[:20000]}], 0))
+    elif is_pdf_doc and len(data) <= 25_000_000:
+        try:
+            from pypdf import PdfReader, PdfWriter
+            import io
+            reader = PdfReader(io.BytesIO(data))
+            n = len(reader.pages)
+            CH = 6
+            for a in range(0, n, CH):
+                w = PdfWriter()
+                for i in range(a, min(a + CH, n)):
+                    w.add_page(reader.pages[i])
+                buf = io.BytesIO(); w.write(buf); b = buf.getvalue()
+                if len(b) <= 18_000_000:
+                    tasks.append(([{"text": _PAGE_REL},
+                                   {"inline_data": {"mime_type": "application/pdf", "data": base64.b64encode(b).decode()}}], a))
+        except Exception:
+            tasks = []
+        if not tasks and len(data) <= 18_000_000:
+            tasks = [([{"text": _PAGE_ABS}, {"inline_data": {"mime_type": mime or "application/pdf", "data": base64.b64encode(data).decode()}}], 0)]
+    elif len(data) <= 18_000_000:
+        tasks = [([{"text": _PAGE_ABS}, {"inline_data": {"mime_type": mime or "image/jpeg", "data": base64.b64encode(data).decode()}}], 0)]
+    else:
+        text, _ = pdf_text_and_pages(data)
+        tasks = [([{"text": _PAGE_ABS}, {"text": "[DOCUMENT TEXT]\n" + text[:30000]}], 0)]
+
+    if not tasks:
+        return PageAnalysis(pages=[], provider="gemini", error="Could not read the document.")
+
+    import concurrent.futures
+    pages: list[PageDetail] = []
+
+    def _run(task):
+        parts, offset = task
+        return _pages_from_raw(_gemini_pages_call(parts), offset)
+
+    if len(tasks) == 1:
+        pages = _run(tasks[0])
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(6, len(tasks))) as ex:
+            for res in ex.map(_run, tasks):
+                pages.extend(res)
+
+    pages.sort(key=lambda p: p.page)
+    if not pages:
+        return PageAnalysis(pages=[], provider="gemini", error="No page detail returned — try again.")
     return PageAnalysis(pages=pages, provider="gemini")
 
 

@@ -133,9 +133,9 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 items-stretch">
         {/* left: document preview (only the current page is rendered) */}
-        <div>
+        <div className="min-w-0">
           {numPages > 1 && (
             <div className="flex items-center gap-2 mb-2 text-xs">
               <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-40"><Icon name="chevron_left" className="text-[18px]" /></button>
@@ -162,7 +162,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
         </div>
 
         {/* right: fields (Required) OR page-by-page analysis (Full) */}
-        <div>
+        <div className="flex flex-col min-w-0 min-h-0">
           {useMapped ? (
             <>
               <div className="flex items-center gap-2 mb-2">
@@ -177,7 +177,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
               )}
               {err && <Card className="p-3 text-xs text-status-rejected">{err}</Card>}
               {!loading && (
-              <div className="space-y-1.5 max-h-[32rem] overflow-y-auto pr-1">
+              <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto pr-1">
                 {(() => { let lastSec = ''; return display.map((f) => {
                   const val = edits[f.id] ?? f.value
                   const has = val.trim() !== ''
@@ -203,7 +203,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
                 {!err && display.length === 0 && <p className="text-xs text-outline">No fields.</p>}
               </div>
               )}
-              <p className="text-[11px] text-outline mt-2">AI-extracted values — hover to locate on the page; edit to correct.</p>
+              <p className="text-[11px] text-outline mt-2">AI-extracted values — edit any field to correct.</p>
             </>
           ) : (
             <>
@@ -224,7 +224,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
               )}
               {pageErr && <Card className="p-3 text-xs text-status-rejected">{pageErr}</Card>}
               {!pageLoading && (
-              <div className="space-y-2 max-h-[32rem] overflow-y-auto pr-1">
+              <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1">
                 {pageRes?.pages.map((pg) => (
                   <div key={pg.page} className="border border-outline-variant/70 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-1">

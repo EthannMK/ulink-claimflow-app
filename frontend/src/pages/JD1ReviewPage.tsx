@@ -265,6 +265,9 @@ export function JD1ReviewPage() {
             <Icon name="bolt" className="text-primary text-[18px]" />
             <div className="text-sm font-semibold">Next step</div>
             <span className="text-xs text-outline flex-1">Fields stay editable until you send. {note ? 'Choose where this claim goes.' : 'Generate the JD1 note to enable Send to JD2.'}</span>
+            <Button variant="outline" onClick={analyze} disabled={!files.length || running}>
+              <Icon name={running ? 'autorenew' : 'auto_awesome'} className={`text-[16px] ${running ? 'animate-spin' : ''}`} />{running ? 'Reading…' : note ? 'Re-generate note' : 'Generate JD1 note'}
+            </Button>
             {note && (
               <div className="flex items-center gap-2">
                 {dirty ? <span className="text-xs text-status-pending flex items-center gap-1"><Icon name="edit" className="text-[13px]" />Unsaved changes</span>
