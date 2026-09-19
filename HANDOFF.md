@@ -88,7 +88,9 @@ npm run dev            # http://localhost:5173
 - Shared AI provider layer with priority + instant fail-over; Vertex AI added as primary (paid, $300 credit, `gemini-3.6-flash` global). No more free-tier quota walls.
 - **Migrated ALL direct-Gemini call sites** to the shared layer: `routers/review.py` (fields + full detection), `adapters/jd1.py` (note + client mail), `adapters/ocr.py`, `routers/assistant.py`, `routers/extract.py`.
 - **Model names removed from user-facing output** — provider labels are now `"ai"`; errors say "The AI service is busy right now. Please try again." (no "Gemini HTTP 503" leaks).
-- **Full-detection speed fixes:** page endpoints now offload blocking AI work via `run_in_threadpool` (true parallelism — previously async endpoints serialized the "parallel" ranges); rasterization lowered to **120 DPI, JPEG quality 72**; frontend batch size **CH 6→3** for more parallelism.
+- **Full-detection speed fixes:** page endpoints now offload blocking AI work via `run_in_threadpool` (true parallelism — previously async endpoints serialized the "parallel" ranges); rasterization lowered to **120 DPI, JPEG quality 72**; frontend batch size **CH 6→3** for more parallelism. Performance is now acceptable.
+- **Full Detection — Adobe-style per-page navigation DONE** (`frontend/src/components/DocReview.tsx`): a page-number box (type + Enter) plus ◀ ▶ arrows on the left; the PDF render and the page's extracted summary/data change together (`curPage = pageItems.find(p => p.page === page+1)`). "Copy" = current page, "Copy all" = every page. Results still stream in the background.
+- **Temporary provider logging** in `ai_provider.generate_text` — prints `[ai] <provider> OK/FAIL/EMPTY <secs>` per call to the server console. Harmless; remove when no longer needed (it's a debugging aid, not required).
 - **Prompt improvements:** full-detection prompt now reads handwriting fully, transcribes Burmese handwritten notes verbatim, and reads TABLES/VOUCHERS/hand-drawn bills row-by-row; asks for more label/value detail.
 - Note generation no longer returns an all-missing checklist on failure — it tells the user to retry.
 - Requirements updated: `google-auth==2.34.0`, `requests==2.32.3` (needed for Vertex ADC token).
@@ -101,12 +103,10 @@ Earlier phases (already shipped): insurer schemas split by form type (Claim/LOG;
 
 Priority order suggested for the POC. Confirm with the user before starting each.
 
-### A. Full Detection — Adobe-style per-page navigation (HIGH)
-Currently all page results render stacked in one panel; the PDF render and the results are not synced.
-**Want:** a single page selector (a small box to type a page number + Enter, plus ◀ ▶ arrows) that controls **BOTH** the PDF rendering (left) and the shown page result (right) together — like Adobe's page selector. Required Fields view does NOT need this.
-- File: `frontend/src/components/DocReview.tsx`. There's already `page`/`setPage` state and per-page PDF rendering for the Required view; reuse it for Full detection so left render + right result both key off `page`. Show one `PageDetail` at a time (find by `page`), with a "Page [n] / [total]" control. Keep the streamed loading (results still arrive in batches; just display the current page's when ready).
+### A. Full Detection — Adobe-style per-page navigation — ✅ DONE
+Implemented in `frontend/src/components/DocReview.tsx`: page-number box + ◀ ▶ arrows; render and result synced via `curPage = pageItems.find(p => p.page === page+1)`.
 
-### B. Editable full-detection notes + save (HIGH)
+### B. Editable full-detection notes + save (HIGH — next)
 JD1 should be able to **edit** the extracted full-detection text per page and **save** it with the ticket.
 - Backend: extend the ticket/JD1 model to store an editable `page_notes` (list of {page,title,summary,items} or a single combined text). Add a save endpoint (see `routers/jd1.py`). 
 - Frontend: make the Full detection result fields editable (reuse `useEditable`), with a Save button that persists to the ticket.

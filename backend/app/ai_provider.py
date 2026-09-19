@@ -177,16 +177,23 @@ def generate_text(parts: list) -> str:
         [p for p in get_settings()["providers"] if p.get("enabled", True)],
         key=lambda p: p.get("priority", 99),
     )
+    import time as _t
     for spec in ordered:
-        reg = _REGISTRY.get(spec.get("provider"))
+        name = spec.get("provider")
+        reg = _REGISTRY.get(name)
         if not reg or not reg["available"]():
             continue
         if need_vision and not reg["vision"]:
             continue
+        t0 = _t.time()
         try:
             txt = reg["call"](parts, spec.get("model") or "")
             if txt and txt.strip():
+                print(f"[ai] {name} OK {(_t.time()-t0):.1f}s (vision={need_vision})", flush=True)
                 return txt
-        except Exception:
+            print(f"[ai] {name} EMPTY {(_t.time()-t0):.1f}s", flush=True)
+        except Exception as e:
+            print(f"[ai] {name} FAIL {(_t.time()-t0):.1f}s: {str(e)[:160]}", flush=True)
             continue   # quota / rate-limit / error -> try the next provider
+    print("[ai] ALL PROVIDERS FAILED", flush=True)
     return ""

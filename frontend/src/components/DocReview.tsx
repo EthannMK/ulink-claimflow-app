@@ -26,6 +26,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
   const [imgUrl, setImgUrl] = useState('')       // for non-PDF image files
   const [numPages, setNumPages] = useState(1)
   const [page, setPage] = useState(0)
+  const [pageInput, setPageInput] = useState('1')   // Adobe-style "go to page" box
   const [rendering, setRendering] = useState(false)
 
   // extraction
@@ -150,7 +151,16 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
     return () => { alive = false }
   }, [full, file, pdfDoc, numPages])
 
+  // keep the page-number box in sync when the page changes via arrows / clicks
+  useEffect(() => { setPageInput(String(page + 1)) }, [page])
+  function commitPageInput() {
+    const n = parseInt(pageInput, 10)
+    if (!isNaN(n) && n >= 1 && n <= numPages) setPage(n - 1)
+    else setPageInput(String(page + 1))
+  }
+
   const curImg = imgUrl || imgCache[page]
+  const curPage = pageItems.find((p) => p.page === page + 1)   // Full-detection result for the page on screen
   const display: ReviewField[] = res?.fields || []
   const pageBoxes = useMapped ? display.filter((f) => f.page === page && f.box.w > 0) : []
   function focusField(f: ReviewField) { setHover(f.id); if (f.box.w > 0 && f.page !== page) setPage(f.page) }
@@ -180,9 +190,18 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
         {/* left: document preview (only the current page is rendered) */}
         <div className="min-w-0">
           {numPages > 1 && (
-            <div className="flex items-center gap-2 mb-2 text-xs">
+            <div className="flex items-center gap-1.5 mb-2 text-xs">
               <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-40"><Icon name="chevron_left" className="text-[18px]" /></button>
-              <span>Page {page + 1} / {numPages}</span>
+              <span>Page</span>
+              <input
+                value={pageInput}
+                onChange={(e) => setPageInput(e.target.value.replace(/[^0-9]/g, ''))}
+                onKeyDown={(e) => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); commitPageInput() } }}
+                onBlur={commitPageInput}
+                className="w-10 text-center border border-outline-variant rounded-md px-1 py-0.5"
+                aria-label="Go to page"
+              />
+              <span>/ {numPages}</span>
               <button disabled={page >= numPages - 1} onClick={() => setPage((p) => p + 1)} className="disabled:opacity-40"><Icon name="chevron_right" className="text-[18px]" /></button>
               {rendering && <Icon name="autorenew" className="text-[14px] animate-spin text-outline" />}
             </div>
@@ -266,21 +285,21 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
                 </div>
               )}
               {pageErr && pageItems.length === 0 && <Card className="p-3 text-xs text-status-rejected">{pageErr}</Card>}
-              <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1">
-                {pageItems.map((pg) => (
-                  <div key={pg.page} className="border border-outline-variant/70 rounded-lg p-3">
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                {curPage ? (
+                  <div className="border border-outline-variant/70 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <button onClick={() => { if (pg.page >= 1) setPage(pg.page - 1) }} title="Show this page" className="text-xs font-semibold text-primary flex items-center gap-1">
-                        <Icon name="description" className="text-[14px]" />Page {pg.page}{pg.title ? ` · ${pg.title}` : ''}
-                      </button>
-                      <button onClick={() => copyPage(pg)} className="ml-auto text-xs text-primary flex items-center gap-1" title="Copy this page">
-                        <Icon name={copied === pg.page ? 'check' : 'content_copy'} className="text-[14px]" />{copied === pg.page ? 'Copied' : 'Copy'}
+                      <span className="text-xs font-semibold text-primary flex items-center gap-1">
+                        <Icon name="description" className="text-[14px]" />Page {curPage.page}{curPage.title ? ` · ${curPage.title}` : ''}
+                      </span>
+                      <button onClick={() => copyPage(curPage)} className="ml-auto text-xs text-primary flex items-center gap-1" title="Copy this page">
+                        <Icon name={copied === curPage.page ? 'check' : 'content_copy'} className="text-[14px]" />{copied === curPage.page ? 'Copied' : 'Copy'}
                       </button>
                     </div>
-                    {pg.summary && <p className="text-xs text-text-main mb-2 leading-relaxed">{pg.summary}</p>}
-                    {pg.items.length > 0 && (
+                    {curPage.summary && <p className="text-xs text-text-main mb-2 leading-relaxed">{curPage.summary}</p>}
+                    {curPage.items.length > 0 && (
                       <div className="space-y-0.5">
-                        {pg.items.map((it, j) => (
+                        {curPage.items.map((it, j) => (
                           <div key={j} className="flex gap-2 text-xs">
                             <span className="text-outline w-40 shrink-0">{it.label}</span>
                             <span className="text-on-surface min-w-0 break-words">{it.value}</span>
@@ -289,10 +308,13 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
                       </div>
                     )}
                   </div>
-                ))}
-                {!pageLoading && !pageErr && pageItems.length === 0 && <p className="text-xs text-outline">No page detail returned.</p>}
+                ) : pageLoading ? (
+                  <p className="text-xs text-outline flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading this page…</p>
+                ) : (
+                  <p className="text-xs text-outline">No detail for this page{numPages > 1 ? ' yet — use the page box on the left to move between pages.' : '.'}</p>
+                )}
               </div>
-              <p className="text-[11px] text-outline mt-2">Each page summarised with its key data — click a page to view it, or copy to paste elsewhere.</p>
+              <p className="text-[11px] text-outline mt-2">Use the page box on the left (◀ ▶ or type a number + Enter) — the document and its detected data change together. “Copy all” exports every page.</p>
             </>
           )}
         </div>
