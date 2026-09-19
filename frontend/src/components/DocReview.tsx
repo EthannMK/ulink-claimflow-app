@@ -131,7 +131,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
     const total = isPdf(file) ? numPages : 1
     startedRef.current = fileKey
     setPageItems([]); setPageErr(''); setPageLoading(true); setPageProgress({ done: 0, total })
-    const CH = 6
+    const CH = 3
     const ranges: [number, number][] = []
     if (total <= 1) ranges.push([1, 1])
     else for (let s = 1; s <= total; s += CH) ranges.push([s, Math.min(CH, total - s + 1)])

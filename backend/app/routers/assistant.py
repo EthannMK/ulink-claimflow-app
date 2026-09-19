@@ -42,24 +42,19 @@ def assistant(body: ChatRequest, user=Depends(get_current_user)):
     if any(len(m.content) > 4000 for m in msgs):
         raise HTTPException(status_code=400, detail="Message too long")
 
-    if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
-        return _fallback("Assistant is offline (no AI key configured). Meanwhile: use the sidebar to reach each area — "
+    from app import ai_provider
+    if not ai_provider.any_available():
+        return _fallback("Assistant is offline (no AI provider configured). Meanwhile: use the sidebar to reach each area — "
                          "JD1 Assistant to read a claim packet, JD2 Adjudication to decide, Settings to configure insurers, "
                          "templates and rules.")
 
-    import httpx
-    contents = [{"role": "model" if m.role == "assistant" else "user", "parts": [{"text": m.content}]} for m in msgs]
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}")
-    payload = {
-        "system_instruction": {"parts": [{"text": SYSTEM}]},
-        "contents": contents,
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 500},
-    }
+    # Flatten the system instruction + short history into one prompt for the shared layer.
+    convo = "\n".join(f"{'Assistant' if m.role == 'assistant' else 'User'}: {m.content}" for m in msgs)
+    prompt = f"{SYSTEM}\n\n---\nConversation so far:\n{convo}\n\nAssistant:"
     try:
-        r = httpx.post(url, json=payload, timeout=60)
-        r.raise_for_status()
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception as e:
-        return _fallback(f"Sorry, I couldn't reach the assistant right now ({type(e).__name__}). Please try again.")
+        text = ai_provider.generate_text([{"text": prompt}])
+    except Exception:
+        text = ""
+    if not text or not text.strip():
+        return _fallback("Sorry, I couldn't reach the assistant right now. Please try again in a moment.")
     return {"reply": text}

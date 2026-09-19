@@ -44,26 +44,22 @@ def _mk_field(f: dict) -> ScanField:
     conf = 0.0 if value == "" else float(f.get("confidence", 0.5))
     return ScanField(key=f.get("key", ""), value=value, confidence=conf)
 
-class GeminiProvider(OcrProvider):
-    name = "gemini"
+class AIProvider(OcrProvider):
+    name = "ai"
     def extract(self, data: bytes, mime: str) -> ScanResult:
-        import httpx
-        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-               f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}")
-        body = {"contents": [{"parts": [
+        from app import ai_provider
+        parts = [
             {"text": _PROMPT},
             {"inline_data": {"mime_type": mime or "image/png", "data": base64.b64encode(data).decode()}},
-        ]}]}
+        ]
         try:
-            r = httpx.post(url, json=body, timeout=60)
-            r.raise_for_status()
-            txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        except httpx.HTTPStatusError as e:
+            txt = ai_provider.generate_text(parts)
+        except Exception:
+            txt = ""
+        if not txt or not txt.strip():
             return ScanResult(doc_type="other",
-                              text=f"Gemini HTTP {e.response.status_code}: {e.response.text}",
+                              text="The AI service is busy right now. Please try again in a moment.",
                               provider=self.name)
-        except Exception as e:
-            return ScanResult(doc_type="other", text=f"Gemini error: {e}", provider=self.name)
         m = re.search(r"\{.*\}", txt, re.S)
         raw = m.group(0) if m else txt
         try:
@@ -79,6 +75,7 @@ class GeminiProvider(OcrProvider):
         )
 
 def get_provider() -> OcrProvider:
-    if settings.ocr_provider == "gemini" and settings.gemini_api_key:
-        return GeminiProvider()
+    from app import ai_provider
+    if ai_provider.any_available():
+        return AIProvider()
     return StubProvider()

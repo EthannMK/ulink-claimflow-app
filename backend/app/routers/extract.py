@@ -31,8 +31,9 @@ async def extract(kind: str = Form(...), file: UploadFile = File(...), user=Depe
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
-    if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
-        raise HTTPException(status_code=503, detail="AI extraction needs a Gemini API key (OCR_PROVIDER=gemini).")
+    from app import ai_provider
+    if not ai_provider.any_available():
+        raise HTTPException(status_code=503, detail="AI extraction is not configured. Please set up an AI provider in Settings.")
 
     name = file.filename or "file"
     mime = file.content_type or ""
@@ -47,17 +48,12 @@ async def extract(kind: str = Form(...), file: UploadFile = File(...), user=Depe
     else:
         raise HTTPException(status_code=413, detail="File too large to process in the POC.")
 
-    import httpx
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}")
     try:
-        r = httpx.post(url, json={"contents": [{"parts": parts}]}, timeout=120)
-        r.raise_for_status()
-        txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=502, detail=f"Gemini HTTP {e.response.status_code}: {e.response.text[:300]}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Gemini error: {e}")
+        txt = ai_provider.generate_text(parts)
+    except Exception:
+        txt = ""
+    if not txt or not txt.strip():
+        raise HTTPException(status_code=502, detail="The AI service is busy right now. Please try again in a moment.")
 
     m = re.search(r"\{.*\}", txt, re.S)
     try:

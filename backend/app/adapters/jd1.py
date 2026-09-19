@@ -6,6 +6,7 @@ POC: uses Gemini when OCR_PROVIDER=gemini + a key is set; otherwise returns a st
 from __future__ import annotations
 import base64, json, re, uuid
 from app.config import settings
+from app import ai_provider
 from app.models import (
     JD1Note, NoteField, ClassifiedDoc,
     JD1Header, JD1SectionA, JD1SectionB, JD1SectionC,
@@ -71,6 +72,31 @@ def pdf_text_by_page(data: bytes, max_pages: int = 40) -> list[str]:
         return [(p.extract_text() or "") for p in r.pages[:max_pages]]
     except Exception:
         return []
+
+
+def pdf_page_images(data: bytes, start: int = 1, count: int = 0, dpi: int = 120, cap: int = 12,
+                    quality: int = 72) -> list[tuple[int, bytes]]:
+    """Rasterize PDF pages to JPEG so scanned/image-only PDFs can go to a vision model.
+    start is 1-based; count 0 = to the end. Never renders more than `cap` pages per call.
+    dpi/quality are kept modest for speed — 120 DPI still reads Burmese handwriting well and
+    the JPEG payload is much smaller (faster upload + faster model). Returns [(page_no, bytes)]."""
+    try:
+        import pymupdf
+        doc = pymupdf.open(stream=data, filetype="pdf")
+    except Exception:
+        return []
+    n = doc.page_count
+    a0 = max(start - 1, 0)
+    hi = n if count <= 0 else min(a0 + count, n)
+    hi = min(hi, a0 + cap)
+    out: list[tuple[int, bytes]] = []
+    for i in range(a0, hi):
+        try:
+            pix = doc.load_page(i).get_pixmap(dpi=dpi)
+            out.append((i + 1, pix.tobytes("jpeg", jpg_quality=quality)))
+        except Exception:
+            continue
+    return out
 
 def is_pdf(name: str, mime: str) -> bool:
     return mime == "application/pdf" or name.lower().endswith(".pdf")
@@ -355,31 +381,20 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
     missing = _missing_docs(docs, claim_type_hint)
     files_count = len(files)
 
-    if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
+    if not ai_provider.any_available():
         note = _stub_note(claim_type_hint)
         note.documents = docs; note.checklist_missing = missing; note.provider = "stub"
         note.checklist_required = list(MANDATORY.get(claim_type_hint, MANDATORY["reimbursement"]))
         note.files_count = files_count; note.document_count = len(docs)
         return note
 
-    # call Gemini once with the whole packet
-    import httpx
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}")
-    try:
-        r = httpx.post(url, json={"contents": [{"parts": parts}]}, timeout=180)
-        r.raise_for_status()
-        txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except httpx.HTTPStatusError as e:
+    # one call through the shared AI provider layer (Vertex -> free fallbacks)
+    txt = ai_provider.generate_text(parts)
+    if not txt or not txt.strip():
         return JD1Note(claim_type=claim_type_hint, documents=docs, checklist_required=list(MANDATORY.get(claim_type_hint, MANDATORY["reimbursement"])),
                        checklist_missing=missing,
                        files_count=files_count, document_count=len(docs),
-                       provider="gemini", notes=f"Gemini HTTP {e.response.status_code}: {e.response.text[:400]}")
-    except Exception as e:
-        return JD1Note(claim_type=claim_type_hint, documents=docs, checklist_required=list(MANDATORY.get(claim_type_hint, MANDATORY["reimbursement"])),
-                       checklist_missing=missing,
-                       files_count=files_count, document_count=len(docs),
-                       provider="gemini", notes=f"Gemini error: {e}")
+                       provider="ai", notes="The AI service is busy right now. Please try Generate again in a moment.")
 
     m = re.search(r"\{.*\}", txt, re.S)
     try:
@@ -388,7 +403,7 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
         return JD1Note(claim_type=claim_type_hint, documents=docs, checklist_required=list(MANDATORY.get(claim_type_hint, MANDATORY["reimbursement"])),
                        checklist_missing=missing,
                        files_count=files_count, document_count=len(docs),
-                       provider="gemini", notes="Could not parse model JSON. Raw: " + txt[:500])
+                       provider="ai", notes="Could not read the document clearly. Please try Generate again.")
 
     # checklist from what the vision model actually SAW (content), unioned with digital classification
     ctype = d.get("claim_type") or claim_type_hint
@@ -415,7 +430,7 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
         checklist_missing=missing2,
         files_count=files_count,
         document_count=doc_count,
-        provider="gemini",
+        provider="ai",
         notes=str(d.get("notes", "")),
     )
     claim_total = note.header.total_claim_amount.value or note.section_b.claim_amount.value
@@ -536,10 +551,9 @@ def draft_client_mail(note: JD1Note, sender: str = "") -> tuple[str, str, str]:
         f"{signoff}"
     )
 
-    if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
+    if not ai_provider.any_available():
         return subject, body, reason
 
-    import httpx
     prompt = (
         "You are a claims officer at Ulink Assist, a health-insurance TPA in Myanmar. "
         "Write a short, warm, professional email to a policyholder asking for the items listed below. "
@@ -550,17 +564,14 @@ def draft_client_mail(note: JD1Note, sender: str = "") -> tuple[str, str, str]:
         '\n\nRespond ONLY as JSON: {"subject":"...","body":"..."}'
     )
     try:
-        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-               f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}")
-        r = httpx.post(url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=60)
-        r.raise_for_status()
-        txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        m = re.search(r"\{.*\}", txt, re.S)
-        d = json.loads(m.group(0) if m else txt)
-        gsub = str(d.get("subject", "")).strip()
-        gbody = str(d.get("body", "")).strip()
-        if gsub and gbody:
-            return gsub, gbody, reason
+        txt = ai_provider.generate_text([{"text": prompt}])
+        if txt:
+            m = re.search(r"\{.*\}", txt, re.S)
+            d = json.loads(m.group(0) if m else txt)
+            gsub = str(d.get("subject", "")).strip()
+            gbody = str(d.get("body", "")).strip()
+            if gsub and gbody:
+                return gsub, gbody, reason
     except Exception:
         pass
     return subject, body, reason

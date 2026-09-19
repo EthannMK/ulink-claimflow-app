@@ -9,6 +9,18 @@ class Settings:
     ocr_provider: str = os.getenv("OCR_PROVIDER", "stub")
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    # Shared AI provider layer — API keys stay in env/secrets, NEVER in the settings DB.
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    groq_model: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
+    # A multilingual VISION model for scanned/handwritten pages (Qwen-VL reads Burmese well).
+    openrouter_model: str = os.getenv("OPENROUTER_MODEL", "qwen/qwen3.8-27b:free")
+    # Vertex AI (GCP) — paid Gemini via the project's billing/credit. No API key: uses the
+    # service account on Cloud Run, or `gcloud auth application-default login` locally.
+    # gemini-2.5-flash is GA on Vertex and reads Burmese (handwriting incl.) very well.
+    vertex_project: str = os.getenv("VERTEX_PROJECT", "")
+    vertex_location: str = os.getenv("VERTEX_LOCATION", "us-central1")
+    vertex_model: str = os.getenv("VERTEX_MODEL", "gemini-2.5-flash")
     # Google Document AI (Form Parser) — for the field-highlight review view
     docai_project: str = os.getenv("DOCAI_PROJECT", "")
     docai_location: str = os.getenv("DOCAI_LOCATION", "asia-southeast1")

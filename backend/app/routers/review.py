@@ -4,11 +4,13 @@
 When no fields are requested, falls back to raw Document AI key/values."""
 import base64, hashlib, json, re, uuid
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from app.models import ReviewResult, ReviewField, ReviewBox, PageAnalysis, PageDetail, PageItem
 from app.security import get_current_user
 from app.adapters.docai import review as docai_review
-from app.adapters.jd1 import pdf_text_and_pages, pdf_text_by_page, is_pdf
+from app.adapters.jd1 import pdf_text_and_pages, pdf_text_by_page, pdf_page_images, is_pdf
 from app.config import settings
+from app import ai_provider
 
 router = APIRouter(prefix="/api", tags=["review"])
 
@@ -52,9 +54,8 @@ def _find_box(value: str, raw: list[ReviewField]):
 
 
 def _gemini_values(data: bytes, mime: str, fields: list[dict]) -> dict:
-    if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
+    if not ai_provider.any_available():
         return {}
-    import httpx
     lines = []
     for i, f in enumerate(fields, 1):
         if not f.get("label"):
@@ -75,20 +76,22 @@ def _gemini_values(data: bytes, mime: str, fields: list[dict]) -> dict:
         'use value "" and confidence 0.\n\nFields:\n' + labels
     )
     parts = [{"text": prompt}]
+    is_pdf_doc = is_pdf("doc", mime) or (mime or "").startswith("application/pdf")
     text = ""
-    if is_pdf("doc", mime) or (mime or "").startswith("application/pdf"):
+    if is_pdf_doc:
         text, _ = pdf_text_and_pages(data)
     if len(text.strip()) > 200:
+        # digital PDF → send text (any provider, incl. Groq)
         parts.append({"text": "[DOCUMENT TEXT]\n" + text[:15000]})
+    elif is_pdf_doc:
+        # scanned PDF → rasterize the first pages to images for a vision provider
+        for _pno, jpg in pdf_page_images(data, 1, 0, dpi=120, cap=10):
+            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(jpg).decode()}})
     elif len(data) <= 18_000_000:
-        parts.append({"inline_data": {"mime_type": mime or "application/pdf", "data": base64.b64encode(data).decode()}})
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}")
-    try:
-        r = httpx.post(url, json={"contents": [{"parts": parts}]}, timeout=120)
-        r.raise_for_status()
-        txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
+        # a plain image upload
+        parts.append({"inline_data": {"mime_type": mime or "image/jpeg", "data": base64.b64encode(data).decode()}})
+    txt = ai_provider.generate_text(parts)
+    if not txt:
         return {}
     m = re.search(r"\{.*\}", txt, re.S)
     try:
@@ -112,14 +115,20 @@ _PAGE_CACHE: dict[str, PageAnalysis] = {}
 _PAGE_BASE = (
     "You are analysing an insurance claim document for a health-insurance TPA in Myanmar. "
     "Go through it PAGE BY PAGE. For EACH page return: the page number, a short title, "
-    "a 2-4 sentence plain-English summary of what that page contains, and the important data points on that "
+    "a 3-5 sentence plain-English summary of what that page contains, and the important data points on that "
     "page as label/value pairs — names, NRC/passport, policy numbers, dates, diagnosis, treatment, "
-    "hospital/provider, amounts, bank details, phone, email, and anything else useful. "
+    "hospital/provider, amounts, bank details, phone, email, and anything else useful. Be thorough and specific: "
+    "prefer more label/value pairs over fewer, and never skip a value just because it is handwritten or in Burmese. "
+    "READ ALL HANDWRITING, including messy or cursive Burmese handwriting, and transcribe it in FULL — "
+    "do not summarise a handwritten note as just 'handwritten remarks'; write out the actual text you read, "
+    "in Burmese, as completely as you can. "
+    "If the page contains a TABLE, VOUCHER, or hand-written bill/ledger (rows and columns, possibly hand-drawn), "
+    "read it ROW BY ROW: for every row capture the description and its amount/quantity as a label/value pair, and "
+    "give the column headers. Do not collapse a multi-row table into one line. "
     "If a page is an INVOICE, BILL or RECEIPT, do not just give its name — extract the details: "
-    "provider/hospital, date, invoice/receipt number, the notable line items with their amounts, "
+    "provider/hospital, date, invoice/receipt number, every notable line item with its amount, "
     "the total amount, and any tax or discount. Put the total as an item like {\"label\":\"Total amount\",\"value\":\"...\"}. "
-    "Read handwriting and Burmese too; keep numbers and IDs exactly as written. "
-    "Include every page, even near-empty ones (brief summary, empty items). "
+    "Keep numbers and IDs exactly as written. Include every page, even near-empty ones (brief summary, empty items). "
     'Respond ONLY with JSON: {"pages":[{"page":1,"title":"...","summary":"...","items":[{"label":"...","value":"..."}]}]}'
 )
 _PAGE_ABS = _PAGE_BASE + " For \"page\", use the [PAGE n] number shown, or the page's position starting at 1."
@@ -127,15 +136,9 @@ _PAGE_REL = _PAGE_BASE + " This is a slice of a larger document — number the p
 
 
 def _gemini_pages_call(parts: list) -> list:
-    """One Gemini call; returns the raw 'pages' list (or [])."""
-    import httpx
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}")
-    try:
-        r = httpx.post(url, json={"contents": [{"parts": parts}]}, timeout=90)
-        r.raise_for_status()
-        txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
+    """One AI call via the shared provider layer; returns the raw 'pages' list (or [])."""
+    txt = ai_provider.generate_text(parts)
+    if not txt:
         return []
     m = re.search(r"\{.*\}", txt, re.S)
     try:
@@ -168,8 +171,8 @@ def _page_analysis(data: bytes, mime: str, start: int = 0, count: int = 0) -> Pa
     """Page-by-page 'Full detection'. With start/count, analyses only that page range
     (the frontend fires ranges in parallel and streams them in). Without a range, it
     chunks the whole document and runs the chunks concurrently."""
-    if not (settings.ocr_provider == "gemini" and settings.gemini_api_key):
-        return PageAnalysis(pages=[], provider="stub", error="AI not configured")
+    if not ai_provider.any_available():
+        return PageAnalysis(pages=[], provider="stub", error="No AI provider configured")
 
     is_pdf_doc = is_pdf("doc", mime) or (mime or "").startswith("application/pdf")
     page_texts = pdf_text_by_page(data) if is_pdf_doc else []
@@ -191,25 +194,14 @@ def _page_analysis(data: bytes, mime: str, start: int = 0, count: int = 0) -> Pa
                 joined = "\n\n".join(f"[PAGE {a + i + 1}]\n{t}" for i, t in enumerate(chunk) if t.strip())
                 if joined.strip():
                     tasks.append(([{"text": _PAGE_ABS}, {"text": "[DOCUMENT TEXT BY PAGE]\n" + joined[:20000]}], 0))
-    elif is_pdf_doc and len(data) <= 25_000_000:
-        try:
-            from pypdf import PdfReader, PdfWriter
-            import io
-            reader = PdfReader(io.BytesIO(data))
-            n = len(reader.pages)
-            spans = [(a0, min(a0 + count, n))] if ranged else [(a, min(a + 6, n)) for a in range(0, n, 6)]
-            for (lo, hi) in spans:
-                w = PdfWriter()
-                for i in range(lo, hi):
-                    w.add_page(reader.pages[i])
-                buf = io.BytesIO(); w.write(buf); b = buf.getvalue()
-                if len(b) <= 18_000_000:
-                    tasks.append(([{"text": _PAGE_REL},
-                                   {"inline_data": {"mime_type": "application/pdf", "data": base64.b64encode(b).decode()}}], lo))
-        except Exception:
-            tasks = []
-        if not tasks and not ranged and len(data) <= 18_000_000:
-            tasks = [([{"text": _PAGE_ABS}, {"inline_data": {"mime_type": mime or "application/pdf", "data": base64.b64encode(data).decode()}}], 0)]
+    elif is_pdf_doc:
+        # scanned PDF → rasterize pages to JPEG images for a vision provider
+        imgs = pdf_page_images(data, start if ranged else 1, count if ranged else 0, dpi=120, cap=(count if ranged else 8))
+        if imgs:
+            parts = [{"text": _PAGE_REL}]
+            for _pno, jpg in imgs:
+                parts.append({"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(jpg).decode()}})
+            tasks.append((parts, imgs[0][0] - 1))   # REL page numbers -> absolute via first page offset
     elif len(data) <= 18_000_000:
         tasks = [([{"text": _PAGE_ABS}, {"inline_data": {"mime_type": mime or "image/jpeg", "data": base64.b64encode(data).decode()}}], 0)]
     else:
@@ -217,7 +209,7 @@ def _page_analysis(data: bytes, mime: str, start: int = 0, count: int = 0) -> Pa
         tasks = [([{"text": _PAGE_ABS}, {"text": "[DOCUMENT TEXT]\n" + text[:30000]}], 0)]
 
     if not tasks:
-        return PageAnalysis(pages=[], provider="gemini", error="Could not read the document.")
+        return PageAnalysis(pages=[], provider="ai", error="Could not read the document.")
 
     import concurrent.futures
     pages: list[PageDetail] = []
@@ -235,8 +227,8 @@ def _page_analysis(data: bytes, mime: str, start: int = 0, count: int = 0) -> Pa
 
     pages.sort(key=lambda p: p.page)
     if not pages:
-        return PageAnalysis(pages=[], provider="gemini", error="No page detail returned — try again.")
-    return PageAnalysis(pages=pages, provider="gemini")
+        return PageAnalysis(pages=[], provider="ai", error="The AI service is busy right now. Please try again in a moment.")
+    return PageAnalysis(pages=pages, provider="ai")
 
 
 @router.post("/review/pages", response_model=PageAnalysis)
@@ -249,7 +241,9 @@ async def review_pages(file: UploadFile = File(...), start: int = Form(0), count
     cached = _PAGE_CACHE.get(key)
     if cached is not None:
         return cached
-    res = _page_analysis(data, mime, start, count)
+    # Run the blocking rasterize + AI call in a worker thread so concurrent page
+    # ranges truly run in parallel (an async endpoint would serialize them).
+    res = await run_in_threadpool(_page_analysis, data, mime, start, count)
     if not res.error:
         if len(_PAGE_CACHE) >= _MAX:
             _PAGE_CACHE.pop(next(iter(_PAGE_CACHE)))
@@ -283,7 +277,7 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
         except Exception:
             pages = 1
     result = ReviewResult(pages=pages, fields=raw, all_fields=raw,
-                          provider=("docai" if settings.use_docai else "gemini"), error=error)
+                          provider=("docai" if settings.use_docai else "ai"), error=error)
 
     req = []
     if fields:
@@ -293,7 +287,7 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
             req = []
 
     if req:
-        gem = _gemini_values(data, mime, req)   # accurate values (handwriting/Burmese), keyed by field number
+        gem = await run_in_threadpool(_gemini_values, data, mime, req)   # accurate values (handwriting/Burmese), keyed by field number
         mapped: list[ReviewField] = []
         for i, f in enumerate(req, 1):
             g = gem.get(i, {})
@@ -305,7 +299,7 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
                 page=page, section=str(f.get("section", "")), box=box,
             ))
         result.fields = mapped
-        result.provider = ("hybrid" if (settings.use_docai and gem) else ("gemini" if gem else result.provider))
+        result.provider = ("hybrid" if (settings.use_docai and gem) else ("ai" if gem else result.provider))
 
     if not result.error:
         if len(_CACHE) >= _MAX:
