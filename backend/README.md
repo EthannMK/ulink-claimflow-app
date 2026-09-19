@@ -7,12 +7,7 @@ POC backend: **document scan (OCR/AI)** + **user control with 3 roles**.
 - **admin** — everything except user management
 - **user** — work claims / run document scan
 
-## Seed accounts (POC only — change before real use)
-| username | password | role |
-|---|---|---|
-| superadmin | super123 | super_admin |
-| admin | admin123 | admin |
-| jd1 | user123 | user |
+
 
 ## Run locally
 ```
