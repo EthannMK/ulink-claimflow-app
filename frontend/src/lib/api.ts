@@ -31,6 +31,20 @@ export async function deleteUser(id: string): Promise<Response> {
 export async function changeMyPassword(current_password: string, new_password: string): Promise<Response> {
   return fetch(`${apiBase()}/api/me/password`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ current_password, new_password }) })
 }
+export type AssignPermissions = Record<string, string[]>
+const DEFAULT_ASSIGN_PERMISSIONS: AssignPermissions = { super_admin: ['super_admin', 'admin', 'user'], admin: ['super_admin', 'admin', 'user'], user: ['super_admin', 'admin', 'user'] }
+export async function getAssignPermissions(): Promise<AssignPermissions> {
+  if (!backendOn()) { await wait(80); return DEFAULT_ASSIGN_PERMISSIONS }
+  const r = await fetch(`${apiBase()}/api/settings/assign-permissions`, { headers: authHeaders() })
+  if (!r.ok) throw new Error(`Failed to load permissions (${r.status})`)
+  return (await r.json()).permissions
+}
+export async function updateAssignPermissions(permissions: AssignPermissions): Promise<AssignPermissions> {
+  const r = await fetch(`${apiBase()}/api/settings/assign-permissions`, { method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ permissions }) })
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Save failed (${r.status})`) }
+  return (await r.json()).permissions
+}
+
 export async function extractDoc(kind: 'rules' | 'benefits', file: File): Promise<any[]> {
   const fd = new FormData(); fd.append('kind', kind); fd.append('file', file, file.name)
   const r = await fetch(`${apiBase()}/api/extract`, { method: 'POST', headers: authHeaders(), body: fd })

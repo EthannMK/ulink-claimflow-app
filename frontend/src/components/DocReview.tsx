@@ -19,7 +19,12 @@ function pageToText(p: { page: number; title: string; summary: string; items: { 
   return lines.join('\n').trim()
 }
 
-export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: string; label: string; hint?: string; section?: string }[] }) {
+export function DocReview({ file, mapFields, initialPages, onSavePages }: {
+  file: File
+  mapFields?: { id: string; label: string; hint?: string; section?: string }[]
+  initialPages?: PageDetail[]
+  onSavePages?: (pages: PageDetail[]) => void
+}) {
   // preview (rendered lazily — only the page being viewed)
   const [pdfDoc, setPdfDoc] = useState<any>(null)
   const [imgCache, setImgCache] = useState<Record<number, string>>({})
@@ -42,7 +47,14 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
   const [pageLoading, setPageLoading] = useState(false)
   const [pageErr, setPageErr] = useState('')
   const [copied, setCopied] = useState<number | null>(null)
+  const [usingSaved, setUsingSaved] = useState(false)   // true while showing previously-saved notes (not fresh AI)
   const startedRef = useRef('')
+  const initialPagesRef = useRef(initialPages)
+  useEffect(() => { initialPagesRef.current = initialPages }, [initialPages])
+  const pageItemsRef = useRef<PageDetail[]>([])
+  useEffect(() => { pageItemsRef.current = pageItems }, [pageItems])
+  const onSavePagesRef = useRef(onSavePages)
+  useEffect(() => { onSavePagesRef.current = onSavePages }, [onSavePages])
 
   const hasMap = !!mapFields?.length
   const [mapped, setMapped] = useState(hasMap)
@@ -54,7 +66,9 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
     let alive = true
     setPdfDoc(null); setImgCache({}); setImgUrl(''); setNumPages(1); setPage(0)
     setRes(null); setErr(''); setEdits({}); setHover(null)
-    setPageItems([]); setPageProgress({ done: 0, total: 0 }); setPageErr(''); setPageLoading(false); setMapped(hasMap); startedRef.current = ''
+    const seed = initialPagesRef.current
+    if (seed && seed.length) { setPageItems(seed); setUsingSaved(true) } else { setPageItems([]); setUsingSaved(false) }
+    setPageProgress({ done: 0, total: 0 }); setPageErr(''); setPageLoading(false); setMapped(hasMap); startedRef.current = ''
     ;(async () => {
       try {
         if (isPdf(file)) {
@@ -69,7 +83,10 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
         }
       } catch { if (alive) setErr('Could not open the document preview.') }
     })()
-    return () => { alive = false }
+    return () => {
+      alive = false
+      if (pageItemsRef.current.length) onSavePagesRef.current?.(pageItemsRef.current)
+    }
   }, [file])
 
   // ---- render only the current page, cache it ----
@@ -107,7 +124,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
 
   // ---- full detection: stream page ranges in parallel, show each batch as it lands ----
   useEffect(() => {
-    if (!full) return
+    if (!full || usingSaved) return
     const fileKey = `${file.name}:${file.size}:${file.lastModified}`
     if (startedRef.current === fileKey) return
     let alive = true
@@ -149,7 +166,18 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
         .finally(() => { remaining -= 1; if (remaining === 0 && alive) { setPageLoading(false); if (!anyOk) setPageErr('No page detail returned — try again.') } })
     })
     return () => { alive = false }
-  }, [full, file, pdfDoc, numPages])
+  }, [full, file, pdfDoc, numPages, usingSaved])
+
+  // Keep the JD1 note's page_notes in sync with what's on screen — the original AI read if
+  // untouched, or JD1's edited version if changed. Debounced: syncing on every streamed AI
+  // batch and every keystroke meant a full note clone + localStorage write each time, which
+  // visibly slowed the page down. This waits for a short quiet period instead — the
+  // file-change cleanup above still flushes immediately if you navigate away inside that window.
+  useEffect(() => {
+    if (!full || !pageItems.length) return
+    const t = setTimeout(() => { onSavePages?.(pageItems) }, 600)
+    return () => clearTimeout(t)
+  }, [pageItems, full])
 
   // keep the page-number box in sync when the page changes via arrows / clicks
   useEffect(() => { setPageInput(String(page + 1)) }, [page])
@@ -167,6 +195,15 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
 
   async function copyPage(p: { page: number; title: string; summary: string; items: { label: string; value: string }[] }) {
     try { await navigator.clipboard.writeText(pageToText(p)); setCopied(p.page); setTimeout(() => setCopied(null), 1500) } catch { /* ignore */ }
+  }
+  function updatePageTitle(pg: number, title: string) {
+    setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, title } : p)))
+  }
+  function updatePageSummary(pg: number, summary: string) {
+    setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, summary } : p)))
+  }
+  function updatePageItemValue(pg: number, idx: number, value: string) {
+    setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, items: p.items.map((it, j) => (j === idx ? { ...it, value } : it)) } : p)))
   }
   async function copyAll() {
     if (!pageItems.length) return
@@ -269,14 +306,28 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
             </>
           ) : (
             <>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <h4 className="font-semibold text-sm">Full detection — page by page</h4>
                 {pageItems.length > 0 && <Badge className="bg-status-approved/10 text-status-approved">{pageItems.length}{pageProgress.total ? ` / ${pageProgress.total}` : ''} page(s)</Badge>}
-                {pageItems.length > 0 && (
-                  <button onClick={copyAll} className="ml-auto text-xs text-primary flex items-center gap-1">
-                    <Icon name={copied === -1 ? 'check' : 'content_copy'} className="text-[14px]" />{copied === -1 ? 'Copied' : 'Copy all'}
-                  </button>
-                )}
+                {usingSaved && <Badge className="bg-status-pending/10 text-status-pending">Saved notes</Badge>}
+                <div className="ml-auto flex items-center gap-3">
+                  {usingSaved && (
+                    <button onClick={() => { setUsingSaved(false); setPageItems([]); startedRef.current = '' }}
+                      className="text-xs text-outline flex items-center gap-1" title="Discard and re-run AI detection">
+                      <Icon name="autorenew" className="text-[14px]" />Re-run AI
+                    </button>
+                  )}
+                  {onSavePages && pageItems.length > 0 && (
+                    <span className="text-xs text-status-approved flex items-center gap-1" title="Kept with the JD1 note automatically as you edit — no extra save needed">
+                      <Icon name="check_circle" className="text-[14px]" />Kept with note
+                    </span>
+                  )}
+                  {pageItems.length > 0 && (
+                    <button onClick={copyAll} className="text-xs text-primary flex items-center gap-1">
+                      <Icon name={copied === -1 ? 'check' : 'content_copy'} className="text-[14px]" />{copied === -1 ? 'Copied' : 'Copy all'}
+                    </button>
+                  )}
+                </div>
               </div>
               {pageLoading && (
                 <div className="mb-2">
@@ -288,21 +339,24 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
               <div className="flex-1 min-h-0 overflow-y-auto pr-1">
                 {curPage ? (
                   <div className="border border-outline-variant/70 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-semibold text-primary flex items-center gap-1">
-                        <Icon name="description" className="text-[14px]" />Page {curPage.page}{curPage.title ? ` · ${curPage.title}` : ''}
-                      </span>
-                      <button onClick={() => copyPage(curPage)} className="ml-auto text-xs text-primary flex items-center gap-1" title="Copy this page">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Icon name="description" className="text-[14px] text-primary shrink-0" />
+                      <span className="text-xs text-outline shrink-0">Page {curPage.page} ·</span>
+                      <input value={curPage.title} onChange={(e) => updatePageTitle(curPage.page, e.target.value)} placeholder="title"
+                        className="flex-1 min-w-0 text-xs font-semibold text-primary border border-outline-variant/50 rounded px-1.5 py-0.5 bg-transparent" />
+                      <button onClick={() => copyPage(curPage)} className="text-xs text-primary flex items-center gap-1 shrink-0" title="Copy this page">
                         <Icon name={copied === curPage.page ? 'check' : 'content_copy'} className="text-[14px]" />{copied === curPage.page ? 'Copied' : 'Copy'}
                       </button>
                     </div>
-                    {curPage.summary && <p className="text-xs text-text-main mb-2 leading-relaxed">{curPage.summary}</p>}
+                    <textarea value={curPage.summary} onChange={(e) => updatePageSummary(curPage.page, e.target.value)} rows={3} placeholder="page summary"
+                      className="w-full text-xs text-text-main leading-relaxed mb-2 border border-outline-variant/60 rounded-md px-2 py-1.5" />
                     {curPage.items.length > 0 && (
-                      <div className="space-y-0.5">
+                      <div className="space-y-1">
                         {curPage.items.map((it, j) => (
-                          <div key={j} className="flex gap-2 text-xs">
-                            <span className="text-outline w-40 shrink-0">{it.label}</span>
-                            <span className="text-on-surface min-w-0 break-words">{it.value}</span>
+                          <div key={j} className="flex gap-2 text-xs items-start">
+                            <span className="text-outline w-40 shrink-0 pt-1.5">{it.label}</span>
+                            <input value={it.value} onChange={(e) => updatePageItemValue(curPage.page, j, e.target.value)}
+                              className="flex-1 min-w-0 text-on-surface border border-outline-variant/60 rounded-md px-2 py-1" />
                           </div>
                         ))}
                       </div>
@@ -314,7 +368,7 @@ export function DocReview({ file, mapFields }: { file: File; mapFields?: { id: s
                   <p className="text-xs text-outline">No detail for this page{numPages > 1 ? ' yet — use the page box on the left to move between pages.' : '.'}</p>
                 )}
               </div>
-              <p className="text-[11px] text-outline mt-2">Use the page box on the left (◀ ▶ or type a number + Enter) — the document and its detected data change together. “Copy all” exports every page.</p>
+              <p className="text-[11px] text-outline mt-2">Use the page box on the left (◀ ▶ or type a number + Enter) — the document and its detected data change together. Edit any field directly — corrections are kept with this ticket automatically. “Copy all” exports every page.</p>
             </>
           )}
         </div>

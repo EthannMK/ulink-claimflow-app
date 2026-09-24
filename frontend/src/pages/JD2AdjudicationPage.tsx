@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getJD2Queue, getJD2Item, decideJD2, updateJD2Note, deleteJD2Item, assignJD2, fetchDocBlobUrl, type JD2Item, type JD1Note, type NoteField } from '../lib/jd1'
-import { listUsers } from '../lib/api'
+import { getJD2Queue, getJD2Item, decideJD2, updateJD2Note, deleteJD2Item, assignJD2, fetchDocBlobUrl, type JD2Item, type JD1Note, type NoteField, type FileNotes } from '../lib/jd1'
+import { listUsers, getAssignPermissions, type AssignPermissions } from '../lib/api'
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { SupportingReview } from '../components/SupportingReview'
@@ -28,6 +28,21 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   approved: { label: 'Approved', cls: 'bg-status-approved/10 text-status-approved' },
   partially_approved: { label: 'Partial', cls: 'bg-status-ai/10 text-status-ai' },
   rejected: { label: 'Rejected', cls: 'bg-status-rejected/10 text-status-rejected' },
+}
+
+function pageNotesText(pageNotes: FileNotes[]): string {
+  const parts: string[] = []
+  for (const fn of pageNotes) {
+    if (!fn.pages.length) continue
+    parts.push(`=== ${fn.file || 'document'} ===`)
+    for (const p of fn.pages) {
+      const lines = [`Page ${p.page}${p.title ? ` — ${p.title}` : ''}`]
+      if (p.summary) lines.push(p.summary)
+      for (const it of p.items) lines.push(`${it.label}: ${it.value}`)
+      parts.push(lines.join('\n'))
+    }
+  }
+  return parts.join('\n\n——————————\n\n')
 }
 
 function roRow(label: string, f: NoteField) {
@@ -58,6 +73,7 @@ export function JD2AdjudicationPage() {
   const [noteDirty, setNoteDirty] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
   const [users, setUsers] = useState<{ id: string; name: string; username: string; role: string; active: boolean }[]>([])
+  const [assignPerms, setAssignPerms] = useState<AssignPermissions | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -67,6 +83,7 @@ export function JD2AdjudicationPage() {
   }, [id])
 
   useEffect(() => { listUsers().then((u: any) => setUsers(u || [])).catch(() => {}) }, [])
+  useEffect(() => { getAssignPermissions().then(setAssignPerms).catch(() => {}) }, [])
 
   async function reassign(assignee: string) {
     if (!item) return
@@ -103,6 +120,15 @@ export function JD2AdjudicationPage() {
     try { const updated = await decideJD2(item.id, decision, reasons); setItem(updated); setDraft(updated.note); setNoteDirty(false) }
     catch (e: any) { setFlash('Decision failed: ' + (e?.message ?? 'unknown')) }
     finally { setBusy(false) }
+  }
+
+  function downloadFullDetection() {
+    if (!item) return
+    const text = pageNotesText(item.note.page_notes || [])
+    const blob = new Blob([text], { type: 'text/plain' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+    a.download = `Full_Detection_${(item.member_name || 'claim').replace(/\s+/g, '_')}.txt`
+    a.click()
   }
 
   async function previewDoc(docId: string) {
@@ -220,10 +246,19 @@ export function JD2AdjudicationPage() {
           <span className="text-xs text-outline">From JD1: {item.handed_by || '—'}</span>
           <div className="flex items-center gap-1 text-xs">
             <Icon name="person" className="text-[15px] text-outline" />
-            <select value={item.assignee || ''} onChange={(e) => reassign(e.target.value)} className="border border-outline-variant rounded-md px-2 py-1 text-xs" title="Reassign to a team member" disabled={decided}>
-              <option value="">Unassigned</option>
-              {users.filter((u) => u.active).map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
-            </select>
+            {(() => {
+              const allowedRoles = assignPerms?.[getRole()] ?? []
+              const canAssignAny = allowedRoles.length > 0
+              return (
+                <select value={item.assignee || ''} onChange={(e) => reassign(e.target.value)}
+                  className="border border-outline-variant rounded-md px-2 py-1 text-xs"
+                  title={canAssignAny ? "Reassign to a team member" : "Your role is not permitted to reassign claims (see Settings > Assignment permissions)"}
+                  disabled={decided || !canAssignAny}>
+                  <option value="">Unassigned</option>
+                  {users.filter((u) => u.active && allowedRoles.includes(u.role)).map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+                </select>
+              )
+            })()}
           </div>
           {isSuper && (
             <Button variant="ghost" size="sm" onClick={() => removeClaim(item.id, true)}>
@@ -327,6 +362,15 @@ export function JD2AdjudicationPage() {
               <div className="flex flex-wrap gap-1.5">
                 {n.documents.map((d, i) => <Badge key={i} className="bg-on-surface-variant/10 text-on-surface-variant">{d.doc_type}</Badge>)}
               </div>
+            </div>
+          )}
+          {n.page_notes && n.page_notes.some((fn) => fn.pages.length > 0) && (
+            <div className="mt-3 pt-3 border-t border-outline-variant/60 flex items-center gap-2">
+              <Icon name="fact_check" className="text-[16px] text-primary shrink-0" />
+              <span className="text-xs text-text-main flex-1">JD1's full-detection notes (page-by-page) are attached to this claim.</span>
+              <button onClick={downloadFullDetection} className="text-primary flex items-center gap-0.5 shrink-0 text-sm">
+                <Icon name="download" className="text-[16px]" />Download .txt
+              </button>
             </div>
           )}
         </Card>

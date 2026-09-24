@@ -4,9 +4,10 @@ import re, uuid
 from datetime import datetime, timezone
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
-from app.models import Claim, ClaimList, Channel, Category, Status, JD1Note
-from app.security import get_current_user
+from app.models import Claim, ClaimList, Channel, Category, Status, JD1Note, Role
+from app.security import get_current_user, require_role
 from app.db import Collection
+from app import jd2_store, storage, audit
 
 router = APIRouter(prefix="/api")
 
@@ -104,3 +105,23 @@ def update_claim(claim_id: str, body: TicketUpdate, user=Depends(get_current_use
     if body.jd2_item_id is not None:
         c.jd2_item_id = body.jd2_item_id
     return _put(c)
+
+@router.delete("/claims/{claim_id}")
+def delete_claim(claim_id: str, user=Depends(require_role(Role.super_admin))):
+    """Delete an Inbox ticket. Super admin only, recorded in the audit log. If the
+    ticket already reached JD2, its JD2 queue item and stored document blobs are
+    cleaned up too, mirroring the cleanup the JD2-side delete already does."""
+    c = _get(claim_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if c.jd2_item_id:
+        jd2_item = jd2_store.get(c.jd2_item_id)
+        if jd2_item:
+            for att in (jd2_item.attachments or []):
+                storage.delete(f"jd2/{c.jd2_item_id}/{att.id}")
+            jd2_store.delete(c.jd2_item_id)
+    _claims.delete(claim_id)
+    audit.record("delete_claim", user.get("name") or user.get("username", ""),
+                 detail=f"Deleted Inbox ticket — {c.memberName or '—'} · {c.insurer or '—'} · {c.reference}",
+                 ref=claim_id)
+    return {"ok": True}

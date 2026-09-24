@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { runJD1, handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, updateTicket,
   type JD1Note, type NoteField, type Section, type InvoiceItem, type DraftMail } from '../lib/jd1'
+import type { PageDetail } from '../lib/review'
 import { backendOn, getName } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { DocReview } from '../components/DocReview'
@@ -122,6 +123,19 @@ export function JD1ReviewPage() {
       if (n.notes && n.provider !== 'stub' && /error|HTTP \d/i.test(n.notes)) setFlash(n.notes)
     } catch (e: any) { setFlash('JD1 failed: ' + (e?.message ?? 'unknown')) }
     finally { setRunning(false) }
+  }
+
+  function savePageNotes(fileName: string, pages: PageDetail[]) {
+    if (!note) return
+    const copy: JD1Note = structuredClone(note)
+    const list = copy.page_notes ? [...copy.page_notes] : []
+    const idx = list.findIndex((fn) => fn.file === fileName)
+    if (idx >= 0) list[idx] = { file: fileName, pages }
+    else list.push({ file: fileName, pages })
+    copy.page_notes = list
+    setNote(copy)
+    try { localStorage.setItem('jd1.note.draft', JSON.stringify(copy)); setDirty(false); setSavedAt(new Date().toLocaleTimeString()) }
+    catch { setFlash('Could not save draft (storage full).') }
   }
 
   function editField(sec: 'section_a' | 'section_b' | 'section_c' | 'header', key: string, value: string) {
@@ -253,7 +267,9 @@ export function JD1ReviewPage() {
             const avail = ins ? formTypesOf(ins) : (['claim'] as FormType[])
             const active = avail.includes(reviewForm) ? reviewForm : (avail[0] ?? 'claim')
             return <DocReview key={reviewIdx + active + files[reviewIdx].name} file={files[reviewIdx]}
-              mapFields={fieldsFor(ins, active).map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))} />
+              mapFields={fieldsFor(ins, active).map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))}
+              initialPages={note?.page_notes?.find((fn) => fn.file === files[reviewIdx].name)?.pages}
+              onSavePages={(pages) => savePageNotes(files[reviewIdx].name, pages)} />
           })()}
         </Card>
       )}
@@ -300,6 +316,13 @@ export function JD1ReviewPage() {
       )}
 
       {/* JD1 note details */}
+      {note && savedAt === 'restored' && files.length === 0 && (
+        <div className="flex items-center gap-2 bg-status-pending/10 rounded-lg px-3 py-2 mb-4 text-xs">
+          <Icon name="history" className="text-[16px] text-status-pending" />
+          <span className="text-text-main flex-1">This is a note restored from a previous session — you haven't uploaded a file this time. If it looks wrong or blank (e.g. a failed attempt), discard it and upload fresh.</span>
+          <button onClick={discardDraft} className="text-status-rejected font-medium shrink-0">Discard</button>
+        </div>
+      )}
       <div className="space-y-4">
           {!note && !running && <p className="text-xs text-outline">The JD1 note will appear here after you generate it. The document and its extracted fields are shown above.</p>}
 

@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { PageTitle, Card, Badge, Icon, Button, AttachField, type Attachment } from '../components/ui'
 import { AiExtract } from '../components/AiExtract'
 import { usePersistent, useEditable, genId } from '../lib/persist'
 import { DEFAULT_INSURERS, FORM_LABELS, formTypesOf, type InsurerConfig, type InsurerField, type FieldType, type FormType } from '../lib/insurers'
+import { getAssignPermissions, updateAssignPermissions, type AssignPermissions } from '../lib/api'
+import { getRole } from '../lib/auth'
 
 function EditBar({ editing, edit, save, cancel }: { editing: boolean; edit: () => void; save: () => void; cancel: () => void }) {
   return editing
@@ -21,7 +23,7 @@ interface Tob { id: string; plan: string; insurer: string; benefits: Benefit[]; 
 const RULE_CATEGORIES = ['Eligibility', 'Documentation', 'Coverage', 'Payment', 'Fraud', 'Waiting period']
 const BENEFIT_CATEGORIES = ['Inpatient', 'Outpatient', 'Day Care', 'Maternity', 'Dental', 'Optical', 'Chronic', 'Other']
 
-const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits', 'Employer mapping'] as const
+const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits', 'Employer mapping', 'Assignment permissions'] as const
 interface EmpMap { id: string; domain: string; employer: string }
 const inp = 'w-full text-sm border border-outline-variant rounded-md px-2 py-1.5'
 const FIELD_TYPES: FieldType[] = ['text', 'number', 'amount', 'date', 'time', 'select', 'textarea']
@@ -43,6 +45,7 @@ export function SettingsPage() {
       {tab === 'Adjudication Rules' && <Rules />}
       {tab === 'Tables of Benefits' && <Benefits />}
       {tab === 'Employer mapping' && <EmployerMapping />}
+      {tab === 'Assignment permissions' && <AssignPermissionsSection />}
     </div>
   )
 }
@@ -382,6 +385,76 @@ function Benefits() {
         )}
       </Card>
       </div>
+    </div>
+  )
+}
+
+// ---------- Assignment permissions (who on JD2 can assign a claim to whom) ----------
+const ASSIGN_ROLES = ['super_admin', 'admin', 'user'] as const
+const ROLE_LABELS: Record<string, string> = { super_admin: 'Super Admin', admin: 'Admin', user: 'User (JD1 / JD2 officer)' }
+
+function AssignPermissionsSection() {
+  const [perms, setPerms] = useState<AssignPermissions | null>(null)
+  const [draft, setDraft] = useState<AssignPermissions | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [err, setErr] = useState('')
+  const canEdit = getRole() === 'super_admin'
+
+  useEffect(() => {
+    getAssignPermissions().then((p) => { setPerms(p); setDraft(p) }).catch((e) => setErr(String(e?.message ?? e)))
+  }, [])
+
+  function toggle(actor: string, target: string) {
+    if (!draft) return
+    const cur = new Set(draft[actor] || [])
+    if (cur.has(target)) cur.delete(target); else cur.add(target)
+    setDraft({ ...draft, [actor]: Array.from(cur) })
+  }
+  async function save() {
+    if (!draft) return
+    setErr('')
+    try { const saved = await updateAssignPermissions(draft); setPerms(saved); setDraft(saved); setEditing(false) }
+    catch (e: any) { setErr(e?.message ?? 'Save failed') }
+  }
+  function cancel() { setDraft(perms); setEditing(false) }
+
+  const view = editing ? draft : perms
+  return (
+    <div>
+      <div className="flex justify-between items-start gap-3 mb-3">
+        <p className="text-xs text-outline max-w-2xl">Controls who can reassign a claim to whom on the JD2 page. Rows are the officer doing the assigning; columns are who they may assign a claim to. This is enforced by the backend, not just hidden in the UI.</p>
+        {canEdit
+          ? <EditBar editing={editing} edit={() => setEditing(true)} save={save} cancel={cancel} />
+          : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">Only a super admin can change this</Badge>}
+      </div>
+      {err && <p className="text-xs text-status-rejected mb-2">{err}</p>}
+      {!view && <Card className="p-6 text-sm text-text-main">Loading…</Card>}
+      {view && (
+        <Card className="p-4">
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                <th className="text-left text-xs text-outline uppercase tracking-wide pb-2 pr-3">Officer's role (can assign to →)</th>
+                {ASSIGN_ROLES.map((r) => <th key={r} className="text-xs text-outline uppercase tracking-wide pb-2 px-2 text-center">{ROLE_LABELS[r]}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {ASSIGN_ROLES.map((actor) => (
+                <tr key={actor} className="border-t border-outline-variant/40">
+                  <td className="py-2 text-sm font-medium pr-3">{ROLE_LABELS[actor]}</td>
+                  {ASSIGN_ROLES.map((target) => (
+                    <td key={target} className="text-center px-2">
+                      <input type="checkbox" disabled={!editing}
+                        checked={(view[actor] || []).includes(target)}
+                        onChange={() => toggle(actor, target)} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </div>
   )
 }

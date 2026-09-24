@@ -71,6 +71,7 @@ def _gemini_values(data: bytes, mime: str, fields: list[dict]) -> dict:
         "Dates in these forms are written in DD/MM/YY (or DD/MM/YYYY) format — return them as written, do not reorder. "
         "For a total claim amount, use the overall total figure even if it appears at the bottom of a table on a later page. "
         "Follow any per-field hint in parentheses. "
+        "If a field's answer has multiple parts (e.g. more than one diagnosis, or a multi-line address), include ALL of them in full rather than truncating to the first one. "
         'Respond ONLY with JSON: {"fields":[{"n":<field number>,"value":"<answer>","confidence":0.0}]}. '
         "Include an entry for every field number. confidence is 0..1; if a field is blank or not present, "
         'use value "" and confidence 0.\n\nFields:\n' + labels
@@ -122,6 +123,8 @@ _PAGE_BASE = (
     "READ ALL HANDWRITING, including messy or cursive Burmese handwriting, and transcribe it in FULL — "
     "do not summarise a handwritten note as just 'handwritten remarks'; write out the actual text you read, "
     "in Burmese, as completely as you can. "
+    "Also transcribe any stamp, seal, or signature block you can read (issuing office, date stamped, signatory name/title) as its own label/value pair, and note if a required stamp or signature appears to be missing. "
+    "Never write a vague summary like 'contains patient details' or 'form with information' — name the actual fields and values present, even if that means a longer summary. "
     "If the page contains a TABLE, VOUCHER, or hand-written bill/ledger (rows and columns, possibly hand-drawn), "
     "read it ROW BY ROW: for every row capture the description and its amount/quantity as a label/value pair, and "
     "give the column headers. Do not collapse a multi-row table into one line. "

@@ -39,6 +39,14 @@ def is_firestore() -> bool:
     return mode() == "firestore"
 
 
+# In-memory fallback storage, shared by collection NAME rather than by Collection
+# instance. Different routers each create their own Collection("claims") — without
+# this, every instance got its own empty dict and writes from one router were
+# invisible to another (the cause of tickets never syncing status/assignee across
+# routers when running without Firestore).
+_MEM_STORES: dict[str, dict[str, dict]] = {}
+
+
 class Collection:
     """A dict-of-dicts keyed by document id, backed by Firestore or memory.
     Every Firestore call is guarded — on any error it uses the in-memory shadow,
@@ -46,7 +54,7 @@ class Collection:
 
     def __init__(self, name: str):
         self.name = name
-        self.mem: dict[str, dict] = {}
+        self.mem = _MEM_STORES.setdefault(name, {})
 
     def get(self, doc_id: str) -> dict | None:
         if is_firestore():

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Response
 from app.models import JD1Note, JD2Item, JD2List, JD2Decision, JD2Status, StoredDoc
 from app.security import get_current_user
-from app import jd2_store, storage, audit
+from app import jd2_store, storage, audit, store, access_settings
 from app.db import Collection
 
 router = APIRouter(prefix="/api/jd2", tags=["jd2"])
@@ -60,16 +60,26 @@ class AssignBody(BaseModel):
 
 @router.put("/{item_id}/assign", response_model=JD2Item)
 async def assign_item(item_id: str, body: AssignBody, user=Depends(get_current_user)):
-    """Reassign a claim to a team member (any active user, either team)."""
+    """Reassign a claim to a team member. Who the current officer is allowed to assign to
+    is controlled by the Settings-driven permission map (role -> allowed target roles).
+    Clearing the assignment (empty assignee) is always allowed."""
     item = jd2_store.get(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Not found")
-    item.assignee = body.assignee or None
+    target_name = body.assignee or None
+    if target_name:
+        target = store.get_by_name(target_name)
+        if not target:
+            raise HTTPException(status_code=404, detail="No such user")
+        allowed = access_settings.get_assign_permissions().get(user.get("role", ""), [])
+        if target["role"] not in allowed:
+            raise HTTPException(status_code=403, detail="Your role is not permitted to assign claims to that team member")
+    item.assignee = target_name
     # keep the linked Inbox ticket in sync
     claims = Collection("claims")
     for c in claims.all():
         if c.get("jd2_item_id") == item_id:
-            c["assignee"] = body.assignee or None
+            c["assignee"] = target_name
             claims.put(c.get("id"), c)
     return jd2_store.save(item)
 
@@ -145,4 +155,11 @@ async def decide(item_id: str, body: JD2Decision, user=Depends(get_current_user)
     item.status = _DECISION_STATUS[body.decision]
     item.decided_by = user.get("name") or user.get("username", "")
     item.decided_at = datetime.now(timezone.utc)
+    # keep the linked Inbox ticket's status in sync with JD2's decision — the JD2Status and
+    # Claim Status enums share the same string values for approved/partially_approved/rejected.
+    claims = Collection("claims")
+    for c in claims.all():
+        if c.get("jd2_item_id") == item_id:
+            c["status"] = item.status.value
+            claims.put(c.get("id"), c)
     return jd2_store.save(item)

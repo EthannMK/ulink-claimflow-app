@@ -1,4 +1,5 @@
 import { apiBase, authHeaders } from './auth'
+import type { PageDetail } from './review'
 
 export interface NoteField { value: string; confidence: number; remark: string }
 export interface JD1Header {
@@ -27,6 +28,8 @@ export interface SupportingDoc {
 export interface ConsistencyCheck { label: string; status: 'ok' | 'warning' | 'fail' | 'unclear'; detail: string }
 export interface SupportingAnalysis { documents: SupportingDoc[]; checks: ConsistencyCheck[]; summary: string }
 
+export interface FileNotes { file: string; pages: PageDetail[] }
+
 export interface JD1Note {
   claim_type: string
   header: JD1Header
@@ -43,6 +46,7 @@ export interface JD1Note {
   document_count: number
   provider: string
   notes: string
+  page_notes: FileNotes[]
 }
 
 // ---- amount helpers + client-side reconciliation (after JD1 edits an amount) ----
@@ -128,6 +132,10 @@ export async function updateTicket(id: string, patch: { status?: string; documen
   const r = await fetch(`${apiBase()}/api/claims/${id}`, { method: 'PATCH', headers: jsonHeaders(), body: JSON.stringify(patch) })
   if (!r.ok) throw new Error(`Ticket update failed (${r.status})`)
   return r.json()
+}
+export async function deleteTicket(id: string): Promise<void> {
+  const r = await fetch(`${apiBase()}/api/claims/${id}`, { method: 'DELETE', headers: authHeaders() })
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Delete failed (${r.status})`) }
 }
 
 /** Fetch a JD2 attachment with auth and return an object URL (caller revokes when done). */

@@ -35,6 +35,11 @@ def get_by_id(uid: str):
     return next((u for u in _users.all() if u["id"] == uid), None)
 
 
+def get_by_name(name: str):
+    """Look up a user by their display name — the assign picker stores the NAME, not the id."""
+    return next((u for u in _users.all() if u["name"] == name), None)
+
+
 def list_users():
     return _users.all()
 

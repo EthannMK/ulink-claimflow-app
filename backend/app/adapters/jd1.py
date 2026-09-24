@@ -113,7 +113,7 @@ Produce a JD1 Process Note as STRICT JSON with this exact shape (every leaf is {
  "claim_type": "reimbursement|LOG|API-eclaim",
  "header": {"member_name":{...},"insurer":{...},"claim_date":{...},"company":{...},
             "nrc_passport":{...},"total_claim_amount":{...},"treatment_date":{...},"claim_no":{...},
-            "ias_note":"what to verify in the iAS system (member name, NRC, DOB, policy effective/termination, benefit balance)"},
+            "ias_note":"a specific instruction naming the ACTUAL values found in these documents to check against iAS — e.g. 'Confirm in iAS: member NAW MYAT MYAT THU, NRC 12/MaHaTha(N)123456, policy effective 01/01/2025, remaining outpatient benefit balance vs this claim of 255,300 MMK'. Always use the real name/NRC/dates/amount you read, never a generic checklist with no specifics"},
  "section_a": {"document_complete":{...},"document_readable":{...},"missing_document":{...},
                "duplicate_document":{...},"incorrect_inconsistent":{...}},
  "section_b": {"policy_member_eligibility":{...},"diagnosis":{...},"treatment_procedure":{...},
@@ -125,12 +125,12 @@ Produce a JD1 Process Note as STRICT JSON with this exact shape (every leaf is {
  "doc_types_present": ["Claim form","Invoice / bill","Medical report","ID copy","LOG / pre-authorization form","Policy wording","Table of Benefits","Provider CSR"],
  "document_count": <integer>,
  "invoices": [{"description":"what this invoice/bill/receipt is for (e.g. in-patient bill, pharmacy, endoscopy, consultation)","provider":"hospital/clinic name if visible","date":"DD/MM/YY as written","amount":"<the invoice total as written, digits only e.g. 255300 — leave \"\" if you cannot read it clearly>","confidence":0.0,"page":<page number, 1-based>}],
- "supporting_documents": [{"name":"<source file name if known>","type":"Invoice|Medical report|Prescription|Lab report|Discharge summary|ID|Other","summary":"1-2 line plain-English summary of what this document is and says","provider":"hospital/clinic/lab if present","date":"DD/MM/YY","amount":"<total if it is a bill, digits only, else \"\">","diagnosis":"diagnosis/findings if a medical doc, else \"\"","person_name":"name on an ID or patient name on a report, else \"\"","flags":["any issue an officer should look at, e.g. unsigned, illegible, date mismatch"],"confidence":0.0,"page":<page number>}],
- "consistency_checks": [{"label":"short name of the check","status":"ok|warning|fail|unclear","detail":"one line explaining the result"}],
- "notes": "brief free-text summary"
+ "supporting_documents": [{"name":"<source file name if known>","type":"Invoice|Medical report|Prescription|Lab report|Discharge summary|ID|Other","summary":"2-3 sentence plain-English summary with the actual specifics — provider/hospital name, exact date(s), diagnosis or procedure, and the amount if it is a bill. Never just restate the document type (e.g. not 'a medical report' but what the report actually says)","provider":"hospital/clinic/lab if present","date":"DD/MM/YY","amount":"<total if it is a bill, digits only, else \"\">","diagnosis":"diagnosis/findings if a medical doc, else \"\"","person_name":"name on an ID or patient name on a report, else \"\"","flags":["any issue an officer should look at, e.g. unsigned, illegible, date mismatch"],"confidence":0.0,"page":<page number>}],
+ "consistency_checks": [{"label":"short name of the check","status":"ok|warning|fail|unclear","detail":"one to two sentences citing the exact figures/dates/names you compared, e.g. 'Claim form total 255,300 MMK vs invoices summing to 255,300 MMK — match' rather than a vague 'amounts match'"}],
+ "notes": "a detailed free-text synopsis (4-6 sentences) covering: what happened and why the member is claiming, the specific diagnosis and treatment, the exact claimed amount and whether invoices reconcile against it, and any concrete red flags or missing items the officer must resolve — use the real names, dates, amounts and diagnoses from the documents, never generic filler phrasing"
 }
 
-For "supporting_documents": list every NON-FORM document in the packet — medical reports, prescriptions, lab/endoscopy results, discharge summaries, invoices/bills, ID copies. Do NOT include the insurer's own claim/LOG form here. Give a genuinely useful 1-2 line summary of each so an officer does not have to open it.
+For "supporting_documents": list every NON-FORM document in the packet — medical reports, prescriptions, lab/endoscopy results, discharge summaries, invoices/bills, ID copies. Do NOT include the insurer's own claim/LOG form here. Give a genuinely useful 2-3 sentence summary of each, with real specifics (names, dates, amounts, diagnosis) so an officer does not have to open it.
 For "consistency_checks": cross-check the whole packet and report findings, e.g.: does the diagnosis on the medical report match the claim form; are all treatment/visit dates consistent; do the invoices add up to the claimed amount; are there duplicate invoices (same provider, date and amount); does the ID name match the claimant. Use status "fail" for a clear mismatch, "warning" for something to verify, "ok" when it checks out, "unclear" when the documents don't allow a conclusion.
 
 For "doc_types_present": list every document TYPE you can actually see anywhere in the packet (including inside scanned images — e.g. a hospital invoice or endoscopy report is a "Medical report" or "Invoice / bill" even if the filename is meaningless). Use only the exact labels shown above.
@@ -142,6 +142,8 @@ RULES:
 - If information is NOT present in the documents, set value "" and confidence 0 (never invent a number).
 - Coverage (section_c) usually needs the policy wording / Table of Benefits and the iAS benefit balance. If those are not provided or not conclusive, set covered_status value "Unclear" and say it must be decided at JD2/JD3. Do the same for exclusions/waiting-period/pre-existing when unclear.
 - Amounts: keep the number and add " MMK".
+- Be concrete everywhere: every "remark", "ias_note", "notes", consistency-check "detail", and supporting-document "summary" must cite the actual names, dates, amounts, diagnoses, or document contents you found. Never write a generic, evidence-free statement like "looks consistent", "need to verify", or "document present" — say WHAT is consistent, what needs verifying and why, or what the document specifically shows.
+- Prefer specific, complete detail over brevity throughout: fuller correct detail is always better than a short vague answer, as long as everything you write is actually grounded in the documents (never pad with invented specifics).
 - Respond with ONLY the JSON, no prose, no markdown fences."""
 
 def _nf(d) -> NoteField:

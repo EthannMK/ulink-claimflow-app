@@ -85,6 +85,18 @@ class ClaimList(BaseModel):
     items: list[Claim]; page: int = 1; total: int = 0
 
 
+# ---- page-by-page "Full detection" (summary + important data per page) ----
+class PageItem(BaseModel):
+    label: str = ""
+    value: str = ""
+
+class PageDetail(BaseModel):
+    page: int = 0
+    title: str = ""
+    summary: str = ""
+    items: list[PageItem] = []
+
+
 # ---- JD1 Process Note models (POC) ----
 from pydantic import Field
 
@@ -195,6 +207,11 @@ class SupportingAnalysis(BaseModel):
     checks: list[ConsistencyCheck] = []   # cross-document consistency checks
     summary: str = ""                      # short overall read of the supporting evidence
 
+class FileNotes(BaseModel):
+    file: str = ""              # source filename these full-detection pages came from
+    pages: list[PageDetail] = []
+
+
 class JD1Note(BaseModel):
     claim_type: str = ""        # reimbursement / LOG / API-eclaim
     header: JD1Header = Field(default_factory=JD1Header)
@@ -211,6 +228,7 @@ class JD1Note(BaseModel):
     document_count: int = 0     # logical documents detected across all files
     provider: str = "stub"
     notes: str = ""
+    page_notes: list[FileNotes] = []   # JD1's saved/edited "Full detection" notes, per uploaded file
 
 
 # ---- JD2 queue (JD1 -> JD2 handoff) --------------------------------------------
@@ -271,17 +289,6 @@ class ReviewResult(BaseModel):
     provider: str = "docai"
     error: str = ""
 
-
-# ---- page-by-page "Full detection" (summary + important data per page) ----
-class PageItem(BaseModel):
-    label: str = ""
-    value: str = ""
-
-class PageDetail(BaseModel):
-    page: int = 0
-    title: str = ""
-    summary: str = ""
-    items: list[PageItem] = []
 
 class PageAnalysis(BaseModel):
     pages: list[PageDetail] = []
