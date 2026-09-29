@@ -2,9 +2,19 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from app.routers import health, claims, auth, users, scan, jd1, jd2, assistant, extract, review, audit, ai_settings, access_settings, usage
+from app.routers import health, claims, auth, users, scan, jd1, jd2, assistant, extract, review, audit, ai_settings, access_settings, usage, teams, prompts
 
-app = FastAPI(title="Ulink ClaimFlow API", version="0.2.0")
+import logging
+from app.config import settings
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+# Production safety: on Cloud Run (K_SERVICE is set there) a real JWT secret is mandatory —
+# with the development default anyone could forge a Super Admin login.
+if os.getenv("K_SERVICE") and (settings.jwt_secret in ("", "dev-secret-change-me") or len(settings.jwt_secret) < 32):
+    raise RuntimeError("JWT_SECRET must be set to a long random value (32+ characters) in production.")
+
+app = FastAPI(title="Ulink ClaimFlow API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     # localhost (dev) + any *.vercel.app (deployed frontend) + optional exact origins via env
@@ -25,6 +35,8 @@ app.include_router(audit.router)
 app.include_router(ai_settings.router)
 app.include_router(access_settings.router)
 app.include_router(usage.router)
+app.include_router(teams.router)
+app.include_router(prompts.router)
 
 # ---- serve the built frontend (single Cloud Run URL = API + web app) ----
 # The Docker build drops the Vite build into /app/static. If present, serve it with SPA fallback.

@@ -12,6 +12,7 @@ up real spend on Vertex AI (or any other provider). Nothing here is sent to
 any provider.
 """
 from __future__ import annotations
+import contextvars
 import time
 import uuid
 from app.db import Collection
@@ -83,12 +84,73 @@ def check_cap(username: str) -> None:
             raise UsageCapExceeded(spent_today, float(daily), "daily")
 
 
+# ---- client billing in tokens ------------------------------------------------
+# Limits are stored in USD (real cost). Everyone except the Super Admin sees them as
+# "AI tokens" instead: tokens = USD / rate * 1,000,000, with ONE rate the Super Admin
+# sets (e.g. 1M tokens = $0.15). A single fixed rate keeps the numbers stable for
+# billing clients even though real prices differ between models and input/output.
+DEFAULT_USD_PER_1M_TOKENS = 0.15
+
+
+def _settings():
+    from app.ai_provider import settings_store   # lazy: ai_provider imports this module
+    return settings_store
+
+
+def billing_rate() -> float:
+    """USD per 1,000,000 client tokens."""
+    try:
+        r = float((_settings().get("billing") or {}).get("usd_per_1m_tokens") or 0)
+    except Exception:
+        r = 0.0
+    return r if r > 0 else DEFAULT_USD_PER_1M_TOKENS
+
+
+def save_billing_rate(rate: float) -> float:
+    rate = float(rate)
+    if not (0.001 <= rate <= 1000):
+        raise ValueError("The rate must be between $0.001 and $1,000 per 1M tokens")
+    _settings().put("billing", {"usd_per_1m_tokens": round(rate, 6)})
+    return rate
+
+
+def to_tokens(usd) -> int | None:
+    return None if usd is None else int(round(float(usd) / billing_rate() * 1_000_000))
+
+
+def actual_rate() -> dict:
+    """What the real calls so far cost per 1M tokens (in+out) — helps pick the billing rate."""
+    cost = tok = n = 0
+    for e in _log.all():
+        t = (e.get("tokens_in") or 0) + (e.get("tokens_out") or 0)
+        if e.get("ok", True) and t and e.get("cost_usd"):
+            cost += float(e["cost_usd"]); tok += t; n += 1
+    return {"usd_per_1m_tokens": round(cost / tok * 1_000_000, 4) if tok else None, "calls": n, "tokens": tok}
+
+
 def cap_message(e: "UsageCapExceeded") -> str:
+    """Shown to the user, so it is in tokens (never dollars)."""
+    used, cap = f"{to_tokens(e.spent):,}", f"{to_tokens(e.cap):,}"
     if e.kind == "daily":
-        return (f"Your daily AI limit has been reached (${e.spent:.2f} of ${e.cap:.2f} today). "
+        return (f"Your daily AI token limit has been reached ({used} of {cap} tokens today). "
                 "It resets at midnight — or ask your administrator to raise it.")
-    return (f"Your AI usage limit has been reached (${e.spent:.2f} of ${e.cap:.2f} used). "
+    return (f"Your AI token limit has been reached ({used} of {cap} tokens used). "
             "Please contact your administrator to raise it.")
+
+
+_tally: contextvars.ContextVar[list | None] = contextvars.ContextVar("usage_tally", default=None)
+
+
+def start_tally() -> list:
+    """Start adding up the cost of every AI call made in this context (e.g. one JD1 scan)."""
+    t: list = []
+    _tally.set(t)
+    return t
+
+
+def tally_tokens(t: list) -> int:
+    """Client tokens charged for the calls collected by start_tally()."""
+    return to_tokens(sum(t)) or 0
 
 
 def record(username: str, provider: str, model: str, tokens_in: int, tokens_out: int,
@@ -96,6 +158,9 @@ def record(username: str, provider: str, model: str, tokens_in: int, tokens_out:
     """Log one AI call and (if it had a real cost) add it to the user's running
     total. Returns the cost in USD of this call (0.0 for free providers/failed calls)."""
     cost = _cost(provider, tokens_in or 0, tokens_out or 0, model) if ok else 0.0
+    t = _tally.get()
+    if t is not None:
+        t.append(cost)
     entry_id = uuid.uuid4().hex
     _log.put(entry_id, {
         "id": entry_id, "ts": time.time(), "user": username or "", "provider": provider or "",
@@ -113,29 +178,31 @@ def record(username: str, provider: str, model: str, tokens_in: int, tokens_out:
     return cost
 
 
-def my_usage(username: str) -> dict:
-    """A single user's own spend/cap/remaining — what a normal (non-admin) user sees."""
+def my_usage(username: str, include_usd: bool = False) -> dict:
+    """A user's own allowance. Everyone gets it in client tokens; only the Super Admin
+    (include_usd=True) also gets the dollar amounts and real token counts."""
     from app import store
     u = store.get_by_username(username) if username else None
-    if not u:
-        return {"spent_usd": 0.0, "cap_usd": None, "remaining_usd": None, "requests": 0, "tokens": 0,
-                "today_usd": 0.0, "daily_cap_usd": None, "daily_remaining_usd": None}
-    spent = float(u.get("usage_spent_usd") or 0.0)
-    cap = u.get("usage_cap_usd")
-    tday = today_spent(u)
-    dcap = u.get("daily_cap_usd")
-    entries = [e for e in _log.all() if e.get("user") == username]
-    tokens = sum((e.get("tokens_in") or 0) + (e.get("tokens_out") or 0) for e in entries)
-    return {
-        "spent_usd": round(spent, 4),
-        "cap_usd": cap,
-        "remaining_usd": (round(max(float(cap) - spent, 0), 4) if cap is not None else None),
+    spent = float((u or {}).get("usage_spent_usd") or 0.0)
+    cap = (u or {}).get("usage_cap_usd")
+    tday = today_spent(u) if u else 0.0
+    dcap = (u or {}).get("daily_cap_usd")
+    entries = [e for e in _log.all() if e.get("user") == username] if u else []
+    rem = max(float(cap) - spent, 0) if cap is not None else None
+    drem = max(float(dcap) - tday, 0) if dcap is not None else None
+    out = {
         "requests": len(entries),
-        "tokens": tokens,
-        "today_usd": round(tday, 4),
-        "daily_cap_usd": dcap,
-        "daily_remaining_usd": (round(max(float(dcap) - tday, 0), 4) if dcap is not None else None),
+        "used_tokens": to_tokens(spent), "cap_tokens": to_tokens(cap), "remaining_tokens": to_tokens(rem),
+        "today_tokens": to_tokens(tday), "daily_cap_tokens": to_tokens(dcap), "daily_remaining_tokens": to_tokens(drem),
     }
+    if include_usd:
+        out.update({
+            "spent_usd": round(spent, 4), "cap_usd": cap, "remaining_usd": round(rem, 4) if rem is not None else None,
+            "today_usd": round(tday, 4), "daily_cap_usd": dcap, "daily_remaining_usd": round(drem, 4) if drem is not None else None,
+            "real_tokens": sum((e.get("tokens_in") or 0) + (e.get("tokens_out") or 0) for e in entries),
+            "usd_per_1m_tokens": billing_rate(),
+        })
+    return out
 
 
 def limits_overview() -> list[dict]:
@@ -162,6 +229,8 @@ def limits_overview() -> list[dict]:
             "today_usd": round(tday, 4), "daily_cap_usd": dcap,
             "daily_remaining_usd": round(max(float(dcap) - tday, 0), 4) if dcap is not None else None,
             "status": status,
+            "used_tokens": to_tokens(spent), "cap_tokens": to_tokens(cap), "today_tokens": to_tokens(tday),
+            "daily_cap_tokens": to_tokens(dcap),
         })
     order = {"total_reached": 0, "daily_reached": 1, "near": 2, "ok": 3}
     return sorted(out, key=lambda r: (order[r["status"]], -r["spent_usd"]))

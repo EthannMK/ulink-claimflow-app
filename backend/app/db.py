@@ -4,12 +4,31 @@ If a Firestore database is reachable, collections are stored there and survive
 redeploys. If it is not (API not enabled, no credentials, network error), every
 operation degrades to an in-memory dict so the app still starts and works — it
 just won't persist across restarts. Set USE_FIRESTORE=0 to force in-memory.
+
+Which database:
+  GOOGLE_CLOUD_PROJECT (or VERTEX_PROJECT)  the GCP project — needed on a laptop,
+                                            auto-detected on Cloud Run
+  FIRESTORE_DATABASE                        default "(default)" (production); use a
+                                            separate one (e.g. "claimflow-dev") for
+                                            local testing so test data never mixes
+                                            with the live site
+If Firestore can't be reached the reason is written to the server log.
 """
 from __future__ import annotations
+import logging
 import os
 
 _MODE: str | None = None      # "firestore" | "memory"
 _DB = None
+_log = logging.getLogger("claimflow.db")
+
+
+def project_id() -> str | None:
+    return (os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("VERTEX_PROJECT") or "").strip() or None
+
+
+def database_id() -> str:
+    return (os.getenv("FIRESTORE_DATABASE") or "(default)").strip()
 
 
 def _probe() -> None:
@@ -21,13 +40,16 @@ def _probe() -> None:
         return
     try:
         from google.cloud import firestore
-        db = firestore.Client()
+        db = firestore.Client(project=project_id(), database=database_id())
         # Force a real round-trip so a misconfig fails here (and we fall back) rather than later.
         list(db.collection("_healthcheck").limit(1).stream())
         _DB = db
         _MODE = "firestore"
-    except Exception:
+        _log.info("Firestore connected: project=%s database=%s", db.project, database_id())
+    except Exception as e:
         _MODE = "memory"
+        _log.warning("Firestore NOT available (project=%s database=%s) — using memory, data will NOT be saved: %s",
+                     project_id(), database_id(), str(e)[:300])
 
 
 def mode() -> str:

@@ -12,7 +12,6 @@ import { useWorkspaceState, jd1Workspace } from '../lib/jd1Workspace'
 import { SupportingReview } from '../components/SupportingReview'
 import { usePersistent } from '../lib/persist'
 import { DEFAULT_INSURERS, FORM_LABELS, formTypesOf, fieldsFor, type InsurerConfig, type FormType } from '../lib/insurers'
-import { confidenceCls } from '../lib/format'
 
 const A_LABELS: Record<string, string> = {
   document_complete: 'Document complete?', document_readable: 'Document readable?',
@@ -36,12 +35,8 @@ const H_LABELS: Record<string, string> = {
   nrc_passport: 'NRC / Passport', total_claim_amount: 'Total claim amount', treatment_date: 'Treatment date', claim_no: 'Claim no.',
 }
 
-function ConfBadge({ f }: { f: NoteField }) {
-  const has = (f?.value ?? '').trim() !== ''
-  return has
-    ? <Badge className={`shrink-0 ${confidenceCls(f.confidence)}`}>{Math.round(f.confidence * 100)}%</Badge>
-    : <Badge className="shrink-0 bg-on-surface-variant/10 text-on-surface-variant">—</Badge>
-}
+// AI confidence percentages are deliberately not shown (user decision) — officers check every value.
+function ConfBadge(_: { f: NoteField }) { return null }
 
 export function JD1ReviewPage() {
   const nav = useNavigate()

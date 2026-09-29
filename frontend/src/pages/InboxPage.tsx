@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { listClaims } from '../lib/api'
 import { deleteTicket } from '../lib/jd1'
-import { getRole } from '../lib/auth'
+import { canDeleteTickets } from '../components/DeleteTicketButton'
 import { Card, Badge, Icon, Button } from '../components/ui'
 import { channelIcon, categoryMeta, statusMeta, timeAgo } from '../lib/format'
 
@@ -19,7 +19,7 @@ export function InboxPage() {
   const [q, setQ] = useState('')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [flash, setFlash] = useState('')
-  const isSuper = getRole() === 'super_admin'
+  const canDelete = canDeleteTickets()   // Super Admin + Admin
   const items = useMemo(() => (data?.items ?? []).filter(
     (c) => (tab === 'all' || c.category === tab) && (channel === 'all' || c.channel === channel)
       && (status === 'all' || c.status === status)
@@ -31,8 +31,8 @@ export function InboxPage() {
     setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
   async function removeTicket(id: string) {
-    if (!window.confirm('Delete this ticket permanently? This action is recorded in the audit log.')) return
-    try { await deleteTicket(id); refetch() }
+    if (!window.confirm('Delete this ticket permanently? This cannot be undone and is recorded in the audit log.')) return
+    try { await deleteTicket(id); setSel((s) => { const n = new Set(s); n.delete(id); return n }); refetch() }
     catch (e: any) { setFlash('Delete failed: ' + (e?.message ?? 'unknown')) }
   }
   async function bulkDelete() {
@@ -80,7 +80,7 @@ export function InboxPage() {
       </div>
 
       {flash && <p className="text-sm text-status-rejected mb-3">{flash}</p>}
-      {isSuper && sel.size > 0 && (
+      {canDelete && sel.size > 0 && (
         <div className="flex items-center gap-3 mb-3 bg-surface-container/60 rounded-lg px-3 py-2">
           <span className="text-sm text-text-main">{sel.size} selected</span>
           <Button variant="outline" size="sm" onClick={bulkDelete}><Icon name="delete" className="text-[16px] text-status-rejected" />Delete selected</Button>
@@ -92,7 +92,7 @@ export function InboxPage() {
         <table className="w-full text-sm">
           <thead className="bg-surface-container/70 text-on-surface-variant text-left text-xs uppercase tracking-wide">
             <tr>
-              {isSuper && (
+              {canDelete && (
                 <th className="px-4 py-3 font-semibold w-8">
                   <input type="checkbox" checked={items.length > 0 && sel.size === items.length} onChange={(e) => setSel(e.target.checked ? new Set(items.map((c) => c.id)) : new Set())} />
                 </th>
@@ -105,14 +105,14 @@ export function InboxPage() {
               <th className="px-4 py-3 font-semibold">Assignee</th>
               <th className="px-4 py-3 font-semibold">Age</th>
               <th className="px-4 py-3 font-semibold text-center">Docs</th>
-              {isSuper && <th className="px-4 py-3 font-semibold text-center">Delete</th>}
+              {canDelete && <th className="px-4 py-3 font-semibold text-center">Delete</th>}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td className="px-4 py-6 text-outline" colSpan={isSuper ? 10 : 8}>Loading…</td></tr>}
+            {isLoading && <tr><td className="px-4 py-6 text-outline" colSpan={canDelete ? 10 : 8}>Loading…</td></tr>}
             {items.map((c) => (
               <tr key={c.id} onClick={() => nav(routeFor(c))} className="border-t border-outline-variant hover:bg-primary/[0.03] cursor-pointer transition-colors">
-                {isSuper && (
+                {canDelete && (
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggleSel(c.id)} />
                   </td>
@@ -143,10 +143,11 @@ export function InboxPage() {
                 <td className="px-4 py-3 text-center">{c.documentsComplete
                   ? <Icon name="check_circle" className="text-[18px] text-status-approved" />
                   : <Icon name="pending" className="text-[18px] text-status-pending" />}</td>
-                {isSuper && (
+                {canDelete && (
                   <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => removeTicket(c.id)} title="Delete ticket" className="text-status-rejected hover:opacity-70">
-                      <Icon name="delete" className="text-[16px]" />
+                    <button onClick={() => removeTicket(c.id)} title={`Delete ticket ${c.reference}`}
+                      className="w-8 h-8 rounded-lg grid place-items-center text-status-rejected hover:bg-status-rejected/10 transition-colors">
+                      <Icon name="delete" className="text-[18px]" />
                     </button>
                   </td>
                 )}

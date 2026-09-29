@@ -5,7 +5,6 @@ import { listUsers, getAssignPermissions, type AssignPermissions } from '../lib/
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { SupportingReview } from '../components/SupportingReview'
-import { confidenceCls } from '../lib/format'
 
 const H_LABELS: Record<string, string> = {
   member_name: 'Member name', insurer: 'Insurer', claim_date: 'Claim date', company: 'Company / employer',
@@ -39,6 +38,11 @@ function pageNotesText(pageNotes: FileNotes[]): string {
       const lines = [`Page ${p.page}${p.title ? ` — ${p.title}` : ''}`]
       if (p.summary) lines.push(p.summary)
       for (const it of p.items) lines.push(`${it.label}: ${it.value}`)
+      for (const t of p.tables ?? []) {
+        lines.push('', `[Table] ${t.title || ''}`.trim())
+        if (t.columns.length) lines.push(t.columns.join(' | '))
+        for (const r of t.rows) lines.push(r.join(' | '))
+      }
       parts.push(lines.join('\n'))
     }
   }
@@ -52,9 +56,6 @@ function roRow(label: string, f: NoteField) {
       <div className="flex items-start gap-2">
         <span className="text-xs text-text-main w-40 shrink-0 pt-0.5">{label}</span>
         <span className="flex-1 min-w-0 text-sm text-on-surface break-words">{has ? f.value : '—'}</span>
-        {has
-          ? <Badge className={`shrink-0 ${confidenceCls(f.confidence)}`}>{Math.round(f.confidence * 100)}%</Badge>
-          : <Badge className="shrink-0 bg-on-surface-variant/10 text-on-surface-variant">—</Badge>}
       </div>
       {f?.remark && <p className="text-xs text-outline mt-0.5 pl-1">{f.remark}</p>}
     </div>
@@ -218,15 +219,12 @@ export function JD2AdjudicationPage() {
   const edRow = (sec: 'header' | 'section_b' | 'section_c', key: string, label: string) => {
     const f = (src[sec] as any)[key] as NoteField
     if (decided) return roRow(label, f)
-    const has = (f?.value ?? '').trim() !== ''
     return (
       <div key={label} className="py-1.5 border-b border-outline-variant/40 last:border-0">
         <div className="flex items-center gap-2">
           <span className="text-xs text-text-main w-40 shrink-0">{label}</span>
           <input value={f?.value ?? ''} onChange={(e) => editJD2(sec, key, e.target.value)}
             className="flex-1 min-w-0 text-sm border border-outline-variant rounded-md px-2 py-1" />
-          {has ? <Badge className={`shrink-0 ${confidenceCls(f.confidence)}`}>{Math.round(f.confidence * 100)}%</Badge>
-            : <Badge className="shrink-0 bg-on-surface-variant/10 text-on-surface-variant">—</Badge>}
         </div>
         {f?.remark && <p className="text-xs text-outline mt-0.5 pl-1">{f.remark}</p>}
       </div>

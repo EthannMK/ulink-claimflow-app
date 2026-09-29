@@ -103,6 +103,18 @@ def _vertex() -> list[dict]:
     return list(seen.values())
 
 
+def is_free(provider: str, model: str) -> bool:
+    """True for a free model (OpenRouter ":free" variants or a live price of 0 in and 0 out).
+    Vertex AI has no free models — every call is billed to the Google Cloud project."""
+    m = (model or "").strip()
+    if not m or provider != "openrouter":
+        return False
+    if m.endswith(":free"):
+        return True
+    p = cached_price(provider, m)
+    return bool(p and p[0] == 0 and p[1] == 0)
+
+
 def _stage(raw: str) -> str:
     """GA / PUBLIC_PREVIEW / EXPERIMENTAL -> 'GA' / 'Public Preview' / 'Experimental'."""
     s = raw.replace("_", " ").strip()

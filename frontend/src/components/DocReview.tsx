@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, Fragment } from 'react'
 import { Card, Badge, Icon } from './ui'
-import { confidenceCls } from '../lib/format'
-import { reviewDoc, reviewDocPagesRange, type ReviewResult, type ReviewField, type PageDetail } from '../lib/review'
+import { reviewDoc, reviewDocPagesRange, type ReviewResult, type ReviewField, type PageDetail, type PageTable } from '../lib/review'
+import { refreshUsage } from '../lib/queryClient'
 
 function mergePages(prev: PageDetail[], incoming: PageDetail[]): PageDetail[] {
   const map = new Map<number, PageDetail>()
@@ -25,12 +25,21 @@ const fkey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`
 
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
 
-function pageToText(p: { page: number; title: string; summary: string; items: { label: string; value: string }[] }): string {
+function tableToTsv(t: PageTable): string {
+  return [t.columns, ...t.rows].filter((r) => r.length).map((r) => r.map((c) => c.replace(/[\t\n]/g, ' ')).join('\t')).join('\n')
+}
+function pageToText(p: PageDetail): string {
   const lines = [`Page ${p.page}${p.title ? ` — ${p.title}` : ''}`, '']
   if (p.summary) { lines.push(p.summary, '') }
   for (const it of p.items) lines.push(`${it.label}: ${it.value}`)
+  for (const t of p.tables ?? []) {
+    lines.push('', `[Table] ${t.title || ''}`.trim())
+    if (t.columns.length) lines.push(t.columns.join(' | '))
+    for (const r of t.rows) lines.push(r.join(' | '))
+  }
   return lines.join('\n').trim()
 }
+const isNumeric = (v: string) => /^[\s\d.,()%+-]+$/.test(v) && /\d/.test(v)
 
 export function DocReview({ file, mapFields, initialPages, onSavePages }: {
   file: File
@@ -62,6 +71,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
   const [copied, setCopied] = useState<number | null>(null)
   const [usingSaved, setUsingSaved] = useState(false)   // true while showing previously-saved notes (not fresh AI)
   const startedRef = useRef('')
+  const fillRef = useRef<number[] | null>(null)   // "Read the missing pages": only these pages, keep the rest
   const initialPagesRef = useRef(initialPages)
   useEffect(() => { initialPagesRef.current = initialPages }, [initialPages])
   const pageItemsRef = useRef<PageDetail[]>([])
@@ -147,6 +157,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
     if (startedRef.current === fileKey) return
     let alive = true
     const resuming = DETECT.has(fileKey) && !DETECT.get(fileKey)!.finished
+    const filling = fillRef.current
 
     // Whole-document fallback (used when we can't get a page count from PDF.js).
     const wholeDoc = () => {
@@ -173,14 +184,23 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
 
     const total = isPdf(file) ? numPages : 1
     startedRef.current = fileKey
+    if (filling) DETECT.set(fileKey, { pages: pageItemsRef.current, doneRanges: new Set(), done: total - filling.length, total, finished: false })
     if (!DETECT.has(fileKey)) DETECT.set(fileKey, { pages: [], doneRanges: new Set(), done: 0, total, finished: false })
     const det = DETECT.get(fileKey)!
     det.total = total
-    if (!resuming) setPageItems([])
+    if (!resuming && !filling) setPageItems([])
     setPageErr(''); setPageLoading(true); setPageProgress({ done: det.done, total })
     const CH = 3
     const ranges: [number, number][] = []
-    if (total <= 1) ranges.push([1, 1])
+    if (filling) {
+      // group the missing pages into runs of up to 3 consecutive pages
+      for (const pg of filling) {
+        const last = ranges[ranges.length - 1]
+        if (last && last[0] + last[1] === pg && last[1] < CH) last[1] += 1
+        else ranges.push([pg, 1])
+      }
+      fillRef.current = null
+    } else if (total <= 1) ranges.push([1, 1])
     else for (let s = 1; s <= total; s += CH) ranges.push([s, Math.min(CH, total - s + 1)])
     let remaining = ranges.length
     let anyOk = false
@@ -188,6 +208,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
       const rk = `${s}:${c}`
       reviewDocPagesRange(file, s, c)
         .then((r) => {
+          refreshUsage()   // each finished batch shows in the allowance straight away
           // record progress even if the page was left meanwhile (counted once per range)
           if (!det.doneRanges.has(rk)) { det.doneRanges.add(rk); det.done = Math.min(det.done + c, total); det.pages = mergePages(det.pages, r.pages ?? []) }
           if (r.pages && r.pages.length) anyOk = true
@@ -240,6 +261,23 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
   }
   function updatePageSummary(pg: number, summary: string) {
     setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, summary } : p)))
+  }
+  function updateTableCell(pg: number, ti: number, ri: number, ci: number, value: string) {
+    setPageItems((prev) => prev.map((p) => (p.page !== pg ? p : {
+      ...p, tables: (p.tables ?? []).map((t, i) => (i !== ti ? t : { ...t, rows: t.rows.map((r, j) => (j !== ri ? r : r.map((c, k) => (k === ci ? value : c)))) })),
+    })))
+  }
+  const [copiedTable, setCopiedTable] = useState('')
+  async function copyTable(key: string, t: PageTable) {
+    try { await navigator.clipboard.writeText(tableToTsv(t)); setCopiedTable(key); setTimeout(() => setCopiedTable(''), 1500) } catch { /* ignore */ }
+  }
+  function readMissing() {
+    const have = new Set(pageItems.map((p) => p.page))
+    const missing = Array.from({ length: numPages }, (_, i) => i + 1).filter((p) => !have.has(p))
+    if (!missing.length) return
+    fillRef.current = missing
+    startedRef.current = ''
+    setUsingSaved(false)
   }
   function updatePageItemValue(pg: number, idx: number, value: string) {
     setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, items: p.items.map((it, j) => (j === idx ? { ...it, value } : it)) } : p)))
@@ -318,7 +356,6 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
               <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto pr-1">
                 {(() => { let lastSec = ''; return display.map((f) => {
                   const val = edits[f.id] ?? f.value
-                  const has = val.trim() !== ''
                   const showSec = !!f.section && f.section !== lastSec
                   if (showSec) lastSec = f.section as string
                   return (
@@ -329,8 +366,6 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                         style={{ borderColor: hover === f.id ? 'rgba(202,138,4,0.9)' : 'rgba(0,0,0,0.08)', backgroundColor: hover === f.id ? 'rgba(254,249,195,0.6)' : 'transparent' }}>
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs text-text-main truncate">{f.name}{f.box.w > 0 && f.page !== page && <span className="text-outline"> · p{f.page + 1}</span>}</span>
-                          {has ? <Badge className={confidenceCls(f.confidence)}>{Math.round(f.confidence * 100)}%</Badge>
-                            : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">—</Badge>}
                         </div>
                         <input value={val} onChange={(e) => setEdits({ ...edits, [f.id]: e.target.value })}
                           className="w-full text-sm border border-outline-variant rounded-md px-2 py-1 mt-1" placeholder="not found — enter manually" />
@@ -374,6 +409,13 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                   <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading pages…{pageProgress.total ? ` ${pageProgress.done} / ${pageProgress.total}` : ''} (results appear as each batch finishes)</p>
                 </div>
               )}
+              {!pageLoading && numPages > 1 && pageItems.length > 0 && pageItems.length < numPages && (
+                <div className="flex items-center gap-2 bg-status-pending/10 rounded-lg px-3 py-2 mb-2 text-xs">
+                  <Icon name="info" className="text-[16px] text-status-pending shrink-0" />
+                  <span className="flex-1 text-text-main">Only {pageItems.length} of {numPages} pages have detail. Your edits are kept — this reads just the missing pages.</span>
+                  <button onClick={readMissing} className="font-semibold text-primary hover:underline shrink-0">Read the {numPages - pageItems.length} missing page(s)</button>
+                </div>
+              )}
               {pageErr && pageItems.length === 0 && <Card className="p-3 text-xs text-status-rejected">{pageErr}</Card>}
               <div className="flex-1 min-h-0 overflow-y-auto pr-1">
                 {curPage ? (
@@ -400,6 +442,42 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                         ))}
                       </div>
                     )}
+                    {(curPage.tables ?? []).map((t, ti) => {
+                      const key = `${curPage.page}-${ti}`
+                      const cols = t.columns.length ? t.columns : (t.rows[0] ?? []).map((_, i) => `Column ${i + 1}`)
+                      return (
+                        <div key={ti} className="mt-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Icon name="table_chart" className="text-[15px] text-primary" />
+                            <span className="text-xs font-semibold text-text-main">{t.title || 'Table'}</span>
+                            <span className="text-[11px] text-outline">{t.rows.length} row{t.rows.length === 1 ? '' : 's'}</span>
+                            <button onClick={() => copyTable(key, t)} className="ml-auto text-xs text-primary flex items-center gap-1" title="Copy — paste straight into Excel">
+                              <Icon name={copiedTable === key ? 'check' : 'content_copy'} className="text-[14px]" />{copiedTable === key ? 'Copied' : 'Copy table'}
+                            </button>
+                          </div>
+                          <div className="overflow-auto max-h-96 border border-outline-variant/70 rounded-md">
+                            <table className="w-full text-[11px] border-collapse">
+                              <thead className="sticky top-0 bg-surface-container">
+                                <tr><th className="px-1.5 py-1 text-left text-outline font-medium w-6">#</th>{cols.map((c, ci) => <th key={ci} className="px-1.5 py-1 text-left font-semibold text-text-main whitespace-nowrap">{c}</th>)}</tr>
+                              </thead>
+                              <tbody>
+                                {t.rows.map((r, ri) => (
+                                  <tr key={ri} className="border-t border-outline-variant/40 odd:bg-white even:bg-surface-container/30">
+                                    <td className="px-1.5 text-outline">{ri + 1}</td>
+                                    {cols.map((_, ci) => (
+                                      <td key={ci} className="p-0">
+                                        <input value={r[ci] ?? ''} onChange={(e) => updateTableCell(curPage.page, ti, ri, ci, e.target.value)}
+                                          className={`w-full min-w-[4rem] bg-transparent px-1.5 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-primary ${isNumeric(r[ci] ?? '') ? 'text-right tabular-nums' : ''}`} />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 ) : pageLoading ? (
                   <p className="text-xs text-outline flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading this page…</p>

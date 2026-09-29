@@ -37,7 +37,8 @@ async def extract(kind: str = Form(...), file: UploadFile = File(...), user=Depe
 
     name = file.filename or "file"
     mime = file.content_type or ""
-    parts = [{"text": PROMPTS[kind]}]
+    from app import prompts
+    parts = [{"text": prompts.get("extract_rules" if kind == "rules" else "extract_benefits")}]
     text = ""
     if is_pdf(name, mime):
         text, _ = pdf_text_and_pages(data)

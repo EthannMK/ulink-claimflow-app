@@ -6,7 +6,7 @@ POC: uses Gemini when OCR_PROVIDER=gemini + a key is set; otherwise returns a st
 from __future__ import annotations
 import base64, json, re, uuid
 from app.config import settings
-from app import ai_provider, progress
+from app import ai_provider, progress, prompts
 from app.models import (
     JD1Note, NoteField, ClassifiedDoc,
     JD1Header, JD1SectionA, JD1SectionB, JD1SectionC,
@@ -97,6 +97,56 @@ def pdf_page_images(data: bytes, start: int = 1, count: int = 0, dpi: int = 120,
         except Exception:
             continue
     return out
+
+def pdf_page_plan(data: bytes, start: int = 1, count: int = 0) -> tuple[int, list[dict]]:
+    """Look at each page in the range and decide how the AI should get it.
+    Returns (total_pages, [{"page", "text", "visual"}]). "visual" = the page is a
+    photo/scan (it contains a picture, or has almost no real text) and must be sent
+    as an IMAGE — sending only its (empty) text would make the AI skip it.
+    Many claim packets are MIXED: a digital e-claim form followed by phone photos
+    of medical records and bills."""
+    try:
+        import pymupdf
+        doc = pymupdf.open(stream=data, filetype="pdf")
+    except Exception:
+        texts = pdf_text_by_page(data, max_pages=500)
+        a0 = max(start - 1, 0)
+        hi = len(texts) if count <= 0 else min(a0 + count, len(texts))
+        return len(texts), [{"page": i + 1, "text": texts[i], "visual": len(texts[i].strip()) < 40} for i in range(a0, hi)]
+    n = doc.page_count
+    a0 = max(start - 1, 0)
+    hi = n if count <= 0 else min(a0 + count, n)
+    out = []
+    for i in range(a0, hi):
+        try:
+            p = doc.load_page(i)
+            text = p.get_text() or ""
+            has_picture = bool(p.get_images(full=False))
+        except Exception:
+            text, has_picture = "", True
+        out.append({"page": i + 1, "text": text, "visual": has_picture or len(text.strip()) < 40})
+    return n, out
+
+
+def pdf_render_pages(data: bytes, pages: list[int], dpi: int = 160, quality: int = 78) -> dict[int, bytes]:
+    """Render specific pages (1-based) to JPEG. 160 DPI keeps small printed bill
+    figures legible; the extra cost vs 120 DPI is a fraction of a cent per page."""
+    out: dict[int, bytes] = {}
+    if not pages:
+        return out
+    try:
+        import pymupdf
+        doc = pymupdf.open(stream=data, filetype="pdf")
+    except Exception:
+        return out
+    for pno in pages:
+        try:
+            pix = doc.load_page(pno - 1).get_pixmap(dpi=dpi)
+            out[pno] = pix.tobytes("jpeg", jpg_quality=quality)
+        except Exception:
+            continue
+    return out
+
 
 def is_pdf(name: str, mime: str) -> bool:
     return mime == "application/pdf" or name.lower().endswith(".pdf")
@@ -381,14 +431,25 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
     """files: list of (filename, data, mime)."""
     progress.emit(f"Received {len(files)} file(s), {_mb(sum(len(d) for _n, d, _m in files))} in total", pct=2)
     docs: list[ClassifiedDoc] = []
-    parts: list[dict] = [{"text": _JD1_PROMPT}]
+    parts: list[dict] = [{"text": prompts.get("jd1_note")}]
     reference_only = {"Policy wording", "Table of Benefits"}
 
     for name, data, mime in files:
         text, pages = ("", None)
+        n_visual = 0
         if is_pdf(name, mime):
             text, pages = pdf_text_and_pages(data)
-            native = len(text.strip()) > 200
+            try:
+                total, plan = pdf_page_plan(data)
+                pages = total or pages
+                n_visual = sum(1 for p in plan if p["visual"])
+                full_text = "\n\n".join(f"[PAGE {p['page']}]\n{p['text']}" for p in plan if p["text"].strip())
+                if full_text.strip():
+                    text = full_text
+            except Exception:
+                pass
+            # digital text only when NO page is a photo/scan — otherwise the AI must see the pages
+            native = len(text.strip()) > 200 and n_visual == 0
             dtype = classify_name(name, text)
             method = "native" if native else "vision"
         elif is_image(name, mime):
@@ -397,15 +458,16 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
             dtype = classify_name(name); method = "native" if text else "vision"
 
         docs.append(ClassifiedDoc(name=name, doc_type=dtype, read_method=method, pages=pages, confidence=0.9))
-        how = ("digital text found — sending the text" if method == "native"
-               else "scanned / image — the AI will read the pages visually")
+        how = ("digital text — sending the text" if method == "native"
+               else (f"{(pages or 0) - n_visual} page(s) with text + {n_visual} photo/scanned page(s) — the AI will read every page"
+                     if n_visual and pages and n_visual < pages else "scanned / image — the AI will read the pages visually"))
         progress.emit(f"Read {name}: {'PDF, ' + str(pages) + ' page(s)' if pages else _mb(len(data))} · looks like {dtype} · {how}",
                       pct=min(12, 3 + 9 * len(docs) / max(1, len(files))))
 
         # what we feed the model
         header = f"[DOCUMENT: {name} | type: {dtype}]"
         if method == "native" and text.strip():
-            body = text[:6000] if dtype not in reference_only else text[:2500]
+            body = text[:20000] if dtype not in reference_only else text[:2500]
             parts.append({"text": f"{header}\n{body}"})
         else:
             # scanned/image -> send bytes for vision OCR (cap size for the POC)

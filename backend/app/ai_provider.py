@@ -20,6 +20,7 @@ whichever user triggered it via app.request_ctx — that's what powers the Usage
 dashboard and per-user cost caps.
 """
 from __future__ import annotations
+import logging
 import time
 import httpx
 from app.config import settings
@@ -68,6 +69,7 @@ def _post(url: str, headers: dict, payload: dict, timeout: int):
 
 # Single shared settings store (the ai-settings router imports these helpers).
 settings_store = Collection("ai_settings")
+log = logging.getLogger("claimflow.ai")
 
 
 def default_providers() -> list[dict]:
@@ -95,8 +97,79 @@ def get_settings() -> dict:
     return doc
 
 
+# Every AI task in the app (name = the "feature" recorded in AI usage). documents=True means
+# the task sends claim documents / patient data to the AI.
+TASKS: list[dict] = [
+    {"name": "JD1 note",                    "documents": True,  "hint": "Reads the whole claim packet and writes the JD1 note"},
+    {"name": "Full detection",              "documents": True,  "hint": "Reads every page (Document review)"},
+    {"name": "Required fields",             "documents": True,  "hint": "Finds the required fields on a document"},
+    {"name": "Quick scan",                  "documents": True,  "hint": "New-claim quick scan"},
+    {"name": "Rules / benefits extraction", "documents": True,  "hint": "Reads policy rules and benefit tables"},
+    {"name": "Client email draft",          "documents": True,  "hint": "Drafts the missing-documents email"},
+    {"name": "Help assistant",              "documents": False, "hint": "The small help chat (no claim data)"},
+    {"name": "Prompt test",                 "documents": False, "hint": "AI Prompts page test runs — use sample documents with free models"},
+]
+_DOC_TASKS = {t["name"] for t in TASKS if t["documents"]}
+
+FREE_MODEL_WARNING = ("Free models on OpenRouter are often run by providers that may log or train on what you send. "
+                      "Claim documents contain patient data, so free models are blocked for document tasks "
+                      "unless you switch on \"Allow free models for claim documents\".")
+
+
+def _feature_doc() -> dict:
+    doc = settings_store.get("feature_models")
+    return doc if isinstance(doc, dict) else {}
+
+
+def get_feature_models() -> dict:
+    """Per-task model overrides, e.g. {"Help assistant": {"openrouter": "<model>"}}.
+    A blank/missing entry means "use the provider's main model"."""
+    return _feature_doc().get("models", {})
+
+
+def allow_free_for_documents() -> bool:
+    return bool(_feature_doc().get("allow_free_for_documents", False))
+
+
+def _free(provider: str, model: str) -> bool:
+    try:
+        from app.model_catalog import is_free
+        return is_free(provider, model)
+    except Exception:
+        return False
+
+
+def blocked_free_models(models: dict, providers: list[dict] | None = None) -> list[str]:
+    """Free models that would be used for claim documents (task overrides + main models)."""
+    bad = []
+    for task, per in (models or {}).items():
+        if task in _DOC_TASKS:
+            bad += [f"{task}: {m}" for p, m in (per or {}).items() if _free(p, m)]
+    for spec in (providers if providers is not None else get_settings()["providers"]):
+        if spec.get("enabled", True) and _free(spec.get("provider", ""), spec.get("model", "")):
+            bad.append(f"Main model: {spec.get('model')}")
+    return bad
+
+
+def save_feature_models(models: dict, allow_free: bool | None = None) -> dict:
+    clean = {f: {p: str(m).strip() for p, m in (per or {}).items() if p in PROVIDER_LABELS and str(m).strip()}
+             for f, per in (models or {}).items()}
+    clean = {f: per for f, per in clean.items() if per}
+    allow = allow_free_for_documents() if allow_free is None else bool(allow_free)
+    if not allow:
+        bad = blocked_free_models(clean)
+        if bad:
+            raise ValueError(FREE_MODEL_WARNING + " Blocked: " + "; ".join(bad))
+    settings_store.put("feature_models", {"models": clean, "allow_free_for_documents": allow})
+    return {"models": clean, "allow_free_for_documents": allow}
+
+
 def save_settings(providers: list[dict]) -> dict:
     providers = [p for p in providers if p.get("provider") in PROVIDER_LABELS]
+    if not allow_free_for_documents():
+        bad = blocked_free_models({}, providers)
+        if bad:
+            raise ValueError(FREE_MODEL_WARNING + " Blocked: " + "; ".join(bad))
     providers = sorted(providers, key=lambda p: p.get("priority", 99))
     doc = {"providers": providers}
     settings_store.put("providers", doc)
@@ -328,13 +401,20 @@ def generate_text(parts: list) -> str:
     import time as _t
     attempt = 0
     for spec in ordered:
+        progress.check()   # user cancelled -> don't start (or fall back to) another AI call
         name = spec.get("provider")
         reg = _REGISTRY.get(name)
         if not reg or not reg["available"]():
             continue
         if need_vision and not reg["vision"]:
             continue
-        model = spec.get("model") or ""
+        model = (get_feature_models().get(feature, {}).get(name) or spec.get("model") or "")
+        if feature in _DOC_TASKS and not allow_free_for_documents() and _free(name, model):
+            # safety net (saving already blocks this): never send claim documents to a free model
+            log.info(f"[ai] free model {model} blocked for '{feature}' — using the main model")
+            model = spec.get("model") or ""
+            if _free(name, model):
+                continue
         role = "primary AI service" if attempt == 0 else "backup AI service"
         attempt += 1
         t0 = _t.time()
@@ -365,20 +445,25 @@ def generate_text(parts: list) -> str:
                 txt, tok = reg["call"](parts, model)
             secs = _t.time() - t0
             if txt and txt.strip():
-                print(f"[ai] {name} OK {secs:.1f}s (vision={need_vision}, live={live})", flush=True)
+                log.info(f"[ai] {name} OK {secs:.1f}s (vision={need_vision}, live={live})")
                 usage.record(who, name, model, tok.get("in", 0), tok.get("out", 0), ok=True, purpose=feature, seconds=secs)
                 progress.emit(f"AI finished in {secs:.0f}s — read {tok.get('in', 0):,} tokens, wrote {tok.get('out', 0):,}",
                               kind="step", ai_seconds=round(secs, 1))
                 return txt
-            print(f"[ai] {name} EMPTY {secs:.1f}s", flush=True)
+            log.info(f"[ai] {name} EMPTY {secs:.1f}s")
             usage.record(who, name, model, 0, 0, ok=False, purpose=feature, seconds=secs)
             progress.emit(f"The {role} returned an empty answer after {secs:.0f}s — trying the next one", kind="warn")
+        except progress.Cancelled:
+            secs = _t.time() - t0
+            log.info(f"[ai] {name} CANCELLED by user after {secs:.1f}s")
+            usage.record(who, name, model, 0, 0, ok=False, purpose=feature, seconds=secs)
+            raise
         except Exception as e:
             secs = _t.time() - t0
-            print(f"[ai] {name} FAIL {secs:.1f}s: {str(e)[:160]}", flush=True)
+            log.info(f"[ai] {name} FAIL {secs:.1f}s: {str(e)[:160]}")
             usage.record(who, name, model, 0, 0, ok=False, purpose=feature, seconds=secs)
             progress.emit(f"The {role} did not answer ({_why(e)}) after {secs:.0f}s — trying the next one", kind="warn")
             continue   # quota / rate-limit / error -> try the next provider
-    print("[ai] ALL PROVIDERS FAILED", flush=True)
+    log.info("[ai] ALL PROVIDERS FAILED")
     progress.emit("No AI service could answer right now", kind="warn")
     return ""

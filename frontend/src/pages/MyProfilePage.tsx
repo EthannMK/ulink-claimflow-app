@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PageTitle, Card, Button, Icon } from '../components/ui'
 import { getName, getAvatar, setAvatar as saveAvatar } from '../lib/auth'
 import { changeMyPassword } from '../lib/api'
+import { useQueryClient } from '@tanstack/react-query'
 
 // downscale an uploaded image to a small square data URL (keeps localStorage light)
 function toAvatarDataUrl(file: File): Promise<string> {
@@ -33,12 +34,13 @@ export function MyProfilePage() {
   const [pwMsg, setPwMsg] = useState('')
   const [pwErr, setPwErr] = useState(false)
 
+  const qc = useQueryClient()
   async function submitPassword() {
     setPwMsg(''); setPwErr(false)
-    if (nw.length < 6) { setPwErr(true); setPwMsg('New password must be at least 6 characters'); return }
+    if (nw.length < 8) { setPwErr(true); setPwMsg('New password must be at least 8 characters'); return }
     if (nw !== confirm) { setPwErr(true); setPwMsg('New passwords do not match'); return }
     const r = await changeMyPassword(cur, nw)
-    if (r.ok) { setPwMsg('Password changed ✓'); setCur(''); setNw(''); setConfirm('') }
+    if (r.ok) { setPwMsg('Password changed ✓'); setCur(''); setNw(''); setConfirm(''); qc.invalidateQueries({ queryKey: ['me', 'security'] }) }
     else { setPwErr(true); setPwMsg((await r.json().catch(() => ({}))).detail || 'Failed to change password') }
   }
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { jd1Runner } from '../lib/jd1Runner'
 import { jd1Workspace } from '../lib/jd1Workspace'
+import { clearChat } from './ChatWidget'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from './ui'
 import { getName, getRole, getAvatar, clearSession } from '../lib/auth'
@@ -32,7 +33,7 @@ export function TopBar() {
   }, [])
 
   function logout() {
-    jd1Runner.cancel(); jd1Runner.clear(); jd1Workspace.clear()   // never leave one user's claim files for the next
+    jd1Runner.cancel(); jd1Runner.clear(); jd1Workspace.clear(); clearChat()   // never leave one user's data for the next
     clearSession(); nav('/login')
   }
 

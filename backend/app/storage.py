@@ -5,7 +5,10 @@ there and survive redeploys. Otherwise everything falls back to an in-memory dic
 the app still works — files just reset on restart. Every GCS call is guarded.
 """
 from __future__ import annotations
+import logging
 import os
+
+_log = logging.getLogger("claimflow.storage")
 
 _MODE: str | None = None      # "gcs" | "memory"
 _BUCKET = None
@@ -19,16 +22,21 @@ def _probe() -> None:
     name = os.getenv("GCS_BUCKET", "").strip()
     if not name:
         _MODE = "memory"
+        _log.warning("GCS_BUCKET is not set — uploaded documents are kept in memory and will NOT be saved")
         return
     try:
         from google.cloud import storage
-        client = storage.Client()
+        from app.db import project_id
+        client = storage.Client(project=project_id())
         bucket = client.bucket(name)
-        bucket.exists()   # forces a real call; raises without access
+        if not bucket.exists():   # forces a real call; raises without access
+            raise RuntimeError(f"bucket {name} does not exist")
         _BUCKET = bucket
         _MODE = "gcs"
-    except Exception:
+        _log.info("Cloud Storage connected: bucket=%s", name)
+    except Exception as e:
         _MODE = "memory"
+        _log.warning("Cloud Storage NOT available (bucket=%s) — using memory, files will NOT be saved: %s", name, str(e)[:300])
 
 
 def mode() -> str:

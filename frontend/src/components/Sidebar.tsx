@@ -23,6 +23,7 @@ export function Sidebar() {
   const admin = [
     ...(isSuper ? [{ to: '/admin/users', label: 'Users & Teams', icon: 'group' }] : []),
     ...(isSuper ? [{ to: '/admin/ai-providers', label: 'AI Providers & Models', icon: 'model_training' }] : []),
+    ...(isSuper ? [{ to: '/admin/ai-prompts', label: 'AI Prompts', icon: 'terminal' }] : []),
     { to: '/admin/roles', label: 'Roles', icon: 'admin_panel_settings' },
     { to: '/admin/channels', label: 'Channels', icon: 'hub' },
     { to: '/admin/routing', label: 'Routing Rules', icon: 'alt_route' },

@@ -18,11 +18,12 @@ def _seed():
     """Create the default accounts only if the store is empty (first run)."""
     if not _users.empty():
         return
-    for u in [
-        _mk("superadmin", "Super Admin", "super@ulink.com", "super_admin", "super123"),
-        _mk("admin", "Normal Admin", "admin@ulink.com", "admin", "admin123"),
-        _mk("jd1", "Aung Ko (JD1)", "aung@ulink.com", "user", "user123"),
-    ]:
+    import os
+    seed = [_mk("superadmin", "Super Admin", "super@ulink.com", "super_admin", "super123")]
+    if not os.getenv("K_SERVICE"):          # local development only — never on Cloud Run
+        seed += [_mk("admin", "Normal Admin", "admin@ulink.com", "admin", "admin123"),
+                 _mk("jd1", "Aung Ko (JD1)", "aung@ulink.com", "user", "user123")]
+    for u in seed:
         _users.put(u["username"], u)
 
 

@@ -5,10 +5,10 @@ When no fields are requested, falls back to raw Document AI key/values."""
 import base64, hashlib, json, re, uuid
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from app.models import ReviewResult, ReviewField, ReviewBox, PageAnalysis, PageDetail, PageItem
+from app.models import ReviewResult, ReviewField, ReviewBox, PageAnalysis, PageDetail, PageItem, PageTable
 from app.security import get_current_user
 from app.adapters.docai import review as docai_review
-from app.adapters.jd1 import pdf_text_and_pages, pdf_text_by_page, pdf_page_images, is_pdf
+from app.adapters.jd1 import pdf_text_and_pages, pdf_text_by_page, pdf_page_images, pdf_page_plan, pdf_render_pages, is_pdf
 from app.config import settings
 from app import ai_provider, request_ctx, usage
 
@@ -53,6 +53,20 @@ def _find_box(value: str, raw: list[ReviewField]):
     return 0, ReviewBox()
 
 
+_FIELDS_PROMPT = (
+        "Read this insurance claim document carefully, INCLUDING handwriting and Burmese text, across ALL pages. "
+        "For each NUMBERED field below, extract the applicant's answer (the value the customer FILLED IN, "
+        "not the printed question/label). Keep numbers and IDs exactly as written. "
+        "Dates in these forms are written in DD/MM/YY (or DD/MM/YYYY) format — return them as written, do not reorder. "
+        "For a total claim amount, use the overall total figure even if it appears at the bottom of a table on a later page. "
+        "Follow any per-field hint in parentheses. "
+        "If a field's answer has multiple parts (e.g. more than one diagnosis, or a multi-line address), include ALL of them in full rather than truncating to the first one. "
+        'Respond ONLY with JSON: {"fields":[{"n":<field number>,"value":"<answer>","confidence":0.0}]}. '
+        "Include an entry for every field number. confidence is 0..1; if a field is blank or not present, "
+        'use value "" and confidence 0.'
+)
+
+
 def _gemini_values(data: bytes, mime: str, fields: list[dict]) -> dict:
     if not ai_provider.any_available():
         return {}
@@ -64,18 +78,8 @@ def _gemini_values(data: bytes, mime: str, fields: list[dict]) -> dict:
         lines.append(f"{i}. " + (f"[{sec}] " if sec else "") + str(f.get("label"))
                      + (f" (hint: {hint})" if hint else ""))
     labels = "\n".join(lines)
-    prompt = (
-        "Read this insurance claim document carefully, INCLUDING handwriting and Burmese text, across ALL pages. "
-        "For each NUMBERED field below, extract the applicant's answer (the value the customer FILLED IN, "
-        "not the printed question/label). Keep numbers and IDs exactly as written. "
-        "Dates in these forms are written in DD/MM/YY (or DD/MM/YYYY) format — return them as written, do not reorder. "
-        "For a total claim amount, use the overall total figure even if it appears at the bottom of a table on a later page. "
-        "Follow any per-field hint in parentheses. "
-        "If a field's answer has multiple parts (e.g. more than one diagnosis, or a multi-line address), include ALL of them in full rather than truncating to the first one. "
-        'Respond ONLY with JSON: {"fields":[{"n":<field number>,"value":"<answer>","confidence":0.0}]}. '
-        "Include an entry for every field number. confidence is 0..1; if a field is blank or not present, "
-        'use value "" and confidence 0.\n\nFields:\n' + labels
-    )
+    from app import prompts
+    prompt = prompts.get("required_fields") + "\n\nFields:\n" + labels
     parts = [{"text": prompt}]
     is_pdf_doc = is_pdf("doc", mime) or (mime or "").startswith("application/pdf")
     text = ""
@@ -125,17 +129,25 @@ _PAGE_BASE = (
     "in Burmese, as completely as you can. "
     "Also transcribe any stamp, seal, or signature block you can read (issuing office, date stamped, signatory name/title) as its own label/value pair, and note if a required stamp or signature appears to be missing. "
     "Never write a vague summary like 'contains patient details' or 'form with information' — name the actual fields and values present, even if that means a longer summary. "
-    "If the page contains a TABLE, VOUCHER, or hand-written bill/ledger (rows and columns, possibly hand-drawn), "
-    "read it ROW BY ROW: for every row capture the description and its amount/quantity as a label/value pair, and "
-    "give the column headers. Do not collapse a multi-row table into one line. "
-    "If a page is an INVOICE, BILL or RECEIPT, do not just give its name — extract the details: "
-    "provider/hospital, date, invoice/receipt number, every notable line item with its amount, "
-    "the total amount, and any tax or discount. Put the total as an item like {\"label\":\"Total amount\",\"value\":\"...\"}. "
+    "If the page contains a TABLE, VOUCHER, bill or ledger (rows and columns, printed or hand-drawn), return it in "
+    "\"tables\" as {\"title\":\"...\",\"columns\":[\"...\"],\"rows\":[[\"...\"]]} with the real column headers and "
+    "EVERY row in order, one cell per column, each cell exactly as written (codes, descriptions, units, quantities, "
+    "prices, discounts, amounts). Do NOT also repeat the table rows as label/value items, and never collapse rows. "
+    "If a page is an INVOICE, BILL or RECEIPT, also give as label/value items: provider/hospital, date, "
+    "invoice/receipt/slip number, patient name/ID, and every total line (sub total, discount, tax, net amount, grand "
+    "total) — e.g. {\"label\":\"Net amount\",\"value\":\"...\"}. "
     "Keep numbers and IDs exactly as written. Include every page, even near-empty ones (brief summary, empty items). "
-    'Respond ONLY with JSON: {"pages":[{"page":1,"title":"...","summary":"...","items":[{"label":"...","value":"..."}]}]}'
+    'Respond ONLY with JSON: {"pages":[{"page":1,"title":"...","summary":"...","items":[{"label":"...","value":"..."}],'
+    '"tables":[{"title":"...","columns":["..."],"rows":[["..."]]}]}]} — use "tables":[] when a page has no table.'
 )
-_PAGE_ABS = _PAGE_BASE + " For \"page\", use the [PAGE n] number shown, or the page's position starting at 1."
-_PAGE_REL = _PAGE_BASE + " This is a slice of a larger document — number the pages 1, 2, 3… in the order they appear here."
+_PAGE_ABS_SUFFIX = " For \"page\", use the [PAGE n] number shown, or the page's position starting at 1."
+_PAGE_REL_SUFFIX = " This is a slice of a larger document — number the pages 1, 2, 3… in the order they appear here."
+
+
+def _page_prompt(absolute: bool = True) -> str:
+    """Full-detection instructions (editable in AI Prompts) + how to number pages."""
+    from app import prompts
+    return prompts.get("full_detection") + (_PAGE_ABS_SUFFIX if absolute else _PAGE_REL_SUFFIX)
 
 
 def _gemini_pages_call(parts: list) -> list:
@@ -165,8 +177,23 @@ def _pages_from_raw(raw: list, offset: int) -> list[PageDetail]:
         items = [PageItem(label=str(x.get("label", "")).strip(), value=str(x.get("value", "")).strip())
                  for x in (it.get("items") or [])
                  if isinstance(x, dict) and (str(x.get("label", "")).strip() or str(x.get("value", "")).strip())]
+        tables = []
+        for t in (it.get("tables") or [])[:6]:
+            if not isinstance(t, dict):
+                continue
+            cols = [str(c).strip() for c in (t.get("columns") or []) if str(c).strip()][:20]
+            rows = []
+            for r in (t.get("rows") or [])[:400]:
+                if isinstance(r, list):
+                    cells = [str(c).strip() for c in r][:max(len(cols), 1) if cols else 20]
+                    if cols and len(cells) < len(cols):
+                        cells += [""] * (len(cols) - len(cells))
+                    if any(cells):
+                        rows.append(cells)
+            if rows:
+                tables.append(PageTable(title=str(t.get("title", "")).strip(), columns=cols, rows=rows))
         out.append(PageDetail(page=pg, title=str(it.get("title", "")).strip(),
-                              summary=str(it.get("summary", "")).strip(), items=items))
+                              summary=str(it.get("summary", "")).strip(), items=items, tables=tables))
     return out
 
 
@@ -175,41 +202,38 @@ def _page_analysis(data: bytes, mime: str, start: int = 0, count: int = 0) -> Pa
     (the frontend fires ranges in parallel and streams them in). Without a range, it
     chunks the whole document and runs the chunks concurrently."""
     if not ai_provider.any_available():
-        return PageAnalysis(pages=[], provider="stub", error="No AI provider configured")
+        return PageAnalysis(pages=[], provider="stub", error="AI reading is not available right now — please contact your administrator.")
 
     is_pdf_doc = is_pdf("doc", mime) or (mime or "").startswith("application/pdf")
-    page_texts = pdf_text_by_page(data) if is_pdf_doc else []
-    total_text = sum(len(t) for t in page_texts)
     ranged = count and count > 0
-    a0 = max(start - 1, 0)
 
     tasks: list[tuple[list, int]] = []   # (parts, page-offset)
-    if page_texts and total_text > 200:
-        if ranged:
-            chunk = page_texts[a0:a0 + count]
-            joined = "\n\n".join(f"[PAGE {a0 + i + 1}]\n{t}" for i, t in enumerate(chunk) if t.strip())
-            if joined.strip():
-                tasks.append(([{"text": _PAGE_ABS}, {"text": "[DOCUMENT TEXT BY PAGE]\n" + joined[:20000]}], 0))
-        else:
-            CH = 10
-            for a in range(0, len(page_texts), CH):
-                chunk = page_texts[a:a + CH]
-                joined = "\n\n".join(f"[PAGE {a + i + 1}]\n{t}" for i, t in enumerate(chunk) if t.strip())
-                if joined.strip():
-                    tasks.append(([{"text": _PAGE_ABS}, {"text": "[DOCUMENT TEXT BY PAGE]\n" + joined[:20000]}], 0))
-    elif is_pdf_doc:
-        # scanned PDF → rasterize pages to JPEG images for a vision provider
-        imgs = pdf_page_images(data, start if ranged else 1, count if ranged else 0, dpi=120, cap=(count if ranged else 8))
-        if imgs:
-            parts = [{"text": _PAGE_REL}]
-            for _pno, jpg in imgs:
-                parts.append({"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(jpg).decode()}})
-            tasks.append((parts, imgs[0][0] - 1))   # REL page numbers -> absolute via first page offset
+    if is_pdf_doc:
+        try:
+            _total, plan = pdf_page_plan(data, start if ranged else 1, count if ranged else 0)
+        except Exception:
+            plan = []
+        # a requested range is one AI call; a whole document is split into groups of 3 pages
+        groups = [plan] if ranged else [plan[i:i + 3] for i in range(0, len(plan), 3)]
+        for grp in groups:
+            if not grp:
+                continue
+            imgs = pdf_render_pages(data, [p["page"] for p in grp if p["visual"]])
+            parts: list[dict] = [{"text": _page_prompt(True)}]
+            for p in grp:
+                txt = p["text"].strip()
+                if p["visual"] and p["page"] in imgs:
+                    parts.append({"text": f"[PAGE {p['page']}] — photo/scanned page, image below"
+                                          + (f". Text layer found on it: {txt[:1500]}" if txt else "")})
+                    parts.append({"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(imgs[p["page"]]).decode()}})
+                elif txt:
+                    parts.append({"text": f"[PAGE {p['page']}]\n{txt[:8000]}"})
+                else:
+                    parts.append({"text": f"[PAGE {p['page']}] — blank page"})
+            tasks.append((parts, 0))
     elif len(data) <= 18_000_000:
-        tasks = [([{"text": _PAGE_ABS}, {"inline_data": {"mime_type": mime or "image/jpeg", "data": base64.b64encode(data).decode()}}], 0)]
-    else:
-        text, _ = pdf_text_and_pages(data)
-        tasks = [([{"text": _PAGE_ABS}, {"text": "[DOCUMENT TEXT]\n" + text[:30000]}], 0)]
+        tasks = [([{"text": _page_prompt(True)}, {"text": "[PAGE 1] — image below"},
+                   {"inline_data": {"mime_type": mime or "image/jpeg", "data": base64.b64encode(data).decode()}}], 0)]
 
     if not tasks:
         return PageAnalysis(pages=[], provider="ai", error="Could not read the document.")
@@ -288,7 +312,7 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
         except Exception:
             pages = 1
     result = ReviewResult(pages=pages, fields=raw, all_fields=raw,
-                          provider=("docai" if settings.use_docai else "ai"), error=error)
+                          provider="ai", error=error)
 
     req = []
     if fields:

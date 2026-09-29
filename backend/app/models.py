@@ -101,11 +101,17 @@ class PageItem(BaseModel):
     label: str = ""
     value: str = ""
 
+class PageTable(BaseModel):
+    title: str = ""
+    columns: list[str] = []
+    rows: list[list[str]] = []
+
 class PageDetail(BaseModel):
     page: int = 0
     title: str = ""
     summary: str = ""
     items: list[PageItem] = []
+    tables: list[PageTable] = []      # bills / vouchers / ledgers read row by row
 
 
 # ---- JD1 Process Note models (POC) ----

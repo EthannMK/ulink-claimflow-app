@@ -5,6 +5,13 @@ import { Icon } from './ui'
 const price = (m: CatalogModel) =>
   m.free ? 'free' : m.price_in_per_1m != null ? `$${m.price_in_per_1m}/$${m.price_out_per_1m ?? '?'} per 1M` : ''
 
+/** Free vs paid, at a glance. The primary cloud service has no free models (every call is billed). */
+export function CostBadge({ free }: { free: boolean }) {
+  return free
+    ? <span className="text-[10px] px-1.5 rounded bg-status-approved/10 text-status-approved shrink-0">Free</span>
+    : <span className="text-[10px] px-1.5 rounded bg-surface-container text-text-main shrink-0">Paid</span>
+}
+
 /** Searchable dropdown of the models a provider offers RIGHT NOW (fetched live from the
  *  provider via the backend — nothing hard-coded), plus Refresh and Test. */
 export function ModelPicker({ provider, value, standard, onChange }: {
@@ -15,6 +22,7 @@ export function ModelPicker({ provider, value, standard, onChange }: {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [visionOnly, setVisionOnly] = useState(true)
+  const [freeOnly, setFreeOnly] = useState(false)
   const [test, setTest] = useState<ModelTestResult | null>(null)
   const [testing, setTesting] = useState(false)
   const box = useRef<HTMLDivElement>(null)
@@ -37,8 +45,8 @@ export function ModelPicker({ provider, value, standard, onChange }: {
   const current = models.find((m) => m.id === value)
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return models.filter((m) => (!visionOnly || m.vision) && (!t || m.id.toLowerCase().includes(t) || m.name.toLowerCase().includes(t)))
-  }, [models, q, visionOnly])
+    return models.filter((m) => (!visionOnly || m.vision) && (!freeOnly || m.free) && (!t || m.id.toLowerCase().includes(t) || m.name.toLowerCase().includes(t)))
+  }, [models, q, visionOnly, freeOnly])
 
   async function runTest() {
     setTesting(true); setTest(null)
@@ -51,7 +59,7 @@ export function ModelPicker({ provider, value, standard, onChange }: {
       <button type="button" onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between gap-2 border border-outline-variant rounded-md px-2 py-1.5 text-left bg-white hover:border-primary">
         <span className="min-w-0">
-          <span className="block font-mono text-xs truncate">{value || 'Choose a model…'}</span>
+          <span className="flex items-center gap-1.5"><span className="font-mono text-xs truncate">{value || 'Choose a model…'}</span>{value && <CostBadge free={current ? current.free : value.endsWith(':free')} />}</span>
           {current && <span className="block text-[11px] text-outline truncate">{current.name}{price(current) ? ` · ${price(current)}` : ''}</span>}
           {!current && value && cat && !loading && <span className="block text-[11px] text-status-pending">Not in the provider's current list — use Test to check it still works</span>}
         </span>
@@ -75,6 +83,11 @@ export function ModelPicker({ provider, value, standard, onChange }: {
             <label className="text-[11px] text-text-main flex items-center gap-1 whitespace-nowrap" title="Scanned claims are images — the model must accept images">
               <input type="checkbox" checked={visionOnly} onChange={(e) => setVisionOnly(e.target.checked)} />Reads images only
             </label>
+            {models.some((m) => m.free) && (
+              <label className="text-[11px] text-text-main flex items-center gap-1 whitespace-nowrap">
+                <input type="checkbox" checked={freeOnly} onChange={(e) => setFreeOnly(e.target.checked)} />Free only
+              </label>
+            )}
           </div>
           <ul className="max-h-72 overflow-y-auto py-1" role="listbox">
             {shown.map((m) => (
@@ -83,6 +96,7 @@ export function ModelPicker({ provider, value, standard, onChange }: {
                   className={`w-full text-left px-3 py-1.5 hover:bg-surface-container ${m.id === value ? 'bg-primary/[0.06]' : ''}`}>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs truncate flex-1">{m.id}</span>
+                    <CostBadge free={m.free} />
                     {m.id === standard && <span className="text-[10px] px-1.5 rounded bg-primary/10 text-primary">standard</span>}
                     {m.stage && <span className="text-[10px] px-1.5 rounded bg-surface-container text-text-main">{m.stage}</span>}
                     {!m.vision && <span className="text-[10px] px-1.5 rounded bg-status-pending/10 text-status-pending">text only</span>}

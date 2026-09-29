@@ -81,14 +81,28 @@ export async function updateAiSettings(providers: AiProvider[]): Promise<{ provi
 }
 
 // ---- AI usage & costs ---------------------------------------------------------
+/** Own allowance. Everyone gets client tokens; the *_usd fields come back for the Super Admin only. */
 export interface MyUsage {
-  spent_usd: number; cap_usd: number | null; remaining_usd: number | null; requests: number; tokens: number
-  today_usd: number; daily_cap_usd: number | null; daily_remaining_usd: number | null
+  requests: number
+  used_tokens: number; cap_tokens: number | null; remaining_tokens: number | null
+  today_tokens: number; daily_cap_tokens: number | null; daily_remaining_tokens: number | null
+  spent_usd?: number; cap_usd?: number | null; today_usd?: number; daily_cap_usd?: number | null
+  real_tokens?: number; usd_per_1m_tokens?: number
+}
+export interface Billing { usd_per_1m_tokens: number; default: number; actual: { usd_per_1m_tokens: number | null; calls: number; tokens: number } }
+export async function getBilling(): Promise<Billing> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/usage/billing`, { headers: authHeaders() }), 'Loading token rate')
+}
+export async function saveBilling(usd_per_1m_tokens: number): Promise<Billing> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/usage/billing`, {
+    method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ usd_per_1m_tokens }),
+  }), 'Saving token rate')
 }
 export interface UserLimit {
   id: string; username: string; name: string; role: string; active: boolean
   spent_usd: number; cap_usd: number | null; remaining_usd: number | null
   today_usd: number; daily_cap_usd: number | null; daily_remaining_usd: number | null
+  used_tokens: number | null; cap_tokens: number | null; today_tokens: number | null; daily_cap_tokens: number | null
   status: 'ok' | 'near' | 'daily_reached' | 'total_reached'
 }
 export async function getUsageLimits(): Promise<UserLimit[]> {
@@ -130,7 +144,7 @@ export interface ProviderAccount {
   credits: null | { error?: string; total_credits_usd?: number | null; total_usage_usd?: number | null; balance_usd?: number | null }
 }
 export async function getMyUsage(): Promise<MyUsage> {
-  if (!backendOn()) { await wait(80); return { spent_usd: 0, cap_usd: null, remaining_usd: null, requests: 0, tokens: 0, today_usd: 0, daily_cap_usd: null, daily_remaining_usd: null } }
+  if (!backendOn()) { await wait(80); return { requests: 0, used_tokens: 0, cap_tokens: null, remaining_tokens: null, today_tokens: 0, daily_cap_tokens: null, daily_remaining_tokens: null } }
   return jsonOrThrow(await fetch(`${apiBase()}/api/usage/me`, { headers: authHeaders() }), 'Loading your usage')
 }
 export async function getUsageSummary(f: UsageFilters): Promise<UsageSummary> {
@@ -167,4 +181,71 @@ export async function testModel(provider: string, model: string): Promise<ModelT
   return jsonOrThrow(await fetch(`${apiBase()}/api/ai-settings/test-model`, {
     method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, model }),
   }), 'Testing model')
+}
+
+// ---- Teams (server-side, shared) ---------------------------------------------
+export interface Team { id: string; name: string; lead: string; members: string[] }
+export async function listTeams(): Promise<Team[]> {
+  if (!backendOn()) { await wait(60); return [] }
+  return jsonOrThrow(await fetch(`${apiBase()}/api/teams`, { headers: authHeaders() }), 'Loading teams')
+}
+export async function saveTeam(t: { id?: string; name: string; lead: string; members: string[] }): Promise<Team> {
+  const url = t.id ? `${apiBase()}/api/teams/${t.id}` : `${apiBase()}/api/teams`
+  return jsonOrThrow(await fetch(url, {
+    method: t.id ? 'PUT' : 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: t.name, lead: t.lead, members: t.members }),
+  }), 'Saving team')
+}
+export async function removeTeam(id: string): Promise<void> {
+  await jsonOrThrow(await fetch(`${apiBase()}/api/teams/${id}`, { method: 'DELETE', headers: authHeaders() }), 'Deleting team')
+}
+export async function getMySecurity(): Promise<{ default_password: boolean }> {
+  if (!backendOn()) return { default_password: false }
+  return jsonOrThrow(await fetch(`${apiBase()}/api/me/security`, { headers: authHeaders() }), 'Loading account security')
+}
+
+// ---- per-feature model overrides (Super Admin) --------------------------------
+export type FeatureModels = Record<string, Record<string, string>>   // task -> provider -> model id
+export interface TaskModels {
+  models: FeatureModels; allow_free_for_documents: boolean; free_warning: string
+  tasks: { name: string; documents: boolean; hint: string }[]
+}
+export async function getFeatureModels(): Promise<TaskModels> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/ai-settings/feature-models`, { headers: authHeaders() }), 'Loading task models')
+}
+export async function saveFeatureModels(models: FeatureModels, allow_free_for_documents: boolean): Promise<TaskModels> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/ai-settings/feature-models`, {
+    method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ models, allow_free_for_documents }),
+  }), 'Saving task models')
+}
+
+// ---- AI prompts (Super Admin) --------------------------------------------------
+export interface PromptInfo {
+  id: string; name: string; feature: string; output: 'json' | 'text'; description: string; note: string
+  custom: boolean; updated_at: string; updated_by: string
+}
+export interface PromptDetail extends PromptInfo { text: string; default: string }
+export interface PromptTestResult {
+  ok: boolean; output: string; error: string; seconds: number; tokens_in?: number; tokens_out?: number
+  json_ok: boolean | null; provider_label: string; model: string
+}
+export async function listPrompts(): Promise<PromptInfo[]> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/prompts`, { headers: authHeaders() }), 'Loading prompts')
+}
+export async function getPrompt(id: string): Promise<PromptDetail> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/prompts/${id}`, { headers: authHeaders() }), 'Loading prompt')
+}
+export async function savePrompt(id: string, text: string): Promise<PromptDetail> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/prompts/${id}`, {
+    method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+  }), 'Saving prompt')
+}
+export async function resetPrompt(id: string): Promise<PromptDetail> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/prompts/${id}`, { method: 'DELETE', headers: authHeaders() }), 'Resetting prompt')
+}
+export async function testPrompt(id: string, text: string, opts: { sample?: string; file?: File | null; provider?: string }): Promise<PromptTestResult> {
+  const fd = new FormData()
+  fd.append('text', text); fd.append('sample_text', opts.sample ?? ''); fd.append('provider', opts.provider ?? '')
+  if (opts.file) fd.append('file', opts.file, opts.file.name)
+  return jsonOrThrow(await fetch(`${apiBase()}/api/prompts/${id}/test`, { method: 'POST', headers: authHeaders(), body: fd }), 'Testing prompt')
 }

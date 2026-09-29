@@ -31,7 +31,7 @@ export function StatCard({ label, value, icon, tone = 'primary' }: { label: stri
     </Card>
   )
 }
-export function Button({ children, variant = 'primary', size = 'md', ...p }: any) {
+export function Button({ children, variant = 'primary', size = 'md', className = '', ...p }: any) {
   const base = 'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50'
   const sizes: Record<string, string> = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-2.5 text-sm' }
   const variants: Record<string, string> = {
@@ -40,7 +40,7 @@ export function Button({ children, variant = 'primary', size = 'md', ...p }: any
     outline: 'border border-outline-variant bg-white text-text-main hover:bg-surface-container',
     ghost: 'text-text-main hover:bg-surface-container',
   }
-  return <button className={`${base} ${sizes[size]} ${variants[variant]}`} {...p}>{children}</button>
+  return <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...p}>{children}</button>
 }
 export interface Attachment { name: string; size: number; dataUrl?: string }
 

@@ -11,7 +11,8 @@
                         OPENROUTER_MANAGEMENT_KEY). Keys are never returned.
 """
 import httpx
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 from app.models import Role
 from app.security import get_current_user, require_role
 from app.config import settings
@@ -22,7 +23,31 @@ router = APIRouter(prefix="/api/usage", tags=["usage"])
 
 @router.get("/me")
 def my_usage(user=Depends(get_current_user)):
-    return usage.my_usage(user.get("username", ""))
+    """Own allowance in tokens. Dollar amounts are included for the Super Admin only."""
+    return usage.my_usage(user.get("username", ""), include_usd=user.get("role") == "super_admin")
+
+
+class _Billing(BaseModel):
+    usd_per_1m_tokens: float
+
+
+@router.get("/billing")
+def get_billing(user=Depends(require_role(Role.super_admin))):
+    """The client token rate (1M tokens = $X) + what real calls have cost so far."""
+    return {"usd_per_1m_tokens": usage.billing_rate(), "default": usage.DEFAULT_USD_PER_1M_TOKENS,
+            "actual": usage.actual_rate()}
+
+
+@router.put("/billing")
+def put_billing(body: _Billing, user=Depends(require_role(Role.super_admin))):
+    try:
+        usage.save_billing_rate(body.usd_per_1m_tokens)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    from app import audit
+    audit.record("billing_rate", user.get("name") or user.get("username", ""),
+                 detail=f"Client token rate set to ${body.usd_per_1m_tokens} per 1M tokens")
+    return get_billing(user)
 
 
 class _F:

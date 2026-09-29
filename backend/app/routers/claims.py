@@ -107,8 +107,8 @@ def update_claim(claim_id: str, body: TicketUpdate, user=Depends(get_current_use
     return _put(c)
 
 @router.delete("/claims/{claim_id}")
-def delete_claim(claim_id: str, user=Depends(require_role(Role.super_admin))):
-    """Delete an Inbox ticket. Super admin only, recorded in the audit log. If the
+def delete_claim(claim_id: str, user=Depends(require_role(Role.super_admin, Role.admin))):
+    """Delete an Inbox ticket. Super Admin and Admin only (not normal users), recorded in the audit log. If the
     ticket already reached JD2, its JD2 queue item and stored document blobs are
     cleaned up too, mirroring the cleanup the JD2-side delete already does."""
     c = _get(claim_id)

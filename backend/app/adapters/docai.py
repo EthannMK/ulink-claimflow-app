@@ -58,19 +58,22 @@ def _pdf_chunks(data: bytes) -> list[bytes]:
 
 def review(data: bytes, mime: str) -> ReviewResult:
     if not (settings.docai_processor_id and settings.docai_project):
-        return ReviewResult(error="Document AI not configured (set DOCAI_PROJECT / DOCAI_PROCESSOR_ID).")
+        print("[docai] not configured (set DOCAI_PROJECT / DOCAI_PROCESSOR_ID)", flush=True)
+        return ReviewResult(error="Field highlighting is not available right now.")
     try:
         from google.cloud import documentai_v1 as documentai
         from google.api_core.client_options import ClientOptions
     except Exception as e:
-        return ReviewResult(error=f"documentai library not installed: {e}")
+        print(f"[docai] library not installed: {e}", flush=True)
+        return ReviewResult(error="Field highlighting is not available right now.")
 
     try:
         opts = ClientOptions(api_endpoint=f"{settings.docai_location}-documentai.googleapis.com")
         client = documentai.DocumentProcessorServiceClient(client_options=opts)
         name = client.processor_path(settings.docai_project, settings.docai_location, settings.docai_processor_id)
     except Exception as e:
-        return ReviewResult(error=f"Document AI client error: {e}")
+        print(f"[docai] client error: {e}", flush=True)
+        return ReviewResult(error="Field highlighting is not available right now.")
 
     chunks = _pdf_chunks(data) if _looks_pdf(data, mime) else [data]
     fields: list[ReviewField] = []
@@ -84,7 +87,8 @@ def review(data: bytes, mime: str) -> ReviewResult:
             result = client.process_document(request=documentai.ProcessRequest(name=name, raw_document=raw))
             doc = result.document
         except Exception as e:
-            return ReviewResult(pages=total_pages or 1, fields=fields, error=f"Document AI error: {e}")
+            print(f"[docai] error: {e}", flush=True)
+            return ReviewResult(pages=total_pages or 1, fields=fields, error="Field highlighting is not available right now.")
         for pi, page in enumerate(doc.pages):
             for ff in page.form_fields:
                 # In Document AI, field_name / field_value ARE Layout objects
@@ -101,4 +105,4 @@ def review(data: bytes, mime: str) -> ReviewResult:
                     box=_box(val_layout) if getattr(val_layout, "bounding_poly", None) else _box(name_layout),
                 ))
         total_pages = offset + len(doc.pages)
-    return ReviewResult(pages=total_pages or 1, fields=fields, provider="docai")
+    return ReviewResult(pages=total_pages or 1, fields=fields, provider="ai")

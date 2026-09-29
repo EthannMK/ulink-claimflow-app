@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getClaim } from '../lib/api'
 import { Card, Badge, Icon, Button } from '../components/ui'
+import { DeleteTicketButton } from '../components/DeleteTicketButton'
 
 export function LogWorkspacePage() {
   const { id } = useParams(); const nav = useNavigate()
@@ -17,6 +18,7 @@ export function LogWorkspacePage() {
       <div className="flex items-center gap-3 mb-4">
         <h1 className="font-display text-2xl font-bold text-primary">LOG Request · {c.reference}</h1>
         <Badge className="bg-brand-accent/10 text-brand-accent">Est &gt; USD 1,000</Badge>
+        <div className="ml-auto"><DeleteTicketButton id={c.id} reference={c.reference} /></div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Card className="p-5 space-y-3">

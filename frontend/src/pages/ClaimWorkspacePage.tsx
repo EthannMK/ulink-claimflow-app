@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getClaim } from '../lib/api'
 import { Card, Badge, Icon, Button } from '../components/ui'
-import { categoryMeta, statusMeta, confidenceCls } from '../lib/format'
+import { DeleteTicketButton } from '../components/DeleteTicketButton'
+import { categoryMeta, statusMeta } from '../lib/format'
 
 const steps = ['Received', 'Category detected', 'Documents scanned', 'Data extracted', 'Completeness checked', 'Policy benefits checked', 'Summary ready', 'Ready for review']
 function SectionHead({ icon, title, tone = 'primary', extra }: { icon: string; title: string; tone?: string; extra?: string }) {
@@ -37,6 +38,7 @@ export function ClaimWorkspacePage() {
           <div className="text-sm text-text-main">{c.memberName} · {c.insurer}{c.amount ? ` · ${c.amount.toLocaleString()} MMK` : ''}</div>
         </div>
         <div className="ml-auto flex gap-2">
+          <DeleteTicketButton id={c.id} reference={c.reference} />
           <Button variant="outline" onClick={() => setFlash('Claim reassigned. ✓')}>Reassign</Button>
           <Button onClick={() => nav('/jd2')}>Pass to JD2</Button>
         </div>
@@ -77,11 +79,10 @@ export function ClaimWorkspacePage() {
                 <div key={f.key} className="flex items-center gap-2">
                   <div className="w-36 text-xs text-text-main">{f.key}</div>
                   <input defaultValue={f.value} className="flex-1 text-sm border border-outline-variant rounded-md px-2 py-1" />
-                  <Badge className={confidenceCls(f.confidence)}>{Math.round(f.confidence * 100)}%</Badge>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-outline mt-2">Amber/red confidence = please verify (often handwritten fields).</p>
+            <p className="text-xs text-outline mt-2">Please check each value against the documents (handwriting especially).</p>
           </Card>
         </div>
 

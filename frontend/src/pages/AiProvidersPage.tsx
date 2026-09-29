@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAiStatus, updateAiSettings, type AiProviderStatus, type AiStatus } from '../lib/api'
+import { getAiStatus, updateAiSettings, getFeatureModels, saveFeatureModels, type AiProviderStatus, type AiStatus, type FeatureModels, type TaskModels } from '../lib/api'
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Badge, Button, Icon } from '../components/ui'
 import { ModelPicker } from '../components/ModelPicker'
@@ -51,18 +51,6 @@ export function AiProvidersPage() {
           <Button size="sm" onClick={save} disabled={!dirty || busy}><Icon name="save" className="text-[16px]" />{busy ? 'Saving…' : 'Save changes'}</Button>
         </div>} />
 
-      <Card className="p-4 mb-4 grid grid-cols-2 gap-4 text-sm">
-        <div className="flex gap-3">
-          <Icon name="cloud" className="text-primary text-[22px]" />
-          <div><div className="font-semibold text-primary">Provider</div>
-            <p className="text-text-main text-xs mt-0.5">The company or platform we send the request to — like choosing a phone carrier.</p></div>
-        </div>
-        <div className="flex gap-3">
-          <Icon name="psychology" className="text-primary text-[22px]" />
-          <div><div className="font-semibold text-primary">Model</div>
-            <p className="text-text-main text-xs mt-0.5">The specific AI that provider runs for us — like choosing the phone. All providers are set to the same standard model; each just writes its id slightly differently.</p></div>
-        </div>
-      </Card>
 
       {msg && <p className={`text-sm mb-3 ${msg.startsWith('Saved') ? 'text-status-approved' : 'text-status-rejected'}`}>{msg}</p>}
 
@@ -115,6 +103,8 @@ export function AiProvidersPage() {
         </table>
       </Card>
 
+      <TaskModelsCard rows={rows} />
+
       <Card className="p-4 text-sm">
         <div className="flex items-center gap-2 mb-2"><Icon name="key" className="text-primary" /><span className="font-semibold text-primary">API keys</span></div>
         <p className="text-xs text-text-main mb-3">For security, keys are never entered or shown in the app. They live only on the server (<code>backend/.env</code> locally, Cloud Run secrets when deployed). This page just shows whether each one is present.</p>
@@ -131,5 +121,76 @@ export function AiProvidersPage() {
         </div>
       </Card>
     </div>
+  )
+}
+
+/** Which model each AI task uses — e.g. a free model for prompt testing, a paid one for claims.
+ *  Blank = the provider's main model (table above). Free models are blocked for tasks that send
+ *  claim documents unless the Super Admin explicitly allows it (checked on the server too). */
+function TaskModelsCard({ rows }: { rows: AiProviderStatus[] }) {
+  const [data, setData] = useState<TaskModels | null>(null)
+  const [fm, setFm] = useState<FeatureModels>({})
+  const [allowFree, setAllowFree] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+  function apply(d: TaskModels) { setData(d); setFm(d.models); setAllowFree(d.allow_free_for_documents) }
+  useEffect(() => { getFeatureModels().then(apply).catch((e) => setMsg(String(e?.message ?? e))) }, [])
+  function set(task: string, provider: string, model: string) {
+    setFm((x) => ({ ...x, [task]: { ...(x[task] ?? {}), [provider]: model } })); setDirty(true); setMsg('')
+  }
+  async function save() {
+    setBusy(true); setMsg('')
+    try { apply(await saveFeatureModels(fm, allowFree)); setDirty(false); setMsg('Saved. New AI requests use these models straight away.') }
+    catch (e: any) { setMsg(String(e?.message ?? e)) } finally { setBusy(false) }
+  }
+  const active = rows.filter((r) => r.enabled)
+  return (
+    <Card className="p-4 mb-4 text-sm">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon name="tune" className="text-primary" /><span className="font-semibold text-primary">Model for each AI task</span>
+        <Button size="sm" className="ml-auto" onClick={save} disabled={!dirty || busy}>{busy ? 'Saving…' : 'Save'}</Button>
+      </div>
+      <p className="text-xs text-text-main mb-3">Every task uses the main model above unless you pick another one here — for example a <b>free</b> model for prompt testing and the help chat, and a <b>paid</b> model for reading claims. Each pick is per provider, so the backup provider keeps working too.</p>
+      {!data ? <p className="text-xs text-outline">Loading…</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-outline text-left">
+              <tr><th className="py-1 pr-3 w-56">Task</th>{active.map((r) => <th key={r.provider} className="py-1 pr-3">{r.label}</th>)}</tr>
+            </thead>
+            <tbody>
+              {data.tasks.map((t) => (
+                <tr key={t.name} className="border-t border-outline-variant align-top">
+                  <td className="py-2 pr-3">
+                    <div className="font-medium text-text-main flex items-center gap-1.5">{t.name}
+                      {t.documents && <span title="Sends claim documents"><Icon name="lock" className="text-[13px] text-outline" /></span>}</div>
+                    <div className="text-[11px] text-outline">{t.hint}</div>
+                  </td>
+                  {active.map((r) => {
+                    const cur = fm[t.name]?.[r.provider] ?? ''
+                    return (
+                      <td key={r.provider} className="py-2 pr-3">
+                        {cur
+                          ? <>
+                              <ModelPicker provider={r.provider} value={cur} standard="" onChange={(id) => set(t.name, r.provider, id)} />
+                              <button onClick={() => set(t.name, r.provider, '')} className="text-[11px] text-primary hover:underline mt-1">Use the main model</button>
+                            </>
+                          : <div className="flex items-center gap-2 pt-1"><span className="text-outline">Main model</span>
+                              <button onClick={() => set(t.name, r.provider, r.model)} className="text-primary hover:underline">Change</button></div>}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <label className="flex items-start gap-2 mt-3 text-xs bg-status-pending/5 rounded-lg p-2.5">
+        <input type="checkbox" className="mt-0.5" checked={allowFree} onChange={(e) => { setAllowFree(e.target.checked); setDirty(true); setMsg('') }} />
+        <span><b>Allow free models for claim documents</b> (tasks with <Icon name="lock" className="text-[12px] align-middle" />). Leave this off for real claims — {data?.free_warning ? data.free_warning.split('. ')[0].toLowerCase() : 'free models may log what you send'}.</span>
+      </label>
+      {msg && <p className={`text-xs mt-2 ${msg.startsWith('Saved') ? 'text-status-approved' : 'text-status-rejected'}`}>{msg}</p>}
+    </Card>
   )
 }

@@ -49,7 +49,8 @@ export function JD1Progress({ run }: { run: JD1RunState }) {
           ))}
         </div>
         {running
-          ? <button onClick={() => jd1Runner.cancel()} className="text-xs text-status-rejected hover:underline">Stop waiting</button>
+          ? <button onClick={() => { if (window.confirm('Cancel this scan?\n\nThe AI stops right away. Nothing is saved, and only the work already done is counted in your AI usage. You can start the scan again any time.')) jd1Runner.cancel() }}
+              title="Stop the AI and cancel this scan" className="text-xs text-status-rejected hover:underline">Cancel scan</button>
           : <button onClick={() => jd1Runner.clear()} className="text-xs text-outline hover:underline">Hide</button>}
       </div>
 
@@ -67,6 +68,11 @@ export function JD1Progress({ run }: { run: JD1RunState }) {
           )}
           {running && run.chars > 0 && <p className="text-[11px] text-outline mt-1.5">{run.chars.toLocaleString()} characters of the note written so far</p>}
           {running && quiet > 20000 && <p className="text-[11px] text-status-pending mt-1.5">No news from the server for {secs(quiet)} — still waiting on the AI.</p>}
+          {run.status === 'done' && run.tokensUsed != null && (
+            <p className="text-xs text-text-main mt-2 flex items-center gap-1.5">
+              <Icon name="toll" className="text-[16px] text-primary" />This scan used <b>{run.tokensUsed.toLocaleString()}</b> tokens
+            </p>
+          )}
           {running && <p className="text-[11px] text-outline mt-2">You can switch tabs or open other pages — the scan keeps running and the note appears here when you come back.</p>}
         </div>
       ) : (

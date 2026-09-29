@@ -1,11 +1,12 @@
 import { useState, Fragment } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getMyUsage, getUsageSummary, getUsageRecent, getUsageOptions, downloadUsageCsv, getProviderAccount, getUsageLimits, listUsers, type UsageSummary, type UsageFilters, type UserLimit } from '../lib/api'
+import { getMyUsage, getBilling, saveBilling, getUsageSummary, getUsageRecent, getUsageOptions, downloadUsageCsv, getProviderAccount, getUsageLimits, listUsers, type UsageSummary, type UsageFilters, type UserLimit } from '../lib/api'
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Badge, Button, Icon } from '../components/ui'
 import { LimitEditor } from '../components/LimitEditor'
 
 const usd = (n: number | null | undefined, dp = 2) => (n === null || n === undefined ? '—' : `$${Number(n).toFixed(dp)}`)
+const tok = (n: number | null | undefined) => (n === null || n === undefined ? '—' : Number(n).toLocaleString())
 const num = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n))
 const RANGES: [number, string][] = [[1, 'Today'], [7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days']]
 
@@ -19,15 +20,17 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
   )
 }
 
-function Meter({ label, spent, cap, hint }: { label: string; spent: number; cap: number | null; hint: string }) {
+/** Allowance meter in client tokens. `usdLine` (Super Admin only) adds the real dollar amounts. */
+function Meter({ label, spent, cap, hint, usdLine }: { label: string; spent: number; cap: number | null; hint: string; usdLine?: string }) {
   const pct = cap != null && cap > 0 ? Math.min(100, (spent / cap) * 100) : 0
   const tone = pct >= 100 ? 'bg-status-rejected' : pct >= 80 ? 'bg-status-pending' : 'bg-primary'
   return (
     <div>
       <div className="flex items-baseline justify-between text-xs mb-1">
         <span className="font-semibold text-text-main">{label}</span>
-        <span className="text-text-main">{usd(spent, 4)} {cap != null ? <>of <b>{usd(cap)}</b> · <span className="text-outline">{usd(Math.max(cap - spent, 0), 4)} left</span></> : <span className="text-outline">· no limit</span>}</span>
+        <span className="text-text-main">{tok(spent)} tokens {cap != null ? <>of <b>{tok(cap)}</b> · <span className="text-outline">{tok(Math.max(cap - spent, 0))} left</span></> : <span className="text-outline">· no limit</span>}</span>
       </div>
+      {usdLine && <div className="text-[11px] text-outline text-right -mt-0.5 mb-1">{usdLine}</div>}
       {cap != null && (
         <div className="h-2 rounded-full bg-surface-container overflow-hidden" role="meter" aria-label={label} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
           <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
@@ -46,10 +49,12 @@ function MyAllowance() {
   return (
     <Card className="p-5 mb-5">
       <div className="flex items-center gap-2 mb-4"><Icon name="account_balance_wallet" className="text-primary" /><span className="font-semibold text-primary">My AI allowance</span>
-        <span className="ml-auto text-xs text-outline">{data.requests} AI requests · {num(data.tokens)} tokens so far</span></div>
+        <span className="ml-auto text-xs text-outline">{data.requests} AI requests · {tok(data.used_tokens)} tokens used in total</span></div>
       <div className="grid grid-cols-2 gap-6">
-        <Meter label="Today" spent={data.today_usd} cap={data.daily_cap_usd} hint="Resets at midnight (Myanmar time)." />
-        <Meter label="Total" spent={data.spent_usd} cap={data.cap_usd} hint="Ask your administrator if you need more." />
+        <Meter label="Today" spent={data.today_tokens} cap={data.daily_cap_tokens} hint="Resets at midnight (Myanmar time)."
+          usdLine={data.today_usd != null ? `Super Admin view: ${usd(data.today_usd, 4)}${data.daily_cap_usd != null ? ` of ${usd(data.daily_cap_usd)}` : ''}` : undefined} />
+        <Meter label="Total" spent={data.used_tokens} cap={data.cap_tokens} hint="Ask your administrator if you need more."
+          usdLine={data.spent_usd != null ? `Super Admin view: ${usd(data.spent_usd, 4)}${data.cap_usd != null ? ` of ${usd(data.cap_usd)}` : ''} · real tokens ${num(data.real_tokens ?? 0)}` : undefined} />
       </div>
     </Card>
   )
@@ -62,14 +67,48 @@ const STATUS: Record<UserLimit['status'], [string, string]> = {
   ok: ['OK', 'bg-status-approved/10 text-status-approved'],
 }
 
+/** Super Admin: the one rate that turns dollars into the tokens clients see. */
+function TokenRate() {
+  const qc = useQueryClient()
+  const { data } = useQuery({ queryKey: ['usage', 'billing'], queryFn: getBilling })
+  const [v, setV] = useState('')
+  const [msg, setMsg] = useState('')
+  const cur = data?.usd_per_1m_tokens
+  async function save(rate: number) {
+    setMsg('')
+    try { await saveBilling(rate); setV(''); setMsg('Saved — every user now sees their allowance with this rate.'); qc.invalidateQueries({ queryKey: ['usage'] }) }
+    catch (e: any) { setMsg(String(e?.message ?? e)) }
+  }
+  const actual = data?.actual.usd_per_1m_tokens
+  return (
+    <Card className="p-4 mb-4 text-sm">
+      <div className="flex items-center gap-2 mb-1"><Icon name="currency_exchange" className="text-primary" /><span className="font-semibold text-primary">Client token rate</span></div>
+      <div className="mb-2" />
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <span>1,000,000 tokens =</span>
+        <span className="font-semibold">${cur ?? '…'}</span>
+        <span className="text-outline">→ change to $</span>
+        <input value={v} onChange={(e) => setV(e.target.value)} placeholder={cur != null ? String(cur) : ''} inputMode="decimal" className="border border-outline-variant rounded-md px-2 py-1 w-24" />
+        <Button size="sm" disabled={!v.trim() || isNaN(Number(v))} onClick={() => save(Number(v))}>Save rate</Button>
+        {actual != null && (
+          <span className="text-outline ml-2">Your real average so far: <b className="text-text-main">${actual}</b> per 1M tokens ({data?.actual.calls} calls)
+            {actual !== cur && <button onClick={() => save(actual)} className="text-primary hover:underline ml-1">Use this</button>}</span>
+        )}
+      </div>
+      {msg && <p className={`text-xs mt-1 ${msg.startsWith('Saved') ? 'text-status-approved' : 'text-status-rejected'}`}>{msg}</p>}
+    </Card>
+  )
+}
+
 /** Super Admin: every user's total & daily limits in one place, editable inline. */
 function UserLimits() {
   const qc = useQueryClient()
   const { data, error } = useQuery({ queryKey: ['usage', 'limits'], queryFn: getUsageLimits, refetchInterval: 30_000 })
   const [edit, setEdit] = useState<string | null>(null)
-  const cell = (spent: number, cap: number | null) => cap == null
-    ? <span className="text-text-main">{usd(spent, 2)} <span className="text-outline">· no limit</span></span>
-    : <div className="w-36"><div className="flex justify-between"><span>{usd(spent, 2)} / {usd(cap)}</span></div>
+  const cell = (spent: number, cap: number | null, tSpent: number | null, tCap: number | null) => cap == null
+    ? <span className="text-text-main">{usd(spent, 2)} <span className="text-outline">· no limit</span><div className="text-[10px] text-outline">{num(tSpent ?? 0)} tokens</div></span>
+    : <div className="w-40"><div className="flex justify-between"><span>{usd(spent, 2)} / {usd(cap)}</span></div>
+        <div className="text-[10px] text-outline">{num(tSpent ?? 0)} / {num(tCap ?? 0)} tokens (what the user sees)</div>
         <div className="h-1.5 rounded-full bg-surface-container overflow-hidden mt-0.5"><div className={`h-full rounded-full ${spent >= cap ? 'bg-status-rejected' : spent / (cap || 1) >= 0.8 ? 'bg-status-pending' : 'bg-primary'}`} style={{ width: `${cap > 0 ? Math.min(100, (spent / cap) * 100) : 100}%` }} /></div></div>
   return (
     <Card className="p-4 mb-4">
@@ -86,8 +125,8 @@ function UserLimits() {
               <tr className="border-t border-outline-variant">
                 <td className="py-1.5 font-medium">{u.name}<div className="text-[10px] text-outline font-normal">{u.username}{u.active ? '' : ' · disabled'}</div></td>
                 <td>{u.role.replace('_', ' ')}</td>
-                <td>{cell(u.today_usd, u.daily_cap_usd)}</td>
-                <td>{cell(u.spent_usd, u.cap_usd)}</td>
+                <td>{cell(u.today_usd, u.daily_cap_usd, u.today_tokens, u.daily_cap_tokens)}</td>
+                <td>{cell(u.spent_usd, u.cap_usd, u.used_tokens, u.cap_tokens)}</td>
                 <td><Badge className={STATUS[u.status][1]}>{STATUS[u.status][0]}</Badge></td>
                 <td className="text-right"><button onClick={() => setEdit(edit === u.id ? null : u.id)} className="text-primary hover:underline">Edit limits</button></td>
               </tr>
@@ -198,6 +237,7 @@ function AdminDashboard() {
         </div>
       </div>
 
+      <TokenRate />
       <UserLimits />
 
       {/* one filter bar drives EVERY panel below */}

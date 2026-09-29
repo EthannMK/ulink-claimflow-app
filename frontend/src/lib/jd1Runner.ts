@@ -8,6 +8,7 @@
  */
 import { useSyncExternalStore } from 'react'
 import { apiBase, authHeaders } from './auth'
+import { refreshUsage } from './queryClient'
 import type { JD1Note } from './jd1'
 
 export interface RunStep { at: number; text: string; kind: 'step' | 'warn' | 'error' | 'done'; pct?: number | null }
@@ -24,14 +25,16 @@ export interface JD1RunState {
   note: JD1Note | null
   error: string
   consumed: boolean      // the JD1 page has applied the result
+  tokensUsed: number | null   // client tokens this scan used (shown when it finishes)
 }
 
 const IDLE: JD1RunState = {
   status: 'idle', startedAt: 0, endedAt: 0, files: [], pct: 0, current: '', chars: 0, lastEventAt: 0,
-  aiSeconds: null, steps: [], note: null, error: '', consumed: true,
+  aiSeconds: null, steps: [], note: null, error: '', consumed: true, tokensUsed: null,
 }
 let state: JD1RunState = IDLE
 let controller: AbortController | null = null
+let jobId = ''          // the server's id for the running scan (used to cancel it)
 const listeners = new Set<() => void>()
 
 function set(patch: Partial<JD1RunState>) {
@@ -49,8 +52,9 @@ function addStep(step: Omit<RunStep, 'at'>) {
 }
 
 function handle(ev: any) {
+  if (state.status !== 'running') return   // cancelled/finished: ignore late events
   switch (ev.type) {
-    case 'start': addStep({ kind: 'step', text: `Scan started — uploading done, ${(ev.files ?? []).length} file(s) on the server`, pct: 1 }); break
+    case 'start': jobId = ev.job || ''; addStep({ kind: 'step', text: `Scan started — uploading done, ${(ev.files ?? []).length} file(s) on the server`, pct: 1 }); break
     case 'step': case 'warn':
       if (ev.text) addStep({ kind: ev.type, text: ev.text, pct: ev.pct })
       if (ev.ai_seconds != null) set({ aiSeconds: ev.ai_seconds })
@@ -58,11 +62,18 @@ function handle(ev: any) {
     case 'stream': set({ chars: ev.chars ?? state.chars, lastEventAt: Date.now() }); break
     case 'ping': set({ lastEventAt: Date.now() }); break
     case 'result':
-      set({ note: ev.note as JD1Note })
+      set({ note: ev.note as JD1Note, tokensUsed: typeof ev.tokens_used === 'number' ? ev.tokens_used : null })
+      refreshUsage()
       addStep({ kind: 'done', text: 'Done — the JD1 note is on the page', pct: 100 })
       set({ status: 'done', endedAt: Date.now(), consumed: false })
       break
+    case 'cancelled':
+      refreshUsage()
+      addStep({ kind: 'error', text: 'Scan cancelled — the AI was stopped' })
+      set({ status: 'error', error: 'Cancelled by you', endedAt: Date.now(), consumed: true })
+      break
     case 'error':
+      refreshUsage()
       addStep({ kind: 'error', text: ev.detail || 'The scan failed' })
       set({ status: 'error', error: ev.detail || 'The scan failed', endedAt: Date.now(), consumed: false })
       break
@@ -109,12 +120,16 @@ export const jd1Runner = {
     listeners.forEach((l) => l())
     void run(files, controller.signal)
   },
-  /** Stop waiting (the server may still finish the AI call; its usage is still recorded). */
+  /** Cancel the scan: tells the server to stop the AI (so it stops costing), then closes the connection.
+   *  Only the AI work done before the cancel is counted in AI usage. */
   cancel() {
     if (state.status !== 'running') return
-    controller?.abort()
-    addStep({ kind: 'error', text: 'You stopped waiting for this scan' })
-    set({ status: 'error', error: 'Stopped by you', endedAt: Date.now(), consumed: true })
+    const id = jobId
+    if (id) void fetch(`${apiBase()}/api/jd1/cancel/${id}`, { method: 'POST', headers: authHeaders() }).catch(() => {})
+    setTimeout(() => controller?.abort(), 300)
+    setTimeout(refreshUsage, 2500)   // closing the connection also stops it, as a backup
+    addStep({ kind: 'error', text: 'Scan cancelled — the AI was stopped' })
+    set({ status: 'error', error: 'Cancelled by you', endedAt: Date.now(), consumed: true })
   },
   consume() { if (!state.consumed) set({ consumed: true }) },
   /** Hide a finished run's panel. */

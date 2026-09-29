@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from app.models import Role
 from app.security import require_role
@@ -61,49 +61,35 @@ def test_model(body: ModelTest, user=Depends(require_role(Role.super_admin))):
     return model_catalog.test_model(body.provider, body.model.strip())
 
 
+class FeatureModels(BaseModel):
+    models: dict[str, dict[str, str]] = {}
+    allow_free_for_documents: bool | None = None
+
+
+def _feature_payload() -> dict:
+    return {"models": ai_provider.get_feature_models(),
+            "allow_free_for_documents": ai_provider.allow_free_for_documents(),
+            "tasks": ai_provider.TASKS, "free_warning": ai_provider.FREE_MODEL_WARNING}
+
+
+@router.get("/feature-models")
+def get_feature_models(user=Depends(require_role(Role.super_admin))):
+    """Which model each AI task uses (blank = the provider's main model) + the free-model guard."""
+    return _feature_payload()
+
+
+@router.put("/feature-models")
+def put_feature_models(body: FeatureModels, user=Depends(require_role(Role.super_admin))):
+    try:
+        ai_provider.save_feature_models(body.models, body.allow_free_for_documents)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _feature_payload()
+
+
 @router.put("")
 def update_ai_settings(payload: AiSettingsUpdate, user=Depends(require_role(Role.super_admin))):
-    return ai_provider.save_settings([p.model_dump() for p in payload.providers])
-
-
-# TEMPORARY local diagnostic — remove before deploy. Never returns a key. It has no
-# login (so it can be opened straight in a browser), so it only answers requests
-# coming from this same computer — never from other users on the network.
-@router.get("/_debug")
-def _debug(request: Request):
-    if (request.client.host if request.client else "") not in ("127.0.0.1", "::1", "localhost"):
-        raise HTTPException(status_code=404, detail="Not Found")
-    import httpx
-    out: dict = {"providers": ai_provider.provider_status()}
-
-    # --- Vertex AI: confirm ADC auth works and the configured model answers ---
-    out["vertex_project"] = settings.vertex_project or "(not set)"
-    out["vertex_location"] = settings.vertex_location
-    out["vertex_model"] = settings.vertex_model
-    if settings.vertex_project:
-        try:
-            txt, _tok = ai_provider._vertex_call([{"text": 'Reply ONLY with JSON {"ok": true}'}], settings.vertex_model)
-            out["vertex_test"] = f"model={settings.vertex_model}: {txt[:150]}"
-        except Exception as e:
-            out["vertex_test"] = f"error: {str(e)[:400]}"
-    else:
-        out["vertex_test"] = "VERTEX_PROJECT not set"
-
-    # --- OpenRouter: confirm the key + configured model answer, and list Gemini ids ---
-    out["openrouter_model"] = settings.openrouter_model
-    if settings.openrouter_api_key:
-        try:
-            txt, _tok = ai_provider._openrouter_call([{"text": 'Reply ONLY with JSON {"ok": true}'}], settings.openrouter_model)
-            out["openrouter_test"] = f"model={settings.openrouter_model}: {txt[:150]}"
-        except Exception as e:
-            out["openrouter_test"] = f"model={settings.openrouter_model} error: {str(e)[:250]}"
-    else:
-        out["openrouter_test"] = "no OPENROUTER_API_KEY set"
     try:
-        r = httpx.get("https://openrouter.ai/api/v1/models", timeout=30)
-        out["openrouter_gemini_models"] = sorted(
-            m.get("id", "") for m in r.json().get("data", []) if str(m.get("id", "")).startswith("google/gemini"))
-    except Exception as e:
-        out["openrouter_gemini_models"] = f"error: {str(e)[:200]}"
-    out["openrouter_management_key_configured"] = bool(settings.openrouter_management_key)
-    return out
+        return ai_provider.save_settings([p.model_dump() for p in payload.providers])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

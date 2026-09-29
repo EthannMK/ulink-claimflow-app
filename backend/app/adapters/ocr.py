@@ -6,6 +6,7 @@ import base64, json, re
 from abc import ABC, abstractmethod
 from app.config import settings
 from app.models import ScanResult, ScanField
+from app import prompts
 
 class OcrProvider(ABC):
     name = "base"
@@ -49,7 +50,7 @@ class AIProvider(OcrProvider):
     def extract(self, data: bytes, mime: str) -> ScanResult:
         from app import ai_provider
         parts = [
-            {"text": _PROMPT},
+            {"text": prompts.get("quick_scan")},
             {"inline_data": {"mime_type": mime or "image/png", "data": base64.b64encode(data).decode()}},
         ]
         try:

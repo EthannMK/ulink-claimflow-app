@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { updateUser } from '../lib/api'
+import { useQuery } from '@tanstack/react-query'
+import { updateUser, getBilling } from '../lib/api'
 import { Button } from './ui'
 
 const toNum = (s: string) => (s.trim() === '' ? null : Number(s))
@@ -13,6 +14,8 @@ export function LimitEditor({ userId, name, total, daily, onDone }: {
   const [d, setD] = useState(daily != null ? String(daily) : '')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  const { data: bill } = useQuery({ queryKey: ['usage', 'billing'], queryFn: getBilling })
+  const asTok = (s: string) => { const n = toNum(s); return n == null || isNaN(n) || !bill ? '' : `≈ ${Math.round(n / bill.usd_per_1m_tokens * 1_000_000).toLocaleString()} tokens` }
 
   async function send(body: Record<string, unknown>) {
     setBusy(true); setMsg('')
@@ -37,9 +40,11 @@ export function LimitEditor({ userId, name, total, daily, onDone }: {
       <div className="flex items-end gap-3 flex-wrap">
         <span className="text-xs text-text-main pb-1.5">AI limits for <b>{name}</b>:</span>
         <label className="text-[11px] text-outline flex flex-col gap-0.5">Total limit (USD)
-          <input value={t} onChange={(e) => setT(e.target.value)} placeholder="no limit" inputMode="decimal" className="text-sm border border-outline-variant rounded-md px-2 py-1 w-28" /></label>
+          <input value={t} onChange={(e) => setT(e.target.value)} placeholder="no limit" inputMode="decimal" className="text-sm border border-outline-variant rounded-md px-2 py-1 w-28" />
+          <span className="h-3 text-[10px] text-primary">{asTok(t)}</span></label>
         <label className="text-[11px] text-outline flex flex-col gap-0.5">Daily limit (USD)
-          <input value={d} onChange={(e) => setD(e.target.value)} placeholder="no limit" inputMode="decimal" className="text-sm border border-outline-variant rounded-md px-2 py-1 w-28" /></label>
+          <input value={d} onChange={(e) => setD(e.target.value)} placeholder="no limit" inputMode="decimal" className="text-sm border border-outline-variant rounded-md px-2 py-1 w-28" />
+          <span className="h-3 text-[10px] text-primary">{asTok(d)}</span></label>
         <Button size="sm" onClick={save} disabled={busy}>Save limits</Button>
         <Button size="sm" variant="outline" onClick={() => send({ reset_usage: true })} disabled={busy} title="Sets both 'spent in total' and 'spent today' back to $0">Reset spent to $0</Button>
         <Button size="sm" variant="ghost" onClick={onDone}>Cancel</Button>

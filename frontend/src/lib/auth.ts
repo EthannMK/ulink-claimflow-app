@@ -8,6 +8,11 @@ export const apiBase = () => API ?? ''
 export function getToken() { return localStorage.getItem('cf_token') }
 export function getRole() { return localStorage.getItem('cf_role') || 'super_admin' }
 export function getName() { return localStorage.getItem('cf_name') || 'Admin' }
+/** Username of the signed-in account, read from the login token (no extra request). */
+export function getUsername(): string {
+  try { const t = getToken(); if (!t) return ''; return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sub || '' }
+  catch { return '' }
+}
 export function getAvatar() { return localStorage.getItem('cf_avatar') || '' }
 export function setAvatar(dataUrl: string) {
   if (dataUrl) localStorage.setItem('cf_avatar', dataUrl); else localStorage.removeItem('cf_avatar')

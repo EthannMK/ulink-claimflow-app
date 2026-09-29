@@ -26,10 +26,22 @@ export function reviewDoc(file: File, fields = ''): Promise<ReviewResult> {
 
 // ---- page-by-page "Full detection" ----
 export interface PageItem { label: string; value: string }
-export interface PageDetail { page: number; title: string; summary: string; items: PageItem[] }
+export interface PageTable { title: string; columns: string[]; rows: string[][] }
+export interface PageDetail { page: number; title: string; summary: string; items: PageItem[]; tables?: PageTable[] }
 export interface PageAnalysis { pages: PageDetail[]; provider: string; error: string }
 
 const pageCache = new Map<string, Promise<PageAnalysis>>()
+
+// At most 4 page batches are read at the same time (across the whole app). Firing all of a
+// 50-page packet at once made the AI service answer "busy" and pages went missing.
+const MAX_PARALLEL = 4
+let active = 0
+const waiting: (() => void)[] = []
+async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (active >= MAX_PARALLEL) await new Promise<void>((r) => waiting.push(r))
+  active++
+  try { return await fn() } finally { active--; waiting.shift()?.() }
+}
 
 export function reviewDocPages(file: File): Promise<PageAnalysis> {
   return reviewDocPagesRange(file, 0, 0)
@@ -40,7 +52,7 @@ export function reviewDocPagesRange(file: File, start: number, count: number): P
   const key = `pages:${file.name}:${file.size}:${file.lastModified}:${start}:${count}`
   const hit = pageCache.get(key)
   if (hit) return hit
-  const p = (async () => {
+  const p = withSlot(async () => {
     const fd = new FormData(); fd.append('file', file, file.name)
     fd.append('start', String(start)); fd.append('count', String(count))
     const ctrl = new AbortController()
@@ -50,7 +62,8 @@ export function reviewDocPagesRange(file: File, start: number, count: number): P
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Page analysis failed (${r.status})`) }
       return await (r.json() as Promise<PageAnalysis>)
     } finally { clearTimeout(timer) }
-  })().catch((e) => { pageCache.delete(key); throw e })
+  }).then((r) => { if (!r.pages?.length) pageCache.delete(key); return r })   // never keep an empty answer
+    .catch((e) => { pageCache.delete(key); throw e })
   pageCache.set(key, p)
   return p
 }
