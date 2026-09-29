@@ -100,6 +100,9 @@ class ClaimList(BaseModel):
 class PageItem(BaseModel):
     label: str = ""
     value: str = ""
+    hw: bool = False        # the AI says this value is handwritten
+    unclear: bool = False   # ... and hard to read (written letter by letter as seen)
+    ai_value: str = ""      # what the AI originally read, kept when an officer applies a consistent value
 
 class PageTable(BaseModel):
     title: str = ""

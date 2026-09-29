@@ -155,6 +155,14 @@ def is_image(name: str, mime: str) -> bool:
     return (mime or "").startswith("image/") or name.lower().endswith((".jpg", ".jpeg", ".png"))
 
 # ---- prompt --------------------------------------------------------------------
+# Always added to the JD1 instructions (also to a custom prompt from the AI Prompts page).
+_NAME_RULE = ("\n\nHANDWRITING: names, NRC numbers, dates of birth and policy numbers often appear on several pages. "
+              "When a handwritten copy is hard to read or differs slightly from a clear printed/typed copy elsewhere, use "
+              "the clear printed version in the note, and add a consistency check (status \"warning\") that lists "
+              "each variant with its page, e.g. 'Patient name: \"Aung Aung\" (printed, claim form p.1) vs \"Aung Aye\" "
+              "(handwritten, unclear, bill p.35) — likely the same person, handwriting'. If the names look like "
+              "DIFFERENT people, use status \"fail\" and say so.")
+
 _JD1_PROMPT = """You are a JD1 claims-intake officer at Ulink Assist (a health-insurance TPA in Myanmar).
 You are given the documents of ONE claim (some digital text, some scanned images that may be in Burmese or handwritten).
 Produce a JD1 Process Note as STRICT JSON with this exact shape (every leaf is {"value","confidence","remark"}; confidence is 0..1):
@@ -431,7 +439,7 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
     """files: list of (filename, data, mime)."""
     progress.emit(f"Received {len(files)} file(s), {_mb(sum(len(d) for _n, d, _m in files))} in total", pct=2)
     docs: list[ClassifiedDoc] = []
-    parts: list[dict] = [{"text": prompts.get("jd1_note")}]
+    parts: list[dict] = [{"text": prompts.get("jd1_note") + _NAME_RULE}]
     reference_only = {"Policy wording", "Table of Benefits"}
 
     for name, data, mime in files:

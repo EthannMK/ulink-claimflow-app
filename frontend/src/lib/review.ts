@@ -25,7 +25,8 @@ export function reviewDoc(file: File, fields = ''): Promise<ReviewResult> {
 }
 
 // ---- page-by-page "Full detection" ----
-export interface PageItem { label: string; value: string }
+/** hw/unclear: the AI's handwriting marks; ai_value: what the AI read before an officer applied a consistent value */
+export interface PageItem { label: string; value: string; hw?: boolean; unclear?: boolean; ai_value?: string }
 export interface PageTable { title: string; columns: string[]; rows: string[][] }
 export interface PageDetail { page: number; title: string; summary: string; items: PageItem[]; tables?: PageTable[] }
 export interface PageAnalysis { pages: PageDetail[]; provider: string; error: string }

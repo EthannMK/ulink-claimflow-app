@@ -26,3 +26,20 @@ def get_assign_permissions() -> dict[str, list[str]]:
 def save_assign_permissions(permissions: dict[str, list[str]]) -> dict[str, list[str]]:
     _store.put(_DOC_ID, {"permissions": permissions})
     return permissions
+
+
+# ---- "Use the clearest value across pages" (Document review / full detection) ----
+CONSISTENCY_FIELDS = ["name", "nrc", "dob", "policy"]
+_CONSISTENCY_DEFAULT = {"enabled": True, "fields": ["name"]}
+
+
+def get_consistency() -> dict:
+    d = _store.get("consistency") or {}
+    fields = [f for f in (d.get("fields") or _CONSISTENCY_DEFAULT["fields"]) if f in CONSISTENCY_FIELDS]
+    return {"enabled": bool(d.get("enabled", _CONSISTENCY_DEFAULT["enabled"])), "fields": fields}
+
+
+def save_consistency(enabled: bool, fields: list[str]) -> dict:
+    doc = {"enabled": bool(enabled), "fields": [f for f in fields if f in CONSISTENCY_FIELDS]}
+    _store.put("consistency", doc)
+    return doc

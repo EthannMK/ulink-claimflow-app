@@ -1,7 +1,10 @@
-import { useEffect, useState, useRef, Fragment } from 'react'
+import { useEffect, useState, useRef, useMemo, Fragment } from 'react'
 import { Card, Badge, Icon } from './ui'
 import { reviewDoc, reviewDocPagesRange, type ReviewResult, type ReviewField, type PageDetail, type PageTable } from '../lib/review'
 import { refreshUsage } from '../lib/queryClient'
+import { useQuery } from '@tanstack/react-query'
+import { getConsistency } from '../lib/api'
+import { findConflicts, applyValue, similarity, type Conflict } from '../lib/consistency'
 
 function mergePages(prev: PageDetail[], incoming: PageDetail[]): PageDetail[] {
   const map = new Map<number, PageDetail>()
@@ -279,6 +282,19 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
     startedRef.current = ''
     setUsingSaved(false)
   }
+  // ---- handwriting variants across pages ("use the clearest value") ----
+  const { data: consistency } = useQuery({ queryKey: ['settings', 'consistency'], queryFn: getConsistency, staleTime: 60_000 })
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const conflicts: Conflict[] = useMemo(() => (
+    !consistency?.enabled || pageLoading || pageItems.length < 2 ? [] : findConflicts(pageItems, consistency.fields).filter((c) => !dismissed.has(c.id))
+  ), [consistency, pageLoading, pageItems, dismissed])
+  function applyEverywhere(c: Conflict, value: string) {
+    setPageItems((prev) => applyValue(prev, c, value))
+    setDismissed((d) => new Set(d).add(c.id))
+  }
+  function restoreItem(pg: number, idx: number) {
+    setPageItems((prev) => prev.map((p) => (p.page !== pg ? p : { ...p, items: p.items.map((it, j) => (j === idx ? { ...it, value: it.ai_value || it.value, ai_value: '' } : it)) })))
+  }
   function updatePageItemValue(pg: number, idx: number, value: string) {
     setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, items: p.items.map((it, j) => (j === idx ? { ...it, value } : it)) } : p)))
   }
@@ -416,6 +432,37 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                   <button onClick={readMissing} className="font-semibold text-primary hover:underline shrink-0">Read the {numPages - pageItems.length} missing page(s)</button>
                 </div>
               )}
+              {conflicts.map((c) => {
+                const best = c.variants[c.best]
+                return (
+                  <div key={c.id} className="bg-status-pending/10 rounded-lg px-3 py-2 mb-2 text-xs">
+                    <div className="flex items-start gap-2">
+                      <Icon name="draw" className="text-[16px] text-status-pending shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-text-main"><b>{c.title}</b> is read differently on different pages — usually handwriting. Best reading: <b>{best.value}</b>
+                          <span className="text-outline"> ({best.printed ? 'printed' : 'handwritten'}{best.unclear && !best.clear ? ', unclear' : ''}, page {best.pages.join(', ')})</span></div>
+                        <ul className="mt-1 space-y-0.5">
+                          {c.variants.map((v, i) => {
+                            const far = i !== c.best && similarity(v.norm, best.norm) < 0.5
+                            return (
+                              <li key={v.norm} className="flex items-center gap-2">
+                                <span className="font-medium">“{v.value}”</span>
+                                <span className="text-outline">{v.hw ? 'handwritten' : 'printed'}{v.unclear ? ', unclear' : ''} · page {v.pages.join(', ')}</span>
+                                {far && <span className="text-status-rejected">looks like a different person/number — check, it won't be changed</span>}
+                                {i !== c.best && !far && <button onClick={() => applyEverywhere(c, v.value)} className="text-primary hover:underline">use this instead</button>}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <button onClick={() => applyEverywhere(c, best.value)} className="font-semibold text-primary hover:underline">Use “{best.value}” everywhere</button>
+                        <button onClick={() => setDismissed((d) => new Set(d).add(c.id))} className="text-outline hover:underline">Keep as read</button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
               {pageErr && pageItems.length === 0 && <Card className="p-3 text-xs text-status-rejected">{pageErr}</Card>}
               <div className="flex-1 min-h-0 overflow-y-auto pr-1">
                 {curPage ? (
@@ -435,9 +482,18 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                       <div className="space-y-1">
                         {curPage.items.map((it, j) => (
                           <div key={j} className="flex gap-2 text-xs items-start">
-                            <span className="text-outline w-40 shrink-0 pt-1.5">{it.label}</span>
-                            <input value={it.value} onChange={(e) => updatePageItemValue(curPage.page, j, e.target.value)}
-                              className="flex-1 min-w-0 text-on-surface border border-outline-variant/60 rounded-md px-2 py-1" />
+                            <span className="text-outline w-40 shrink-0 pt-1.5">{it.label}
+                              {it.hw && <span className="ml-1 text-[10px] px-1 rounded bg-surface-container text-text-main" title="The AI says this value is handwritten">handwritten</span>}
+                              {it.unclear && <span className="ml-1 text-[10px] px-1 rounded bg-status-pending/15 text-status-pending" title="Hard to read — written exactly as the AI saw it">unclear</span>}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <input value={it.value} onChange={(e) => updatePageItemValue(curPage.page, j, e.target.value)}
+                                className="w-full text-on-surface border border-outline-variant/60 rounded-md px-2 py-1" />
+                              {it.ai_value && it.ai_value !== it.value && (
+                                <p className="text-[11px] text-outline mt-0.5">AI read on this page: “{it.ai_value}”{it.hw ? ' (handwritten' + (it.unclear ? ', unclear)' : ')') : ''}
+                                  <button onClick={() => restoreItem(curPage.page, j)} className="ml-2 text-primary hover:underline">Restore</button></p>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>

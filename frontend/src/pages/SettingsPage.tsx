@@ -3,7 +3,8 @@ import { PageTitle, Card, Badge, Icon, Button, AttachField, type Attachment } fr
 import { AiExtract } from '../components/AiExtract'
 import { usePersistent, useEditable, genId } from '../lib/persist'
 import { DEFAULT_INSURERS, FORM_LABELS, formTypesOf, type InsurerConfig, type InsurerField, type FieldType, type FormType } from '../lib/insurers'
-import { getAssignPermissions, updateAssignPermissions, type AssignPermissions } from '../lib/api'
+import { getAssignPermissions, updateAssignPermissions, getConsistency, saveConsistency, type AssignPermissions, type ConsistencySettings } from '../lib/api'
+import { FIELD_LABELS, type ConsistencyField } from '../lib/consistency'
 import { getRole } from '../lib/auth'
 
 function EditBar({ editing, edit, save, cancel }: { editing: boolean; edit: () => void; save: () => void; cancel: () => void }) {
@@ -23,7 +24,7 @@ interface Tob { id: string; plan: string; insurer: string; benefits: Benefit[]; 
 const RULE_CATEGORIES = ['Eligibility', 'Documentation', 'Coverage', 'Payment', 'Fraud', 'Waiting period']
 const BENEFIT_CATEGORIES = ['Inpatient', 'Outpatient', 'Day Care', 'Maternity', 'Dental', 'Optical', 'Chronic', 'Other']
 
-const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits', 'Employer mapping', 'Assignment permissions'] as const
+const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits', 'Employer mapping', 'Assignment permissions', 'Data consistency'] as const
 interface EmpMap { id: string; domain: string; employer: string }
 const inp = 'w-full text-sm border border-outline-variant rounded-md px-2 py-1.5'
 const FIELD_TYPES: FieldType[] = ['text', 'number', 'amount', 'date', 'time', 'select', 'textarea']
@@ -46,6 +47,7 @@ export function SettingsPage() {
       {tab === 'Tables of Benefits' && <Benefits />}
       {tab === 'Employer mapping' && <EmployerMapping />}
       {tab === 'Assignment permissions' && <AssignPermissionsSection />}
+      {tab === 'Data consistency' && <ConsistencySection />}
     </div>
   )
 }
@@ -456,5 +458,38 @@ function AssignPermissionsSection() {
         </Card>
       )}
     </div>
+  )
+}
+
+// ---------- Data consistency: handwriting variants across pages (Document review) ----------
+function ConsistencySection() {
+  const isSuper = getRole() === 'super_admin'
+  const [cfg, setCfg] = useState<ConsistencySettings | null>(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => { getConsistency().then(setCfg).catch((e) => setMsg(String(e?.message ?? e))) }, [])
+  async function save(next: ConsistencySettings) {
+    setCfg(next); setMsg('')
+    try { setCfg(await saveConsistency(next)); setMsg('Saved.') } catch (e: any) { setMsg(String(e?.message ?? e)) }
+  }
+  if (!cfg) return <Card className="p-4 text-sm text-outline">{msg || 'Loading…'}</Card>
+  const toggleField = (f: ConsistencyField) => save({ ...cfg, fields: cfg.fields.includes(f) ? cfg.fields.filter((x) => x !== f) : [...cfg.fields, f] })
+  return (
+    <Card className="p-5 max-w-2xl">
+      <label className="flex items-center gap-2 text-sm font-semibold text-primary">
+        <input type="checkbox" disabled={!isSuper} checked={cfg.enabled} onChange={(e) => save({ ...cfg, enabled: e.target.checked })} />
+        Use the clearest value across pages
+      </label>
+      <p className="text-xs text-text-main mt-1 mb-3">After full detection, if the same field is read differently on different pages (usually messy handwriting), the review screen shows every variant with its page, suggests the clearest one (printed before handwritten, clear before unclear) and lets the officer apply it with one click. Nothing changes automatically, and the AI's original reading stays visible on each changed field.</p>
+      <div className={`space-y-1.5 ${cfg.enabled ? '' : 'opacity-50'}`}>
+        <div className="text-[11px] uppercase tracking-wide text-outline">Fields to check</div>
+        {(Object.keys(FIELD_LABELS) as ConsistencyField[]).map((f) => (
+          <label key={f} className="flex items-center gap-2 text-sm text-text-main">
+            <input type="checkbox" disabled={!isSuper || !cfg.enabled} checked={cfg.fields.includes(f)} onChange={() => toggleField(f)} />{FIELD_LABELS[f]}
+          </label>
+        ))}
+      </div>
+      {!isSuper && <p className="text-xs text-outline mt-3">Only the Super Admin can change this.</p>}
+      {msg && <p className={`text-xs mt-2 ${msg === 'Saved.' ? 'text-status-approved' : 'text-status-rejected'}`}>{msg}</p>}
+    </Card>
   )
 }

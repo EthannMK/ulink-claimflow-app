@@ -33,6 +33,16 @@ export async function changeMyPassword(current_password: string, new_password: s
 }
 export type AssignPermissions = Record<string, string[]>
 const DEFAULT_ASSIGN_PERMISSIONS: AssignPermissions = { super_admin: ['super_admin', 'admin', 'user'], admin: ['super_admin', 'admin', 'user'], user: ['super_admin', 'admin', 'user'] }
+export interface ConsistencySettings { enabled: boolean; fields: ('name' | 'nrc' | 'dob' | 'policy')[] }
+export async function getConsistency(): Promise<ConsistencySettings> {
+  if (!backendOn()) return { enabled: true, fields: ['name'] }
+  return jsonOrThrow(await fetch(`${apiBase()}/api/settings/consistency`, { headers: authHeaders() }), 'Loading consistency settings')
+}
+export async function saveConsistency(s: ConsistencySettings): Promise<ConsistencySettings> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/settings/consistency`, {
+    method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(s),
+  }), 'Saving consistency settings')
+}
 export async function getAssignPermissions(): Promise<AssignPermissions> {
   if (!backendOn()) { await wait(80); return DEFAULT_ASSIGN_PERMISSIONS }
   const r = await fetch(`${apiBase()}/api/settings/assign-permissions`, { headers: authHeaders() })

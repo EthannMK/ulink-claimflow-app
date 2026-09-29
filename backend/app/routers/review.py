@@ -141,13 +141,18 @@ _PAGE_BASE = (
     '"tables":[{"title":"...","columns":["..."],"rows":[["..."]]}]}]} — use "tables":[] when a page has no table.'
 )
 _PAGE_ABS_SUFFIX = " For \"page\", use the [PAGE n] number shown, or the page's position starting at 1."
+# Always added (even to a custom prompt from the AI Prompts page): handwriting marks used by the
+# "use the clearest value across pages" check on the Document review screen.
+_HW_SUFFIX = (" For EVERY item also add \"hw\":true when the value is HANDWRITTEN (omit it for printed/typed text) and "
+              "\"unclear\":true when that handwriting is hard to read. For unclear handwriting write the value letter by "
+              "letter exactly as you see it — never guess, correct or 'fix' a name, ID or date to match another page.")
 _PAGE_REL_SUFFIX = " This is a slice of a larger document — number the pages 1, 2, 3… in the order they appear here."
 
 
 def _page_prompt(absolute: bool = True) -> str:
     """Full-detection instructions (editable in AI Prompts) + how to number pages."""
     from app import prompts
-    return prompts.get("full_detection") + (_PAGE_ABS_SUFFIX if absolute else _PAGE_REL_SUFFIX)
+    return prompts.get("full_detection") + _HW_SUFFIX + (_PAGE_ABS_SUFFIX if absolute else _PAGE_REL_SUFFIX)
 
 
 def _gemini_pages_call(parts: list) -> list:
@@ -174,7 +179,9 @@ def _pages_from_raw(raw: list, offset: int) -> list[PageDetail]:
             pg = 0
         if offset:
             pg += offset
-        items = [PageItem(label=str(x.get("label", "")).strip(), value=str(x.get("value", "")).strip())
+        items = [PageItem(label=str(x.get("label", "")).strip(), value=str(x.get("value", "")).strip(),
+                          hw=x.get("hw") is True or str(x.get("hw", "")).lower() == "true",
+                          unclear=x.get("unclear") is True or str(x.get("unclear", "")).lower() == "true")
                  for x in (it.get("items") or [])
                  if isinstance(x, dict) and (str(x.get("label", "")).strip() or str(x.get("value", "")).strip())]
         tables = []
