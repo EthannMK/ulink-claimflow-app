@@ -250,7 +250,7 @@ async def review_pages(file: UploadFile = File(...), start: int = Form(0), count
         return cached
     # Run the blocking rasterize + AI call in a worker thread so concurrent page
     # ranges truly run in parallel (an async endpoint would serialize them).
-    request_ctx.set_user(user.get("username", ""))
+    request_ctx.set_user(user.get("username", ""), "Full detection")
     try:
         res = await run_in_threadpool(_page_analysis, data, mime, start, count)
     except usage.UsageCapExceeded as e:
@@ -298,7 +298,7 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
             req = []
 
     if req:
-        request_ctx.set_user(user.get("username", ""))
+        request_ctx.set_user(user.get("username", ""), "Required fields")
         try:
             gem = await run_in_threadpool(_gemini_values, data, mime, req)   # accurate values (handwriting/Burmese), keyed by field number
         except usage.UsageCapExceeded as e:

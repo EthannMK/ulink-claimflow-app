@@ -13,8 +13,10 @@ class User(BaseModel):
     email: str
     role: Role
     active: bool = True
-    usage_cap_usd: float | None = None   # None = unlimited AI spend
-    usage_spent_usd: float = 0.0         # running estimated AI spend (USD)
+    usage_cap_usd: float | None = None   # TOTAL limit — None = unlimited AI spend
+    usage_spent_usd: float = 0.0         # running estimated AI spend (USD), all providers & models
+    daily_cap_usd: float | None = None   # DAILY limit — None = no daily limit; resets at local midnight
+    usage_today_usd: float = 0.0         # estimated AI spend so far today
 
 class UserCreate(BaseModel):
     username: str
@@ -23,6 +25,7 @@ class UserCreate(BaseModel):
     role: Role = Role.user
     password: str
     usage_cap_usd: float | None = None
+    daily_cap_usd: float | None = None
 
 class UserUpdate(BaseModel):
     name: str | None = None
@@ -31,8 +34,10 @@ class UserUpdate(BaseModel):
     active: bool | None = None
     password: str | None = None
     usage_cap_usd: float | None = None
-    clear_usage_cap: bool = False        # set true to make the user unlimited again
-    reset_usage: bool = False            # set true to zero their spent counter
+    daily_cap_usd: float | None = None
+    clear_usage_cap: bool = False        # set true to remove the TOTAL limit
+    clear_daily_cap: bool = False        # set true to remove the DAILY limit
+    reset_usage: bool = False            # set true to zero their spent counters (total and today)
 
 class Token(BaseModel):
     access_token: str
@@ -298,5 +303,5 @@ class ReviewResult(BaseModel):
 
 class PageAnalysis(BaseModel):
     pages: list[PageDetail] = []
-    provider: str = "gemini"
+    provider: str = "ai"
     error: str = ""

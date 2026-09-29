@@ -17,7 +17,7 @@ class StubProvider(OcrProvider):
     def extract(self, data: bytes, mime: str) -> ScanResult:
         return ScanResult(
             doc_type="claim_form",
-            text="STUB OCR output — no AI provider is configured (set up Vertex AI or OpenRouter) to read real documents.",
+            text="AI reading is not available right now — please contact your administrator.",
             fields=[
                 ScanField(key="Member name", value="Thin Zar", confidence=0.9),
                 ScanField(key="Policy number", value="MG-100234", confidence=0.86),

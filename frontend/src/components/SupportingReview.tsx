@@ -47,7 +47,7 @@ export function SupportingReview({ supporting, step }: { supporting?: Supporting
               </div>
               {d.summary && <p className="text-xs text-text-main mb-1">{d.summary}</p>}
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-outline">
-                {d.provider && <span>Provider: {d.provider}</span>}
+                {d.provider && <span>Hospital / clinic: {d.provider}</span>}
                 {d.date && <span>Date: {d.date}</span>}
                 {d.amount && <span>Amount: {d.amount}</span>}
                 {d.diagnosis && <span>Dx: {d.diagnosis}</span>}

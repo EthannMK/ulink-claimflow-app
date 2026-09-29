@@ -1,11 +1,13 @@
 import { NavLink } from 'react-router-dom'
 import { Logo } from './ui'
 import { getRole } from '../lib/auth'
+import { useJD1Run } from '../lib/jd1Runner'
 
 export function Sidebar() {
   const role = getRole()
   const isAdmin = role === 'admin' || role === 'super_admin'
   const isSuper = role === 'super_admin'
+  const jd1 = useJD1Run()
   const main = [
     { to: '/inbox', label: 'Inbox', icon: 'inbox' },
     { to: '/new-claim', label: 'New Claim', icon: 'add_circle' },
@@ -44,6 +46,9 @@ export function Sidebar() {
                 {({ isActive }) => (<>
                   {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r bg-brand-accent" />}
                   <span className="material-symbols-outlined text-[20px]">{n.icon}</span>{n.label}
+                  {n.to === '/jd1' && jd1.status === 'running' && <span className="ml-auto text-[10px] font-semibold text-primary animate-pulse" title="A JD1 scan is running">{Math.round(jd1.pct)}%</span>}
+                  {n.to === '/jd1' && !jd1.consumed && jd1.status === 'done' && <span className="ml-auto w-2 h-2 rounded-full bg-status-approved" title="JD1 note ready" />}
+                  {n.to === '/jd1' && !jd1.consumed && jd1.status === 'error' && <span className="ml-auto w-2 h-2 rounded-full bg-status-rejected" title="JD1 scan failed" />}
                 </>)}
               </NavLink>
             ))}

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from app import store
+from app import store, usage
 from app.models import User, UserCreate, UserUpdate, Role, PasswordChange
 from app.security import get_current_user, require_role
 from app.hashing import verify_password
@@ -9,7 +9,8 @@ router = APIRouter(prefix="/api", tags=["users"])
 def _pub(u: dict) -> User:
     return User(id=u["id"], username=u["username"], name=u["name"], email=u["email"], role=Role(u["role"]),
                 active=u["active"], usage_cap_usd=u.get("usage_cap_usd"),
-                usage_spent_usd=float(u.get("usage_spent_usd") or 0.0))
+                usage_spent_usd=float(u.get("usage_spent_usd") or 0.0),
+                daily_cap_usd=u.get("daily_cap_usd"), usage_today_usd=usage.today_spent(u))
 
 @router.get("/me", response_model=User)
 def me(user=Depends(get_current_user)):
@@ -32,9 +33,11 @@ def list_users(_=Depends(require_role(Role.admin, Role.super_admin))):
 # only super_admin can manage users
 @router.post("/users", response_model=User)
 def create_user(body: UserCreate, _=Depends(require_role(Role.super_admin))):
-    if body.usage_cap_usd is not None and body.usage_cap_usd < 0:
-        raise HTTPException(status_code=400, detail="Usage cap must be 0 or more")
-    u = store.create_user(body.username, body.name, body.email, body.role.value, body.password, body.usage_cap_usd)
+    for v in (body.usage_cap_usd, body.daily_cap_usd):
+        if v is not None and v < 0:
+            raise HTTPException(status_code=400, detail="AI limits must be 0 or more")
+    u = store.create_user(body.username, body.name, body.email, body.role.value, body.password,
+                          body.usage_cap_usd, body.daily_cap_usd)
     if not u:
         raise HTTPException(status_code=409, detail="Username already exists")
     return _pub(u)
@@ -42,8 +45,9 @@ def create_user(body: UserCreate, _=Depends(require_role(Role.super_admin))):
 @router.put("/users/{uid}", response_model=User)
 def update_user(uid: str, body: UserUpdate, _=Depends(require_role(Role.super_admin))):
     fields = body.model_dump(exclude_unset=True)
-    if fields.get("usage_cap_usd") is not None and fields["usage_cap_usd"] < 0:
-        raise HTTPException(status_code=400, detail="Usage cap must be 0 or more")
+    for k in ("usage_cap_usd", "daily_cap_usd"):
+        if fields.get(k) is not None and fields[k] < 0:
+            raise HTTPException(status_code=400, detail="AI limits must be 0 or more")
     if "role" in fields and fields["role"] is not None:
         fields["role"] = fields["role"].value if hasattr(fields["role"], "value") else fields["role"]
     u = store.update_user(uid, **fields)

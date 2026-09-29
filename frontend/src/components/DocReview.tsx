@@ -10,6 +10,19 @@ function mergePages(prev: PageDetail[], incoming: PageDetail[]): PageDetail[] {
   return Array.from(map.values()).sort((a, b) => a.page - b.page)
 }
 
+/** Like mergePages, but never overwrites a page already on screen (it may have been edited). */
+function mergeKeep(prev: PageDetail[], incoming: PageDetail[]): PageDetail[] {
+  const have = new Set(prev.map((p) => p.page))
+  return mergePages(prev, incoming.filter((p) => !have.has(p.page)))
+}
+
+/** Full-detection progress per file, kept outside React so leaving the page and coming
+ *  back resumes where it was (the AI requests themselves are cached in lib/review.ts,
+ *  so nothing is sent twice). */
+interface Detect { pages: PageDetail[]; doneRanges: Set<string>; done: number; total: number; finished: boolean }
+const DETECT = new Map<string, Detect>()
+const fkey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`
+
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
 
 function pageToText(p: { page: number; title: string; summary: string; items: { label: string; value: string }[] }): string {
@@ -67,8 +80,13 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
     setPdfDoc(null); setImgCache({}); setImgUrl(''); setNumPages(1); setPage(0)
     setRes(null); setErr(''); setEdits({}); setHover(null)
     const seed = initialPagesRef.current
-    if (seed && seed.length) { setPageItems(seed); setUsingSaved(true) } else { setPageItems([]); setUsingSaved(false) }
+    const det = DETECT.get(fkey(file))
     setPageProgress({ done: 0, total: 0 }); setPageErr(''); setPageLoading(false); setMapped(hasMap); startedRef.current = ''
+    if (det && !det.finished) {
+      // came back while full detection was still running — show what we have and resume
+      setPageItems(mergeKeep(seed ?? [], det.pages)); setUsingSaved(false)
+      setPageProgress({ done: det.done, total: det.total }); setPageLoading(true)
+    } else if (seed && seed.length) { setPageItems(seed); setUsingSaved(true) } else { setPageItems([]); setUsingSaved(false) }
     ;(async () => {
       try {
         if (isPdf(file)) {
@@ -125,17 +143,24 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
   // ---- full detection: stream page ranges in parallel, show each batch as it lands ----
   useEffect(() => {
     if (!full || usingSaved) return
-    const fileKey = `${file.name}:${file.size}:${file.lastModified}`
+    const fileKey = fkey(file)
     if (startedRef.current === fileKey) return
     let alive = true
+    const resuming = DETECT.has(fileKey) && !DETECT.get(fileKey)!.finished
 
     // Whole-document fallback (used when we can't get a page count from PDF.js).
     const wholeDoc = () => {
       if (startedRef.current === fileKey) return
       startedRef.current = fileKey
-      setPageItems([]); setPageErr(''); setPageLoading(true); setPageProgress({ done: 0, total: 0 })
+      if (!DETECT.has(fileKey)) DETECT.set(fileKey, { pages: [], doneRanges: new Set(), done: 0, total: 0, finished: false })
+      const det = DETECT.get(fileKey)!
+      if (!resuming) setPageItems([])
+      setPageErr(''); setPageLoading(true); setPageProgress({ done: 0, total: 0 })
       reviewDocPagesRange(file, 0, 0)
-        .then((r) => { if (alive) { if (r.pages?.length) setPageItems((p) => mergePages(p, r.pages)); else if (r.error) setPageErr(r.error) } })
+        .then((r) => {
+          det.pages = mergePages(det.pages, r.pages ?? []); det.finished = true
+          if (alive) { if (r.pages?.length) setPageItems((p) => mergeKeep(p, r.pages)); else if (r.error) setPageErr(r.error) }
+        })
         .catch((e) => { if (alive) setPageErr(e?.message ?? 'Page analysis failed') })
         .finally(() => { if (alive) setPageLoading(false) })
     }
@@ -148,7 +173,11 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
 
     const total = isPdf(file) ? numPages : 1
     startedRef.current = fileKey
-    setPageItems([]); setPageErr(''); setPageLoading(true); setPageProgress({ done: 0, total })
+    if (!DETECT.has(fileKey)) DETECT.set(fileKey, { pages: [], doneRanges: new Set(), done: 0, total, finished: false })
+    const det = DETECT.get(fileKey)!
+    det.total = total
+    if (!resuming) setPageItems([])
+    setPageErr(''); setPageLoading(true); setPageProgress({ done: det.done, total })
     const CH = 3
     const ranges: [number, number][] = []
     if (total <= 1) ranges.push([1, 1])
@@ -156,14 +185,24 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
     let remaining = ranges.length
     let anyOk = false
     ranges.forEach(([s, c]) => {
+      const rk = `${s}:${c}`
       reviewDocPagesRange(file, s, c)
         .then((r) => {
+          // record progress even if the page was left meanwhile (counted once per range)
+          if (!det.doneRanges.has(rk)) { det.doneRanges.add(rk); det.done = Math.min(det.done + c, total); det.pages = mergePages(det.pages, r.pages ?? []) }
+          if (r.pages && r.pages.length) anyOk = true
           if (!alive) return
-          if (r.pages && r.pages.length) { anyOk = true; setPageItems((prev) => mergePages(prev, r.pages)) }
-          setPageProgress((p) => ({ done: Math.min(p.done + c, total), total }))
+          if (r.pages && r.pages.length) setPageItems((prev) => mergeKeep(prev, r.pages))
+          setPageProgress({ done: det.done, total })
         })
         .catch(() => {})
-        .finally(() => { remaining -= 1; if (remaining === 0 && alive) { setPageLoading(false); if (!anyOk) setPageErr('No page detail returned — try again.') } })
+        .finally(() => {
+          remaining -= 1
+          if (remaining === 0) {
+            if (anyOk) det.finished = true; else DETECT.delete(fileKey)   // failed runs can be retried
+            if (alive) { setPageLoading(false); if (!anyOk) setPageErr('No page detail returned — try again.') }
+          }
+        })
     })
     return () => { alive = false }
   }, [full, file, pdfDoc, numPages, usingSaved])

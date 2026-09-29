@@ -11,7 +11,7 @@ async def scan(file: UploadFile = File(...), user=Depends(get_current_user)):
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
-    request_ctx.set_user(user.get("username", ""))
+    request_ctx.set_user(user.get("username", ""), "Quick scan")
     try:
         return get_provider().extract(data, file.content_type or "image/png")
     except usage.UsageCapExceeded as e:

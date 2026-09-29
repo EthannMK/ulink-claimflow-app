@@ -7,10 +7,11 @@ from app.db import Collection
 _users = Collection("users")
 
 
-def _mk(username, name, email, role, password, usage_cap_usd=None):
+def _mk(username, name, email, role, password, usage_cap_usd=None, daily_cap_usd=None):
     return {"id": str(uuid.uuid4()), "username": username, "name": name, "email": email,
             "role": role, "active": True, "password_hash": hash_password(password),
-            "usage_cap_usd": usage_cap_usd, "usage_spent_usd": 0.0}
+            "usage_cap_usd": usage_cap_usd, "usage_spent_usd": 0.0,
+            "daily_cap_usd": daily_cap_usd, "usage_day": "", "usage_day_spent_usd": 0.0}
 
 
 def _seed():
@@ -45,10 +46,10 @@ def list_users():
     return _users.all()
 
 
-def create_user(username, name, email, role, password, usage_cap_usd=None):
+def create_user(username, name, email, role, password, usage_cap_usd=None, daily_cap_usd=None):
     if _users.get(username):
         return None
-    u = _mk(username, name, email, role, password, usage_cap_usd)
+    u = _mk(username, name, email, role, password, usage_cap_usd, daily_cap_usd)
     _users.put(username, u)
     return u
 
@@ -63,8 +64,11 @@ def update_user(uid: str, **fields):
         fields.pop("password", None)
     if fields.pop("clear_usage_cap", False):
         u["usage_cap_usd"] = None
+    if fields.pop("clear_daily_cap", False):
+        u["daily_cap_usd"] = None
     if fields.pop("reset_usage", False):
         u["usage_spent_usd"] = 0.0
+        u["usage_day_spent_usd"] = 0.0
     for k, v in fields.items():
         if v is not None:
             u[k] = v

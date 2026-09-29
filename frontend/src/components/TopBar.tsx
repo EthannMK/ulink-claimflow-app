@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { jd1Runner } from '../lib/jd1Runner'
+import { jd1Workspace } from '../lib/jd1Workspace'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from './ui'
 import { getName, getRole, getAvatar, clearSession } from '../lib/auth'
@@ -29,7 +31,10 @@ export function TopBar() {
     return () => { window.removeEventListener('cf-avatar', onAvatar); document.removeEventListener('mousedown', onClick) }
   }, [])
 
-  function logout() { clearSession(); nav('/login') }
+  function logout() {
+    jd1Runner.cancel(); jd1Runner.clear(); jd1Workspace.clear()   // never leave one user's claim files for the next
+    clearSession(); nav('/login')
+  }
 
   return (
     <header className="h-16 bg-white border-b border-outline-variant flex items-center gap-4 px-6">

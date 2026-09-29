@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listUsers, createUser, deleteUser, updateUser } from '../lib/api'
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Badge, Button, Icon } from '../components/ui'
+import { LimitEditor } from '../components/LimitEditor'
 import { usePersistent, genId } from '../lib/persist'
 
 interface Team { id: string; name: string; lead: string; members: string[] } // members = usernames
@@ -18,10 +19,8 @@ export function UserManagementPage() {
   const isSuper = getRole() === 'super_admin'
   const { data } = useQuery({ queryKey: ['users'], queryFn: listUsers })
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ username: '', name: '', email: '', role: 'user', password: '', team: '', cap: '' })
+  const [form, setForm] = useState({ username: '', name: '', email: '', role: 'user', password: '', team: '', cap: '', daily: '' })
   const [capId, setCapId] = useState<string | null>(null)
-  const [capVal, setCapVal] = useState('')
-  const [capMsg, setCapMsg] = useState('')
   const [msg, setMsg] = useState('')
   const [teams, setTeams] = usePersistent<Team[]>('teams.v2', [
     { id: 'administrators', name: 'Administrators', lead: 'superadmin', members: ['superadmin', 'admin'] },
@@ -38,21 +37,16 @@ export function UserManagementPage() {
     if (r.ok) { setResetId(null); setNewPw(''); setResetMsg('') }
     else setResetMsg((await r.json().catch(() => ({}))).detail || 'Failed')
   }
-  async function saveCap(id: string, body: any) {
-    setCapMsg('')
-    const r = await updateUser(id, body)
-    if (r.ok) { setCapId(null); setCapVal(''); qc.invalidateQueries({ queryKey: ['users'] }) }
-    else setCapMsg((await r.json().catch(() => ({}))).detail || 'Failed')
-  }
   async function submit() {
-    const { team, cap, ...rest } = form
+    const { team, cap, daily, ...rest } = form
     const capNum = cap.trim() === '' ? null : Number(cap)
-    if (capNum !== null && (isNaN(capNum) || capNum < 0)) { setMsg('AI limit must be a number of US dollars (e.g. 2), or blank for no limit'); return }
-    const payload = { ...rest, usage_cap_usd: capNum }
+    const dayNum = daily.trim() === '' ? null : Number(daily)
+    if ([capNum, dayNum].some((v) => v !== null && (isNaN(v) || v < 0))) { setMsg('AI limits must be dollar amounts (e.g. 5 or 0.50), or blank for no limit'); return }
+    const payload = { ...rest, usage_cap_usd: capNum, daily_cap_usd: dayNum }
     const r = await createUser(payload)
     if (r.ok) {
       if (team) setTeams((ts) => ts.map((t) => t.id === team ? { ...t, members: Array.from(new Set([...t.members, form.username])) } : t))
-      setOpen(false); setForm({ username: '', name: '', email: '', role: 'user', password: '', team: '', cap: '' }); setMsg(''); qc.invalidateQueries({ queryKey: ['users'] })
+      setOpen(false); setForm({ username: '', name: '', email: '', role: 'user', password: '', team: '', cap: '', daily: '' }); setMsg(''); qc.invalidateQueries({ queryKey: ['users'] })
     } else setMsg((await r.json().catch(() => ({}))).detail || 'Failed to create user')
   }
   function toggleMember(teamId: string, username: string) {
@@ -67,7 +61,7 @@ export function UserManagementPage() {
         action={isSuper ? <Button onClick={() => setOpen(!open)}><Icon name="person_add" className="text-[18px]" /> Invite user</Button> : undefined} />
 
       {open && isSuper && (
-        <Card className="p-4 mb-4 grid grid-cols-7 gap-2 items-end">
+        <Card className="p-4 mb-4 grid grid-cols-8 gap-2 items-end">
           {(['username', 'name', 'email', 'password'] as const).map((k) => (
             <div key={k}><label className="block text-xs text-text-main mb-1 capitalize">{k}</label>
               <input value={(form as any)[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className="w-full text-sm border border-outline-variant rounded-md px-2 py-1.5" /></div>
@@ -78,17 +72,20 @@ export function UserManagementPage() {
           <div><label className="block text-xs text-text-main mb-1">Team</label>
             <select value={form.team} onChange={(e) => setForm({ ...form, team: e.target.value })} className="w-full text-sm border border-outline-variant rounded-md px-2 py-1.5">
               <option value="">— none —</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-          <div><label className="block text-xs text-text-main mb-1">AI limit (USD)</label>
+          <div><label className="block text-xs text-text-main mb-1">Total AI limit (USD)</label>
             <input value={form.cap} onChange={(e) => setForm({ ...form, cap: e.target.value })} placeholder="blank = no limit" inputMode="decimal"
               className="w-full text-sm border border-outline-variant rounded-md px-2 py-1.5" /></div>
-          <div className="col-span-7 flex items-center gap-2"><Button size="sm" onClick={submit}>Create</Button><Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>{msg && <span className="text-xs text-status-rejected">{msg}</span>}</div>
+          <div><label className="block text-xs text-text-main mb-1">Daily AI limit (USD)</label>
+            <input value={form.daily} onChange={(e) => setForm({ ...form, daily: e.target.value })} placeholder="blank = no limit" inputMode="decimal"
+              className="w-full text-sm border border-outline-variant rounded-md px-2 py-1.5" /></div>
+          <div className="col-span-8 flex items-center gap-2"><Button size="sm" onClick={submit}>Create</Button><Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>{msg && <span className="text-xs text-status-rejected">{msg}</span>}</div>
         </Card>
       )}
 
       <Card className="overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-surface-container/70 text-on-surface-variant text-left text-xs uppercase tracking-wide">
-            <tr>{['Name', 'Email', 'Role', 'Status', 'AI usage / limit', ''].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}</tr>
+            <tr>{['Name', 'Email', 'Role', 'Status', 'AI spend / limits', ''].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}</tr>
           </thead>
           <tbody>
             {(data ?? []).map((u: any) => (
@@ -99,12 +96,17 @@ export function UserManagementPage() {
                 <td className="px-4 py-3"><Badge className={roleCls[u.role] || 'bg-surface-container'}>{String(u.role).replace('_', ' ').toUpperCase()}</Badge></td>
                 <td className="px-4 py-3"><Badge className="bg-status-approved/10 text-status-approved">{u.active ? 'Active' : 'Disabled'}</Badge></td>
                 <td className="px-4 py-3 whitespace-nowrap text-xs">
-                  {u.usage_cap_usd != null
-                    ? <Badge className={Number(u.usage_spent_usd ?? 0) >= u.usage_cap_usd ? 'bg-status-rejected/10 text-status-rejected' : 'bg-surface-container'}>${Number(u.usage_spent_usd ?? 0).toFixed(2)} / ${Number(u.usage_cap_usd).toFixed(2)}</Badge>
-                    : <span className="text-text-main">${Number(u.usage_spent_usd ?? 0).toFixed(2)} <span className="text-outline">· no limit</span></span>}
+                  {([['Total', u.usage_spent_usd, u.usage_cap_usd], ['Today', u.usage_today_usd, u.daily_cap_usd]] as const).map(([label, spent, cap]) => (
+                    <div key={label} className="leading-5">
+                      <span className="text-outline w-10 inline-block">{label}</span>
+                      {cap != null
+                        ? <Badge className={Number(spent ?? 0) >= cap ? 'bg-status-rejected/10 text-status-rejected' : 'bg-surface-container'}>${Number(spent ?? 0).toFixed(2)} / ${Number(cap).toFixed(2)}</Badge>
+                        : <span className="text-text-main">${Number(spent ?? 0).toFixed(2)} <span className="text-outline">· no limit</span></span>}
+                    </div>
+                  ))}
                 </td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">{isSuper && <>
-                  <button onClick={() => { setCapId(capId === u.id ? null : u.id); setCapVal(u.usage_cap_usd != null ? String(u.usage_cap_usd) : ''); setCapMsg('') }} className="text-xs text-primary hover:underline mr-3">AI limit</button>
+                  <button onClick={() => setCapId(capId === u.id ? null : u.id)} className="text-xs text-primary hover:underline mr-3">AI limits</button>
                   <button onClick={() => { setResetId(resetId === u.id ? null : u.id); setNewPw(''); setResetMsg('') }} className="text-xs text-primary hover:underline mr-3">Reset password</button>
                   <button onClick={() => remove(u.id)} className="text-xs text-status-rejected hover:underline">Delete</button>
                 </>}</td>
@@ -112,17 +114,8 @@ export function UserManagementPage() {
               {isSuper && capId === u.id && (
                 <tr className="bg-primary/[0.03]">
                   <td colSpan={6} className="px-4 py-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-text-main">AI spending limit for <b>{u.name}</b> (USD):</span>
-                      <input value={capVal} onChange={(e) => setCapVal(e.target.value)} placeholder="e.g. 2" inputMode="decimal"
-                        className="text-sm border border-outline-variant rounded-md px-2 py-1 w-28" />
-                      <Button size="sm" onClick={() => { const n = Number(capVal); if (capVal.trim() === '' || isNaN(n) || n < 0) { setCapMsg('Enter a number, e.g. 2'); return } saveCap(u.id, { usage_cap_usd: n }) }}>Set limit</Button>
-                      <Button size="sm" variant="outline" onClick={() => saveCap(u.id, { clear_usage_cap: true })}>Remove limit</Button>
-                      <Button size="sm" variant="outline" onClick={() => saveCap(u.id, { reset_usage: true })}>Reset spent to $0</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setCapId(null)}>Cancel</Button>
-                      {capMsg && <span className="text-xs text-status-rejected">{capMsg}</span>}
-                    </div>
-                    <p className="text-[11px] text-outline mt-1">When spent reaches the limit, this user's AI features (JD1 scan, full detection, assistant, extraction) stop until you raise the limit or reset.</p>
+                    <LimitEditor userId={u.id} name={u.name} total={u.usage_cap_usd} daily={u.daily_cap_usd}
+                      onDone={() => { setCapId(null); qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['usage'] }) }} />
                   </td>
                 </tr>
               )}

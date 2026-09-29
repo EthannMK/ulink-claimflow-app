@@ -6,7 +6,7 @@ POC: uses Gemini when OCR_PROVIDER=gemini + a key is set; otherwise returns a st
 from __future__ import annotations
 import base64, json, re, uuid
 from app.config import settings
-from app import ai_provider
+from app import ai_provider, progress
 from app.models import (
     JD1Note, NoteField, ClassifiedDoc,
     JD1Header, JD1SectionA, JD1SectionB, JD1SectionC,
@@ -345,8 +345,41 @@ def _compose_summary(note: JD1Note) -> str:
     return "\n".join(parts)
 
 # ---- main entry ----------------------------------------------------------------
+# JSON keys in the order the prompt asks the AI to write them -> (label, progress %)
+_SECTIONS = [
+    ("header", "claimant & claim details", 30), ("section_a", "A. Document checking", 40),
+    ("section_b", "B. Claim information", 50), ("section_c", "C. Rule / coverage checking", 60),
+    ("doc_types_present", "document checklist", 66), ("invoices", "invoices & bills", 72),
+    ("supporting_documents", "supporting documents", 80), ("consistency_checks", "consistency checks", 86),
+    ("notes", "summary notes", 90),
+]
+
+
+def _section_listener():
+    """Watches the AI's reply as it streams and reports each section it starts writing."""
+    seen: set[str] = set()
+    last_chars = [0.0]
+    import time as _t
+
+    def on_text(so_far: str):
+        for key, label, pct in _SECTIONS:
+            if key not in seen and f'"{key}"' in so_far:
+                seen.add(key)
+                progress.emit(f"AI is writing: {label}", pct=pct)
+        now = _t.time()
+        if now - last_chars[0] >= 1.0:          # light "still writing" pulse for the UI
+            last_chars[0] = now
+            progress.emit("", kind="stream", chars=len(so_far))
+    return on_text
+
+
+def _mb(n: int) -> str:
+    return f"{n / 1_048_576:.1f} MB" if n >= 1_048_576 else f"{max(1, n // 1024)} KB"
+
+
 def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
     """files: list of (filename, data, mime)."""
+    progress.emit(f"Received {len(files)} file(s), {_mb(sum(len(d) for _n, d, _m in files))} in total", pct=2)
     docs: list[ClassifiedDoc] = []
     parts: list[dict] = [{"text": _JD1_PROMPT}]
     reference_only = {"Policy wording", "Table of Benefits"}
@@ -364,6 +397,10 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
             dtype = classify_name(name); method = "native" if text else "vision"
 
         docs.append(ClassifiedDoc(name=name, doc_type=dtype, read_method=method, pages=pages, confidence=0.9))
+        how = ("digital text found — sending the text" if method == "native"
+               else "scanned / image — the AI will read the pages visually")
+        progress.emit(f"Read {name}: {'PDF, ' + str(pages) + ' page(s)' if pages else _mb(len(data))} · looks like {dtype} · {how}",
+                      pct=min(12, 3 + 9 * len(docs) / max(1, len(files))))
 
         # what we feed the model
         header = f"[DOCUMENT: {name} | type: {dtype}]"
@@ -390,18 +427,28 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
         note.files_count = files_count; note.document_count = len(docs)
         return note
 
-    # one call through the shared AI provider layer (Vertex -> free fallbacks)
-    txt = ai_provider.generate_text(parts)
+    n_img = sum(1 for p in parts if isinstance(p, dict) and p.get("inline_data"))
+    sent = sum(len(p["inline_data"]["data"]) * 3 // 4 for p in parts if isinstance(p, dict) and p.get("inline_data"))
+    progress.emit(f"Sending {len(docs)} document(s) to the AI"
+                  + (f" ({n_img} scanned file(s), {_mb(sent)})" if n_img else " (text only)"), pct=15)
+    # one call through the shared AI provider layer (streams when live progress is on)
+    progress.set_text_listener(_section_listener())
+    try:
+        txt = ai_provider.generate_text(parts)
+    finally:
+        progress.set_text_listener(None)
     if not txt or not txt.strip():
         return JD1Note(claim_type=claim_type_hint, documents=docs, checklist_required=list(MANDATORY.get(claim_type_hint, MANDATORY["reimbursement"])),
                        checklist_missing=missing,
                        files_count=files_count, document_count=len(docs),
                        provider="ai", notes="The AI service is busy right now. Please try Generate again in a moment.")
 
+    progress.emit("Checking the AI's answer and building the JD1 note", pct=92)
     m = re.search(r"\{.*\}", txt, re.S)
     try:
         d = json.loads(m.group(0) if m else txt)
     except Exception:
+        progress.emit("The AI's answer could not be read — please try again", kind="warn")
         return JD1Note(claim_type=claim_type_hint, documents=docs, checklist_required=list(MANDATORY.get(claim_type_hint, MANDATORY["reimbursement"])),
                        checklist_missing=missing,
                        files_count=files_count, document_count=len(docs),
@@ -435,10 +482,15 @@ def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
         provider="ai",
         notes=str(d.get("notes", "")),
     )
+    progress.emit("Checklist: " + ("all required documents present" if not missing2
+                                     else "missing " + ", ".join(missing2)), pct=94)
     claim_total = note.header.total_claim_amount.value or note.section_b.claim_amount.value
     note.invoices = _build_invoices(d.get("invoices"), claim_total, files)
+    progress.emit(f"Invoices: {len(note.invoices.items) if note.invoices else 0} found — "
+                  + (note.invoices.note if note.invoices and note.invoices.note else "reconciled"), pct=96)
     note.supporting = _build_supporting(d.get("supporting_documents"), d.get("consistency_checks"), note)
     note.ai_summary = _compose_summary(note)
+    progress.emit("JD1 note ready", pct=100)
     return note
 
 def _header(d: dict) -> JD1Header:
@@ -581,7 +633,7 @@ def draft_client_mail(note: JD1Note, sender: str = "") -> tuple[str, str, str]:
 
 def _stub_note(claim_type: str) -> JD1Note:
     n = JD1Note(claim_type=claim_type, provider="stub",
-                notes="STUB — no AI provider is configured (set up Vertex AI or OpenRouter) to generate a real JD1 note.")
+                notes="AI reading is not available right now — please contact your administrator.")
     n.header.member_name = NoteField(value="(sample) Thein Nyunt", confidence=0.9)
     n.header.insurer = NoteField(value="AYA SOMPO", confidence=0.9)
     return n

@@ -17,11 +17,19 @@ from __future__ import annotations
 import contextvars
 
 _user: contextvars.ContextVar[str] = contextvars.ContextVar("ai_ctx_user", default="")
+_feature: contextvars.ContextVar[str] = contextvars.ContextVar("ai_ctx_feature", default="")
 
 
-def set_user(username: str) -> None:
+def set_user(username: str, feature: str = "") -> None:
+    """Who is asking, and from which app feature (e.g. "JD1 note") — both are recorded
+    with every AI call so usage can be tracked per user AND per feature."""
     _user.set(username or "")
+    _feature.set(feature or "")
 
 
 def get_user() -> str:
     return _user.get()
+
+
+def get_feature() -> str:
+    return _feature.get()

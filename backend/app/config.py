@@ -35,5 +35,8 @@ class Settings:
     # Document AI is only used for field-highlight boxes; OFF by default for speed.
     # Set USE_DOCAI=1 to re-enable on-document highlighting.
     use_docai: bool = os.getenv("USE_DOCAI", "0").lower() in ("1", "true", "yes")
+    # Daily AI limits reset at local midnight in this timezone (minutes from UTC;
+    # Myanmar = +390 = UTC+6:30).
+    app_tz_offset_min: int = int(os.getenv("APP_TZ_OFFSET_MIN", "390"))
 
 settings = Settings()

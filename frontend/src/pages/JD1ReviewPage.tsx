@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { runJD1, handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, updateTicket,
+import { handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, updateTicket,
   type JD1Note, type NoteField, type Section, type InvoiceItem, type DraftMail } from '../lib/jd1'
 import type { PageDetail } from '../lib/review'
 import { backendOn, getName } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { DocReview } from '../components/DocReview'
+import { JD1Progress } from '../components/JD1Progress'
+import { jd1Runner, useJD1Run } from '../lib/jd1Runner'
+import { useWorkspaceState, jd1Workspace } from '../lib/jd1Workspace'
 import { SupportingReview } from '../components/SupportingReview'
 import { usePersistent } from '../lib/persist'
 import { DEFAULT_INSURERS, FORM_LABELS, formTypesOf, fieldsFor, type InsurerConfig, type FormType } from '../lib/insurers'
@@ -42,27 +45,31 @@ function ConfBadge({ f }: { f: NoteField }) {
 
 export function JD1ReviewPage() {
   const nav = useNavigate()
-  const [files, setFiles] = useState<File[]>([])
-  const [note, setNote] = useState<JD1Note | null>(null)
-  const [running, setRunning] = useState(false)
+  const run = useJD1Run()          // the scan runs outside this page — see lib/jd1Runner.ts
+  const running = run.status === 'running'
+  // working state lives in jd1Workspace so it survives visiting other pages mid-scan
+  const [files, setFiles] = useWorkspaceState<File[]>('files', () => (run.status === 'running' || !run.consumed ? run.files : []))
+  const [note, setNote] = useWorkspaceState<JD1Note | null>('note', null)
   const [sending, setSending] = useState(false)
   const [flash, setFlash] = useState('')
-  const [reviewIdx, setReviewIdx] = useState(0)
+  const [reviewIdx, setReviewIdx] = useWorkspaceState('reviewIdx', 0)
   const [insurers] = usePersistent<InsurerConfig[]>('settings.insurers.v3', DEFAULT_INSURERS)
-  const [reviewInsurerId, setReviewInsurerId] = useState(insurers[0]?.id ?? '')
-  const [reviewForm, setReviewForm] = useState<FormType>('claim')
-  const [mail, setMail] = useState<DraftMail | null>(null)
+  const [reviewInsurerId, setReviewInsurerId] = useWorkspaceState('reviewInsurerId', insurers[0]?.id ?? '')
+  const [reviewForm, setReviewForm] = useWorkspaceState<FormType>('reviewForm', 'claim')
+  const [mail, setMail] = useWorkspaceState<DraftMail | null>('mail', null)
   const [mailBusy, setMailBusy] = useState(false)
-  const [invDraft, setInvDraft] = useState<Record<string, string>>({})
+  const [invDraft, setInvDraft] = useWorkspaceState<Record<string, string>>('invDraft', {})
   const [menuOpen, setMenuOpen] = useState(false)
   const [templates] = usePersistent<{ id: string; name: string; channel: string; subject: string; bodyEn: string; bodyMm: string }[]>('settings.templates', [])
-  const [dirty, setDirty] = useState(false)
-  const [savedAt, setSavedAt] = useState('')
-  const [ticketId, setTicketId] = useState<string | null>(null)
-  const [ticketRef, setTicketRef] = useState('')
+  const [dirty, setDirty] = useWorkspaceState('dirty', false)
+  const [savedAt, setSavedAt] = useWorkspaceState('savedAt', '')
+  const [ticketId, setTicketId] = useWorkspaceState<string | null>('ticketId', null)
+  const [ticketRef, setTicketRef] = useWorkspaceState('ticketRef', '')
 
   // restore a locally-saved draft note on first load (survives refresh / navigation)
   useEffect(() => {
+    if (jd1Runner.get().status === 'running' || !jd1Runner.get().consumed) return   // a scan result is on its way instead
+    if (jd1Workspace.has('note')) return   // coming back to the page — keep what was on screen
     try {
       const raw = localStorage.getItem('jd1.note.draft')
       if (raw) { setNote(JSON.parse(raw)); setSavedAt('restored'); setDirty(false) }
@@ -106,24 +113,34 @@ export function JD1ReviewPage() {
     finally { setSending(false) }
   }
 
-  async function analyze() {
-    if (!files.length) return
-    setRunning(true); setFlash(''); setNote(null)
-    try {
-      if (!backendOn()) { setFlash('Backend is off — start the API and set VITE_USE_MOCKS=false to run the JD1 assistant.'); return }
-      const n = await runJD1(files)
-      setNote(n); setDirty(false); setSavedAt(''); localStorage.removeItem('jd1.note.draft')
-      // auto-create (or update) the Inbox ticket — best-effort, never blocks the note
+  function analyze() {
+    if (!files.length || running) return
+    setFlash('')
+    if (!backendOn()) { setFlash('Backend is off — start the API and set VITE_USE_MOCKS=false to run the JD1 assistant.'); return }
+    setNote(null)
+    jd1Runner.start(files)   // runs in the background; the effect below applies the result
+  }
+
+  // apply a finished scan — also when it finished while you were on another page
+  useEffect(() => {
+    if (run.consumed) return
+    if (run.status === 'error') { setFlash('JD1 failed: ' + run.error); jd1Runner.consume(); return }
+    if (run.status !== 'done' || !run.note) return
+    const n = run.note
+    jd1Runner.consume()
+    if (!files.length && run.files.length) setFiles(run.files)
+    setNote(n); setDirty(false); setSavedAt(''); localStorage.removeItem('jd1.note.draft')
+    if (n.notes && n.provider !== 'stub' && /error|HTTP \d/i.test(n.notes)) setFlash(n.notes)
+    // auto-create (or update) the Inbox ticket — best-effort, never blocks the note
+    ;(async () => {
       try {
         const complete = n.checklist_missing.length === 0
         const summary = (n.ai_summary || n.notes || '').split('\n')[0].slice(0, 200)
         if (ticketId) { await updateTicket(ticketId, { documentsComplete: complete, summary }) }
         else { const t = await createTicketFromJD1(n); setTicketId(t.id); setTicketRef(t.reference) }
       } catch { /* ignore ticket errors */ }
-      if (n.notes && n.provider !== 'stub' && /error|HTTP \d/i.test(n.notes)) setFlash(n.notes)
-    } catch (e: any) { setFlash('JD1 failed: ' + (e?.message ?? 'unknown')) }
-    finally { setRunning(false) }
-  }
+    })()
+  }, [run.status, run.consumed])
 
   function savePageNotes(fileName: string, pages: PageDetail[]) {
     if (!note) return
@@ -221,10 +238,11 @@ export function JD1ReviewPage() {
             {files.map((f) => <span key={f.name} className="text-xs flex items-center gap-1 bg-surface-container rounded px-2 py-0.5"><Icon name="description" className="text-[13px] text-primary" />{f.name.length > 34 ? f.name.slice(0, 34) + '…' : f.name}</span>)}
           </div>
         )}
-        {running && <p className="text-xs text-text-main mt-2">Reading the packet — classifying documents and drafting the note…</p>}
         {flash && <p className="text-xs text-status-rejected mt-2">{flash}</p>}
         {!backendOn() && <p className="text-xs text-outline mt-2">Connect the backend to run the JD1 assistant.</p>}
       </Card>
+
+      {run.status !== 'idle' && run.steps.length > 0 && <JD1Progress run={run} />}
 
       {/* render + populated fields (half/half) — the primary review surface */}
       {files.length > 0 && (
@@ -330,7 +348,7 @@ export function JD1ReviewPage() {
             <Card className="p-5">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge className="bg-status-ai/10 text-status-ai">Claim type: {note.claim_type || 'unknown'}</Badge>
-                {note.provider === 'gemini'
+                {note.provider && note.provider !== 'stub'
                   ? <Badge className="bg-status-approved/10 text-status-approved">Live AI</Badge>
                   : <Badge className="bg-on-surface-variant/10 text-on-surface-variant">Stub</Badge>}
                 <span className="ml-auto flex items-center gap-2">

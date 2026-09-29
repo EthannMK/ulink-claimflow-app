@@ -1,30 +1,21 @@
 import { useEffect, useState } from 'react'
-import { getAiStatus, updateAiSettings, type AiProviderStatus } from '../lib/api'
+import { getAiStatus, updateAiSettings, type AiProviderStatus, type AiStatus } from '../lib/api'
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Badge, Button, Icon } from '../components/ui'
+import { ModelPicker } from '../components/ModelPicker'
 
-// The model id each provider uses for the team's standard model (Gemini 3.6 Flash).
-// Same model, but each provider spells its id its own way.
-const STANDARD_MODEL: Record<string, string> = {
-  vertex: 'gemini-3.6-flash',
-  openrouter: 'google/gemini-3.6-flash',
-}
-const WHAT_IS_IT: Record<string, string> = {
-  vertex: "Google Cloud's AI platform. Billed to your GCP credit. Main provider — reads Burmese handwriting and scanned PDFs directly.",
-  openrouter: 'A marketplace that gives access to many AI models through one API key. Backup if Vertex AI is unavailable.',
-}
 
 export function AiProvidersPage() {
   const isSuper = getRole() === 'super_admin'
   const [rows, setRows] = useState<AiProviderStatus[]>([])
-  const [mgmtKey, setMgmtKey] = useState(false)
+  const [keys, setKeys] = useState<AiStatus['keys']>([])
   const [dirty, setDirty] = useState(false)
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
   function load() {
     getAiStatus()
-      .then((s) => { setRows([...s.providers].sort((a, b) => a.priority - b.priority)); setMgmtKey(s.openrouter_management_key_configured); setDirty(false) })
+      .then((s) => { setRows([...s.providers].sort((a, b) => a.priority - b.priority)); setKeys(s.keys ?? []); setDirty(false) })
       .catch((e) => setMsg(String(e?.message ?? e)))
   }
   useEffect(() => { if (isSuper) load() }, [isSuper])
@@ -39,7 +30,7 @@ export function AiProvidersPage() {
     setRows(next.map((r, k) => ({ ...r, priority: k + 1 }))); setDirty(true)
   }
   function useStandardModel() {
-    setRows((rs) => rs.map((r) => ({ ...r, model: STANDARD_MODEL[r.provider] ?? r.model }))); setDirty(true)
+    setRows((rs) => rs.map((r) => ({ ...r, model: r.standard_model || r.model }))); setDirty(true)
   }
   async function save() {
     if (!rows.some((r) => r.enabled)) { setMsg('Keep at least one provider switched on, otherwise no AI feature will work.'); return }
@@ -56,7 +47,7 @@ export function AiProvidersPage() {
     <div>
       <PageTitle title="AI Providers & Models" sub="Choose which AI services the app uses, in what order, and which model each one runs."
         action={<div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={useStandardModel}><Icon name="auto_fix_high" className="text-[16px]" />Use Gemini 3.6 Flash on all</Button>
+          <Button variant="outline" size="sm" onClick={useStandardModel}><Icon name="auto_fix_high" className="text-[16px]" />Use standard model on all</Button>
           <Button size="sm" onClick={save} disabled={!dirty || busy}><Icon name="save" className="text-[16px]" />{busy ? 'Saving…' : 'Save changes'}</Button>
         </div>} />
 
@@ -64,12 +55,12 @@ export function AiProvidersPage() {
         <div className="flex gap-3">
           <Icon name="cloud" className="text-primary text-[22px]" />
           <div><div className="font-semibold text-primary">Provider</div>
-            <p className="text-text-main text-xs mt-0.5">The company or platform we send the request to — like choosing a phone carrier. Here: Vertex AI or OpenRouter.</p></div>
+            <p className="text-text-main text-xs mt-0.5">The company or platform we send the request to — like choosing a phone carrier.</p></div>
         </div>
         <div className="flex gap-3">
           <Icon name="psychology" className="text-primary text-[22px]" />
           <div><div className="font-semibold text-primary">Model</div>
-            <p className="text-text-main text-xs mt-0.5">The specific AI that provider runs for us — like choosing the phone. Both providers are set to Gemini 3.6 Flash; each just writes its id slightly differently.</p></div>
+            <p className="text-text-main text-xs mt-0.5">The specific AI that provider runs for us — like choosing the phone. All providers are set to the same standard model; each just writes its id slightly differently.</p></div>
         </div>
       </Card>
 
@@ -99,19 +90,17 @@ export function AiProvidersPage() {
                 </td>
                 <td className="px-4 py-3 max-w-xs">
                   <div className="font-semibold text-text-main">{r.label}</div>
-                  <p className="text-xs text-outline mt-0.5">{WHAT_IS_IT[r.provider] ?? ''}</p>
+                  <p className="text-xs text-outline mt-0.5">{r.description}</p>
                 </td>
                 <td className="px-4 py-3">
-                  <input value={r.model} onChange={(e) => patch(i, { model: e.target.value })}
-                    className="w-64 font-mono text-xs border border-outline-variant rounded-md px-2 py-1.5" />
-                  {STANDARD_MODEL[r.provider] && r.model.trim() !== STANDARD_MODEL[r.provider] && (
-                    <p className="text-[11px] text-status-pending mt-1">Not the standard model ({STANDARD_MODEL[r.provider]})</p>)}
+                  <ModelPicker provider={r.provider} value={r.model} standard={r.standard_model}
+                    onChange={(id) => patch(i, { model: id })} />
                 </td>
                 <td className="px-4 py-3">
                   {r.available
                     ? <Badge className="bg-status-approved/10 text-status-approved"><Icon name="check_circle" className="text-[14px] mr-1" />Ready</Badge>
                     : <Badge className="bg-status-rejected/10 text-status-rejected"><Icon name="error" className="text-[14px] mr-1" />Not set up</Badge>}
-                  {!r.available && <p className="text-[11px] text-outline mt-1">{r.provider === 'vertex' ? 'VERTEX_PROJECT is not set on the server.' : 'OPENROUTER_API_KEY is not set on the server.'}</p>}
+                  {!r.available && <p className="text-[11px] text-outline mt-1">{r.not_ready_hint}</p>}
                 </td>
                 <td className="px-4 py-3 text-center">
                   <label className="inline-flex items-center gap-2 cursor-pointer">
@@ -130,12 +119,8 @@ export function AiProvidersPage() {
         <div className="flex items-center gap-2 mb-2"><Icon name="key" className="text-primary" /><span className="font-semibold text-primary">API keys</span></div>
         <p className="text-xs text-text-main mb-3">For security, keys are never entered or shown in the app. They live only on the server (<code>backend/.env</code> locally, Cloud Run secrets when deployed). This page just shows whether each one is present.</p>
         <div className="grid grid-cols-3 gap-3">
-          {[
-            ['Vertex AI', 'Google Cloud sign-in (no key)', rows.find((r) => r.provider === 'vertex')?.available],
-            ['OpenRouter API key', 'OPENROUTER_API_KEY — used to run the model', rows.find((r) => r.provider === 'openrouter')?.available],
-            ['OpenRouter management key', 'OPENROUTER_MANAGEMENT_KEY — used only to read your account balance', mgmtKey],
-          ].map(([name, hint, ok]) => (
-            <div key={String(name)} className="border border-outline-variant rounded-lg p-3">
+          {keys.map(({ name, hint, configured: ok }) => (
+            <div key={name} className="border border-outline-variant rounded-lg p-3">
               <div className="flex items-center justify-between">
                 <span className="font-medium text-text-main text-xs">{name}</span>
                 {ok ? <Badge className="bg-status-approved/10 text-status-approved">Configured</Badge> : <Badge className="bg-surface-container text-outline">Not set</Badge>}
