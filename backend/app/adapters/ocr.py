@@ -1,5 +1,5 @@
 """OCR / vision-AI providers behind one interface.
-POC default = stub (no key needed). Set OCR_PROVIDER=gemini + GEMINI_API_KEY for real reading.
+Falls back to a stub when no AI provider (Vertex AI / OpenRouter) is configured.
 Later: add a DocumentAiProvider the same way for production-grade OCR."""
 from __future__ import annotations
 import base64, json, re
@@ -17,7 +17,7 @@ class StubProvider(OcrProvider):
     def extract(self, data: bytes, mime: str) -> ScanResult:
         return ScanResult(
             doc_type="claim_form",
-            text="STUB OCR output — set OCR_PROVIDER=gemini with a GEMINI_API_KEY to read real documents.",
+            text="STUB OCR output — no AI provider is configured (set up Vertex AI or OpenRouter) to read real documents.",
             fields=[
                 ScanField(key="Member name", value="Thin Zar", confidence=0.9),
                 ScanField(key="Policy number", value="MG-100234", confidence=0.86),
@@ -54,6 +54,8 @@ class AIProvider(OcrProvider):
         ]
         try:
             txt = ai_provider.generate_text(parts)
+        except ai_provider.UsageCapExceeded:
+            raise          # let the router turn this into a clear "limit reached" error
         except Exception:
             txt = ""
         if not txt or not txt.strip():

@@ -51,8 +51,13 @@ def assistant(body: ChatRequest, user=Depends(get_current_user)):
     # Flatten the system instruction + short history into one prompt for the shared layer.
     convo = "\n".join(f"{'Assistant' if m.role == 'assistant' else 'User'}: {m.content}" for m in msgs)
     prompt = f"{SYSTEM}\n\n---\nConversation so far:\n{convo}\n\nAssistant:"
+    from app import request_ctx, usage
+    request_ctx.set_user(user.get("username", ""))
     try:
         text = ai_provider.generate_text([{"text": prompt}])
+    except usage.UsageCapExceeded as e:
+        return _fallback(f"Your AI usage limit has been reached (${e.spent:.2f} of ${e.cap:.2f} used). "
+                         "Please contact your administrator to raise it.")
     except Exception:
         text = ""
     if not text or not text.strip():

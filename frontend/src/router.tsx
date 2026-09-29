@@ -21,6 +21,8 @@ import { AuditPage } from './pages/AuditPage'
 import { ChannelsPage } from './pages/ChannelsPage'
 import { AutomationsPage } from './pages/AutomationsPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { AiUsagePage } from './pages/AiUsagePage'
+import { AiProvidersPage } from './pages/AiProvidersPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/login" replace /> },
@@ -49,6 +51,8 @@ export const router = createBrowserRouter([
       { path: '/admin/channels', element: <ChannelsPage /> },
       { path: '/admin/automations', element: <AutomationsPage /> },
       { path: '/settings', element: <SettingsPage /> },
+      { path: '/ai-usage', element: <AiUsagePage /> },
+      { path: '/admin/ai-providers', element: <AiProvidersPage /> },
     ],
   },
 ])

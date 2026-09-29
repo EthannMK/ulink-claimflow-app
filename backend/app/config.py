@@ -7,20 +7,27 @@ class Settings:
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
     ocr_provider: str = os.getenv("OCR_PROVIDER", "stub")
-    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
     # Shared AI provider layer — API keys stay in env/secrets, NEVER in the settings DB.
-    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
-    groq_model: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+    # Two providers, both running the same Gemini model by default (gemini-3.6-flash):
+    # Vertex AI (primary, paid via GCP credit) and OpenRouter (backup). Groq and the
+    # direct Gemini API / AI Studio were removed on purpose.
     openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
-    # A multilingual VISION model for scanned/handwritten pages (Qwen-VL reads Burmese well).
-    openrouter_model: str = os.getenv("OPENROUTER_MODEL", "qwen/qwen3.8-27b:free")
-    # Vertex AI (GCP) — paid Gemini via the project's billing/credit. No API key: uses the
-    # service account on Cloud Run, or `gcloud auth application-default login` locally.
-    # gemini-2.5-flash is GA on Vertex and reads Burmese (handwriting incl.) very well.
+    # Provisioning/management key (OpenRouter's separate "management" API key) — used
+    # only to create/monitor scoped OpenRouter keys with their own credit limit (e.g.
+    # for a demo tester). NOT the key used to make completions calls (that's
+    # OPENROUTER_API_KEY above). Optional — features that need it degrade cleanly
+    # when it isn't set.
+    openrouter_management_key: str = os.getenv("OPENROUTER_MANAGEMENT_KEY", "")
+    # NOTE: verify this model id against OpenRouter's own catalog in Settings > AI
+    # Providers before relying on it — OpenRouter's newest Gemini listings are often
+    # paid-only, not on the free tier.
+    openrouter_model: str = os.getenv("OPENROUTER_MODEL", "google/gemini-3.6-flash")
+    # Vertex AI (GCP) — paid Gemini via the project's billing/credit. No API key: uses
+    # the service account on Cloud Run, or `gcloud auth application-default login`
+    # locally.
     vertex_project: str = os.getenv("VERTEX_PROJECT", "")
-    vertex_location: str = os.getenv("VERTEX_LOCATION", "us-central1")
-    vertex_model: str = os.getenv("VERTEX_MODEL", "gemini-2.5-flash")
+    vertex_location: str = os.getenv("VERTEX_LOCATION", "global")
+    vertex_model: str = os.getenv("VERTEX_MODEL", "gemini-3.6-flash")
     # Google Document AI (Form Parser) — for the field-highlight review view
     docai_project: str = os.getenv("DOCAI_PROJECT", "")
     docai_location: str = os.getenv("DOCAI_LOCATION", "asia-southeast1")

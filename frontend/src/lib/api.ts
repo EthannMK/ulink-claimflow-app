@@ -53,3 +53,51 @@ export async function extractDoc(kind: 'rules' | 'benefits', file: File): Promis
 }
 export async function listConfirmations(): Promise<ConfirmationRecord[]> { await wait(90); return mockConfirmations }
 export async function listNotifs(): Promise<Notif[]> { await wait(80); return mockNotifs }
+
+// ---- AI providers & models (Super Admin) -------------------------------------
+// Provider = the company/platform we call (Vertex AI, OpenRouter).
+// Model    = the specific AI model that provider runs for us (e.g. gemini-3.6-flash).
+export interface AiProvider { provider: string; model: string; enabled: boolean; priority: number }
+export interface AiProviderStatus extends AiProvider { label: string; available: boolean; vision: boolean }
+export interface AiStatus { providers: AiProviderStatus[]; openrouter_management_key_configured: boolean }
+
+async function jsonOrThrow<T>(r: Response, what: string): Promise<T> {
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `${what} failed (${r.status})`) }
+  return r.json()
+}
+export async function getAiStatus(): Promise<AiStatus> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/ai-settings/status`, { headers: authHeaders() }), 'Loading AI providers')
+}
+export async function updateAiSettings(providers: AiProvider[]): Promise<{ providers: AiProvider[] }> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/ai-settings`, {
+    method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ providers }),
+  }), 'Saving AI providers')
+}
+
+// ---- AI usage & costs ---------------------------------------------------------
+export interface MyUsage { spent_usd: number; cap_usd: number | null; remaining_usd: number | null; requests: number; tokens: number }
+export interface UsageSummary {
+  days: number; total_cost_usd: number; total_tokens: number; requests: number; failed: number; success_rate: number
+  by_model: { provider: string; model: string; requests: number; tokens: number; cost_usd: number }[]
+  by_day: { day: string; requests: number; cost_usd: number }[]
+  by_user: { user: string; requests: number; cost_usd: number }[]
+}
+export interface UsageEntry { id: string; ts: number; user: string; provider: string; model: string; tokens_in: number; tokens_out: number; cost_usd: number; ok: boolean }
+export interface OpenRouterLive {
+  api_key_configured: boolean; management_key_configured: boolean
+  key: null | { error?: string; label?: string; usage_usd?: number | null; limit_usd?: number | null; limit_remaining_usd?: number | null; is_free_tier?: boolean }
+  credits: null | { error?: string; total_credits_usd?: number | null; total_usage_usd?: number | null; balance_usd?: number | null }
+}
+export async function getMyUsage(): Promise<MyUsage> {
+  if (!backendOn()) { await wait(80); return { spent_usd: 0, cap_usd: null, remaining_usd: null, requests: 0, tokens: 0 } }
+  return jsonOrThrow(await fetch(`${apiBase()}/api/usage/me`, { headers: authHeaders() }), 'Loading your usage')
+}
+export async function getUsageSummary(days: number): Promise<UsageSummary> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/usage/summary?days=${days}`, { headers: authHeaders() }), 'Loading usage summary')
+}
+export async function getUsageRecent(limit = 50): Promise<UsageEntry[]> {
+  return (await jsonOrThrow<{ items: UsageEntry[] }>(await fetch(`${apiBase()}/api/usage/recent?limit=${limit}`, { headers: authHeaders() }), 'Loading recent calls')).items
+}
+export async function getOpenRouterLive(): Promise<OpenRouterLive> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/usage/openrouter`, { headers: authHeaders() }), 'Loading OpenRouter balance')
+}

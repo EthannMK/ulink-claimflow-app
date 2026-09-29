@@ -12,6 +12,7 @@ export function Sidebar() {
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { to: '/confirmation', label: 'Confirmation', icon: 'fact_check' },
     { to: '/notifications', label: 'Notifications', icon: 'notifications' },
+    { to: '/ai-usage', label: 'AI Usage', icon: 'monitoring' },
   ]
   const pipeline = [
     { to: '/jd1', label: 'JD1 · Doc Scan & Validation', icon: 'assignment_turned_in' },
@@ -19,6 +20,7 @@ export function Sidebar() {
   ]
   const admin = [
     ...(isSuper ? [{ to: '/admin/users', label: 'Users & Teams', icon: 'group' }] : []),
+    ...(isSuper ? [{ to: '/admin/ai-providers', label: 'AI Providers & Models', icon: 'model_training' }] : []),
     { to: '/admin/roles', label: 'Roles', icon: 'admin_panel_settings' },
     { to: '/admin/channels', label: 'Channels', icon: 'hub' },
     { to: '/admin/routing', label: 'Routing Rules', icon: 'alt_route' },

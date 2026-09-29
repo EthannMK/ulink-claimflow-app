@@ -48,8 +48,12 @@ async def extract(kind: str = Form(...), file: UploadFile = File(...), user=Depe
     else:
         raise HTTPException(status_code=413, detail="File too large to process in the POC.")
 
+    from app import request_ctx, usage
+    request_ctx.set_user(user.get("username", ""))
     try:
         txt = ai_provider.generate_text(parts)
+    except usage.UsageCapExceeded as e:
+        raise usage.cap_http_error(e)
     except Exception:
         txt = ""
     if not txt or not txt.strip():

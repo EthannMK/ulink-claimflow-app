@@ -10,7 +10,7 @@ from app.security import get_current_user
 from app.adapters.docai import review as docai_review
 from app.adapters.jd1 import pdf_text_and_pages, pdf_text_by_page, pdf_page_images, is_pdf
 from app.config import settings
-from app import ai_provider
+from app import ai_provider, request_ctx, usage
 
 router = APIRouter(prefix="/api", tags=["review"])
 
@@ -224,9 +224,13 @@ def _page_analysis(data: bytes, mime: str, start: int = 0, count: int = 0) -> Pa
     if len(tasks) == 1:
         pages = _run(tasks[0])
     else:
+        # A raw ThreadPoolExecutor does not carry contextvars over, so copy the
+        # request context (who is asking -> usage attribution + cap) into each task.
+        import contextvars
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(6, len(tasks))) as ex:
-            for res in ex.map(_run, tasks):
-                pages.extend(res)
+            futs = [ex.submit(contextvars.copy_context().run, _run, t) for t in tasks]
+            for fut in futs:
+                pages.extend(fut.result())
 
     pages.sort(key=lambda p: p.page)
     if not pages:
@@ -246,7 +250,11 @@ async def review_pages(file: UploadFile = File(...), start: int = Form(0), count
         return cached
     # Run the blocking rasterize + AI call in a worker thread so concurrent page
     # ranges truly run in parallel (an async endpoint would serialize them).
-    res = await run_in_threadpool(_page_analysis, data, mime, start, count)
+    request_ctx.set_user(user.get("username", ""))
+    try:
+        res = await run_in_threadpool(_page_analysis, data, mime, start, count)
+    except usage.UsageCapExceeded as e:
+        raise usage.cap_http_error(e)
     if not res.error:
         if len(_PAGE_CACHE) >= _MAX:
             _PAGE_CACHE.pop(next(iter(_PAGE_CACHE)))
@@ -290,7 +298,11 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
             req = []
 
     if req:
-        gem = await run_in_threadpool(_gemini_values, data, mime, req)   # accurate values (handwriting/Burmese), keyed by field number
+        request_ctx.set_user(user.get("username", ""))
+        try:
+            gem = await run_in_threadpool(_gemini_values, data, mime, req)   # accurate values (handwriting/Burmese), keyed by field number
+        except usage.UsageCapExceeded as e:
+            raise usage.cap_http_error(e)
         mapped: list[ReviewField] = []
         for i, f in enumerate(req, 1):
             g = gem.get(i, {})

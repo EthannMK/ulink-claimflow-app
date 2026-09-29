@@ -7,9 +7,10 @@ from app.db import Collection
 _users = Collection("users")
 
 
-def _mk(username, name, email, role, password):
+def _mk(username, name, email, role, password, usage_cap_usd=None):
     return {"id": str(uuid.uuid4()), "username": username, "name": name, "email": email,
-            "role": role, "active": True, "password_hash": hash_password(password)}
+            "role": role, "active": True, "password_hash": hash_password(password),
+            "usage_cap_usd": usage_cap_usd, "usage_spent_usd": 0.0}
 
 
 def _seed():
@@ -44,10 +45,10 @@ def list_users():
     return _users.all()
 
 
-def create_user(username, name, email, role, password):
+def create_user(username, name, email, role, password, usage_cap_usd=None):
     if _users.get(username):
         return None
-    u = _mk(username, name, email, role, password)
+    u = _mk(username, name, email, role, password, usage_cap_usd)
     _users.put(username, u)
     return u
 
@@ -58,6 +59,12 @@ def update_user(uid: str, **fields):
         return None
     if fields.get("password"):
         u["password_hash"] = hash_password(fields.pop("password"))
+    else:
+        fields.pop("password", None)
+    if fields.pop("clear_usage_cap", False):
+        u["usage_cap_usd"] = None
+    if fields.pop("reset_usage", False):
+        u["usage_spent_usd"] = 0.0
     for k, v in fields.items():
         if v is not None:
             u[k] = v

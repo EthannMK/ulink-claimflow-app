@@ -581,7 +581,7 @@ def draft_client_mail(note: JD1Note, sender: str = "") -> tuple[str, str, str]:
 
 def _stub_note(claim_type: str) -> JD1Note:
     n = JD1Note(claim_type=claim_type, provider="stub",
-                notes="STUB — set OCR_PROVIDER=gemini with a GEMINI_API_KEY to generate a real JD1 note.")
+                notes="STUB — no AI provider is configured (set up Vertex AI or OpenRouter) to generate a real JD1 note.")
     n.header.member_name = NoteField(value="(sample) Thein Nyunt", confidence=0.9)
     n.header.insurer = NoteField(value="AYA SOMPO", confidence=0.9)
     return n

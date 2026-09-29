@@ -4,7 +4,7 @@ export type Category = 'new_claim' | 'log_request' | 'query' | 'complaint' | 'pa
 export type Status = 'new' | 'in_progress' | 'awaiting_docs' | 'ready_for_review' | 'approved' | 'partially_approved' | 'rejected' | 'closed';
 export type Role = 'admin' | 'jd1' | 'jd2' | 'jd3' | 'jd4' | 'csr';
 
-export interface User { id: string; name: string; email: string; role: Role; team?: string; active: boolean; }
+export interface User { id: string; name: string; email: string; role: Role; team?: string; active: boolean; username?: string; usage_cap_usd?: number | null; usage_spent_usd?: number; }
 export interface DocumentFile { id: string; name: string; type: string; url: string; pages?: number; }
 export interface ExtractedField { key: string; value: string; confidence: number; }
 export interface Claim {

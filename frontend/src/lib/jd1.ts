@@ -81,7 +81,7 @@ export async function runJD1(files: File[]): Promise<JD1Note> {
   const fd = new FormData()
   files.forEach((f) => fd.append('files', f, f.name))
   const r = await fetch(`${apiBase()}/api/jd1`, { method: 'POST', headers: authHeaders(), body: fd })
-  if (!r.ok) throw new Error(`JD1 failed (${r.status})`)
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `JD1 failed (${r.status})`) }
   return r.json()
 }
 

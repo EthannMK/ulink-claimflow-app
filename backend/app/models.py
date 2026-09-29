@@ -13,6 +13,8 @@ class User(BaseModel):
     email: str
     role: Role
     active: bool = True
+    usage_cap_usd: float | None = None   # None = unlimited AI spend
+    usage_spent_usd: float = 0.0         # running estimated AI spend (USD)
 
 class UserCreate(BaseModel):
     username: str
@@ -20,6 +22,7 @@ class UserCreate(BaseModel):
     email: str
     role: Role = Role.user
     password: str
+    usage_cap_usd: float | None = None
 
 class UserUpdate(BaseModel):
     name: str | None = None
@@ -27,6 +30,9 @@ class UserUpdate(BaseModel):
     role: Role | None = None
     active: bool | None = None
     password: str | None = None
+    usage_cap_usd: float | None = None
+    clear_usage_cap: bool = False        # set true to make the user unlimited again
+    reset_usage: bool = False            # set true to zero their spent counter
 
 class Token(BaseModel):
     access_token: str

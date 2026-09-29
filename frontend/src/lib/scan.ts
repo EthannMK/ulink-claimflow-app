@@ -5,7 +5,7 @@ export interface BackendScan { doc_type: string; text: string; fields: BackendFi
 export async function scanFile(file: Blob, filename = 'doc.png'): Promise<BackendScan> {
   const fd = new FormData(); fd.append('file', file, filename)
   const r = await fetch(`${apiBase()}/api/scan`, { method: 'POST', headers: authHeaders(), body: fd })
-  if (!r.ok) throw new Error(`Scan failed (${r.status})`)
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Scan failed (${r.status})`) }
   return r.json()
 }
 export function dataUrlToBlob(d: string): Blob {
