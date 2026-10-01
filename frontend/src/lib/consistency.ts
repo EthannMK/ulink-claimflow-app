@@ -21,10 +21,21 @@ const GROUPS: Group[] = [
 ]
 
 const HONORIFIC = /^(u|daw|mg|maung|ma|ko|mr|mrs|ms|miss|dr|sayar|saya)\.?\s+/i
+// Burmese honorifics: U, Daw, Maung, Ko, Ma (written before the name)
+const HONORIFIC_MY = /^(ဦး|ဒေါ်|မောင်|ကို|မ)\s*/
+/** Company / organisation names are not a person's name (e.g. a group policy's "insured" = the employer). */
+const ORG = /\b(international|ltd|limited|co\.?|company|corp|corporation|inc|organi[sz]ation|foundation|association|bank|hospital|clinic|group|services?|insurance|ngo|unicef|undp|care)\b|ကုမ္ပဏီ|လီမိတက်/i
+export const isOrgName = (v: string) => ORG.test(v || '')
+/** 'my' = Burmese letters, 'latin' = A–Z, '' = neither. A Burmese and an English spelling of the same name
+ *  share no letters, so letter-similarity can't compare them — the officer decides. */
+export function scriptOf(v: string): 'my' | 'latin' | '' {
+  if (/[\u1000-\u109f]/.test(v || '')) return 'my'
+  return /[a-z]/i.test(v || '') ? 'latin' : ''
+}
 export function normalize(field: ConsistencyField, v: string): string {
   let s = (v || '').trim().toLowerCase()
   if (field === 'name') {
-    for (let i = 0; i < 3; i++) s = s.replace(HONORIFIC, '')
+    for (let i = 0; i < 3; i++) s = s.replace(HONORIFIC, '').replace(HONORIFIC_MY, '')
     return s.replace(/[^a-zက-႟]/g, '')
   }
   if (field === 'dob') return s.split(/[^0-9a-z]+/).filter(Boolean).map((x) => x.replace(/^0+(?=\d)/, '')).join('-')
@@ -59,6 +70,7 @@ export function findConflicts(pages: PageDetail[], fields: ConsistencyField[]): 
     const byNorm = new Map<string, Variant>()
     for (const p of pages) for (const it of p.items) {
       if (!g.test(it.label) || !it.value.trim()) continue
+      if (g.field === 'name' && isOrgName(it.value)) continue   // employer / company, not a person
       const norm = normalize(g.field, it.value)
       if (norm.length < 2) continue
       const v = byNorm.get(norm) ?? { value: it.value.trim(), norm, pages: [], printed: 0, clear: 0, count: 0, hw: false, unclear: false }
@@ -76,17 +88,28 @@ export function findConflicts(pages: PageDetail[], fields: ConsistencyField[]): 
   return out
 }
 
-/** Put `value` into every field of this group that is a close variant of it (similar spelling).
- *  Clearly different values (probably another person) are left alone. Keeps the AI's reading. */
-export function applyValue(pages: PageDetail[], c: Conflict, value: string): PageDetail[] {
+/** Which variants "Use … everywhere" changes by default: every variant, except one written in the
+ *  SAME script that is clearly different (probably another person/number). A Burmese spelling of an
+ *  English name (and vice versa) is included — letters can't be compared across scripts. */
+export function defaultInclude(c: Conflict, bestIdx = c.best): Set<string> {
+  const best = c.variants[bestIdx]
+  return new Set(c.variants.filter((v, i) => i !== bestIdx &&
+    !(scriptOf(v.value) === scriptOf(best.value) && similarity(v.norm, best.norm) < 0.5)).map((v) => v.norm))
+}
+
+/** Put `value` into every field of this group whose reading is in `include` (normalized values).
+ *  Each changed field keeps the AI's reading (ai_value) so it can be restored. */
+export function applyValue(pages: PageDetail[], c: Conflict, value: string, include?: Set<string>): PageDetail[] {
   const g = GROUPS.find((x) => x.key === c.key)!
   const target = normalize(c.field, value)
+  const inc = include ?? defaultInclude(c, Math.max(0, c.variants.findIndex((v) => v.norm === target)))
   return pages.map((p) => ({
     ...p,
     items: p.items.map((it) => {
       if (!g.test(it.label) || !it.value.trim()) return it
+      if (g.field === 'name' && isOrgName(it.value)) return it
       const n = normalize(c.field, it.value)
-      if (n === target || similarity(n, target) < 0.5) return it
+      if (n === target || !inc.has(n)) return it
       return { ...it, value, ai_value: it.ai_value || it.value }
     }),
   }))

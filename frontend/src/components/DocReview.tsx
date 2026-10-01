@@ -5,7 +5,7 @@ import type { ReqField } from '../lib/jd1'
 import { refreshUsage } from '../lib/queryClient'
 import { useQuery } from '@tanstack/react-query'
 import { getConsistency } from '../lib/api'
-import { findConflicts, applyValue, similarity, type Conflict } from '../lib/consistency'
+import { findConflicts, applyValue, similarity, scriptOf, defaultInclude, type Conflict } from '../lib/consistency'
 
 function mergePages(prev: PageDetail[], incoming: PageDetail[]): PageDetail[] {
   const map = new Map<number, PageDetail>()
@@ -342,9 +342,19 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
   const conflicts: Conflict[] = useMemo(() => (
     !consistency?.enabled || pageLoading || pageItems.length < 2 ? [] : findConflicts(pageItems, consistency.fields).filter((c) => !dismissed.has(c.id))
   ), [consistency, pageLoading, pageItems, dismissed])
+  // per banner: which variants will be replaced (the officer can untick any)
+  const [include, setInclude] = useState<Record<string, Set<string>>>({})
+  const includeFor = (c: Conflict) => include[c.id] ?? defaultInclude(c)
+  function toggleInclude(c: Conflict, norm: string) {
+    setInclude((m) => { const cur = new Set(m[c.id] ?? defaultInclude(c)); cur.has(norm) ? cur.delete(norm) : cur.add(norm); return { ...m, [c.id]: cur } })
+  }
   function applyEverywhere(c: Conflict, value: string) {
     userEdit()
-    setPageItems((prev) => applyValue(prev, c, value))
+    const chosen = c.variants.findIndex((v) => v.value === value)
+    // "use this instead": the old best becomes one of the readings to replace
+    const inc = chosen === c.best || chosen < 0 ? includeFor(c)
+      : new Set([...includeFor(c), c.variants[c.best].norm].filter((n) => n !== c.variants[chosen].norm))
+    setPageItems((prev) => applyValue(prev, c, value, inc))
     setDismissed((d) => new Set(d).add(c.id))
   }
   function restoreItem(pg: number, idx: number) {
@@ -501,20 +511,27 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
                           <span className="text-outline"> ({best.printed ? 'printed' : 'handwritten'}{best.unclear && !best.clear ? ', unclear' : ''}, page {best.pages.join(', ')})</span></div>
                         <ul className="mt-1 space-y-0.5">
                           {c.variants.map((v, i) => {
-                            const far = i !== c.best && similarity(v.norm, best.norm) < 0.5
+                            const isBest = i === c.best
+                            const other = !isBest && scriptOf(v.value) !== scriptOf(best.value)
+                            const far = !isBest && !other && similarity(v.norm, best.norm) < 0.5
+                            const on = includeFor(c).has(v.norm)
                             return (
-                              <li key={v.norm} className="flex items-center gap-2">
+                              <li key={v.norm} className="flex items-start gap-2">
+                                {isBest ? <Icon name="star" className="text-[14px] text-primary mt-0.5" />
+                                  : <input type="checkbox" className="mt-0.5" checked={on} onChange={() => toggleInclude(c, v.norm)} title="Replace this reading" />}
                                 <span className="font-medium">“{v.value}”</span>
-                                <span className="text-outline">{v.hw ? 'handwritten' : 'printed'}{v.unclear ? ', unclear' : ''} · page {v.pages.join(', ')}</span>
-                                {far && <span className="text-status-rejected">looks like a different person/number — check, it won't be changed</span>}
-                                {i !== c.best && !far && <button onClick={() => applyEverywhere(c, v.value)} className="text-primary hover:underline">use this instead</button>}
+                                <span className="text-outline whitespace-nowrap">{v.hw ? 'handwritten' : 'printed'}{v.unclear ? ', unclear' : ''} · page {v.pages.join(', ')}</span>
+                                {other && <span className="text-text-main">{scriptOf(v.value) === 'my' ? 'Burmese spelling' : 'English spelling'} — likely the same name</span>}
+                                {far && <span className="text-status-rejected">looks like a different person — unticked, check it</span>}
+                                {!isBest && <button onClick={() => applyEverywhere(c, v.value)} className="text-primary hover:underline whitespace-nowrap">use this instead</button>}
                               </li>
                             )
                           })}
                         </ul>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <button onClick={() => applyEverywhere(c, best.value)} className="font-semibold text-primary hover:underline">Use “{best.value}” everywhere</button>
+                        <button onClick={() => applyEverywhere(c, best.value)} disabled={includeFor(c).size === 0}
+                          className="font-semibold text-primary hover:underline disabled:opacity-40">Use “{best.value}” for the ticked ({includeFor(c).size})</button>
                         <button onClick={() => setDismissed((d) => new Set(d).add(c.id))} className="text-outline hover:underline">Keep as read</button>
                       </div>
                     </div>
