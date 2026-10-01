@@ -1,10 +1,10 @@
 import base64, uuid
 from datetime import datetime, timezone
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, Response
-from app.models import JD1Note, JD2Item, JD2List, JD2Decision, JD2Status, StoredDoc
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File
+from app.models import JD1Note, JD2Item, JD2List, JD2Decision, JD2Status, StoredDoc, Status
 from app.security import get_current_user
-from app import jd2_store, storage, audit, store, access_settings
+from app import jd2_store, storage, audit, assignment
 from app.db import Collection
 
 router = APIRouter(prefix="/api/jd2", tags=["jd2"])
@@ -23,12 +23,21 @@ class HandoffAttachment(BaseModel):
 
 class HandoffRequest(BaseModel):
     note: JD1Note
-    attachments: list[HandoffAttachment] = []
+    attachments: list[HandoffAttachment] = []   # old clients only — new ones upload files one by one
+    ticket_id: str | None = None                 # the Inbox ticket JD1 already created (if any)
+
+
+def _amount_of(note: JD1Note) -> str:
+    return note.header.total_claim_amount.value or note.section_b.claim_amount.value
 
 
 @router.post("/handoff", response_model=JD2Item)
 async def handoff(body: HandoffRequest, user=Depends(get_current_user)):
-    """JD1 sends a completed Process Note (plus the uploaded documents) to the JD2 queue."""
+    """JD1 sends a completed Process Note to the JD2 queue and links its Inbox ticket
+    (creating one if JD1 has none). The documents follow with POST /{id}/documents, one
+    request per file — sending them inside this JSON as base64 made big packets exceed
+    Cloud Run's 32 MB request limit, so "Send to JD2" failed."""
+    from app.routers import claims as tickets
     note = body.note
     item_id = uuid.uuid4().hex[:12]
     stored: list[StoredDoc] = []
@@ -47,40 +56,56 @@ async def handoff(body: HandoffRequest, user=Depends(get_current_user)):
         member_name=note.header.member_name.value,
         insurer=note.header.insurer.value,
         claim_type=note.claim_type,
-        claim_amount=note.header.total_claim_amount.value or note.section_b.claim_amount.value,
+        claim_amount=_amount_of(note),
         status=JD2Status.pending,
         note=note,
         attachments=stored,
     )
+    # link the Inbox ticket so everyone can follow the claim from the Inbox
+    t = tickets._get(body.ticket_id) if body.ticket_id else None
+    if t is None:
+        t = tickets.new_ticket_for_note(note)
+    t.jd2_item_id = item_id
+    t.status = Status.ready_for_review
+    t.documentsComplete = len(note.checklist_missing) == 0
+    if t.assignee:   # keep an existing ticket assignment
+        item.assignee, item.assignee_username = t.assignee, t.assignee_username
+    tickets._put(t)
+    item.ticket_id, item.ticket_ref = t.id, t.reference
+    audit.record("jd2_handoff", item.handed_by, detail=f"Sent to JD2 — {item.member_name or '—'} · {t.reference}", ref=item_id)
     return jd2_store.add(item)
 
 
-class AssignBody(BaseModel):
-    assignee: str = ""
-
-@router.put("/{item_id}/assign", response_model=JD2Item)
-async def assign_item(item_id: str, body: AssignBody, user=Depends(get_current_user)):
-    """Reassign a claim to a team member. Who the current officer is allowed to assign to
-    is controlled by the Settings-driven permission map (role -> allowed target roles).
-    Clearing the assignment (empty assignee) is always allowed."""
+@router.post("/{item_id}/documents", response_model=JD2Item)
+async def upload_document(item_id: str, file: UploadFile = File(...), user=Depends(get_current_user)):
+    """Attach one uploaded document to a JD2 claim (called once per file after the handoff)."""
     item = jd2_store.get(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Not found")
-    target_name = body.assignee or None
-    if target_name:
-        target = store.get_by_name(target_name)
-        if not target:
-            raise HTTPException(status_code=404, detail="No such user")
-        allowed = access_settings.get_assign_permissions().get(user.get("role", ""), [])
-        if target["role"] not in allowed:
-            raise HTTPException(status_code=403, detail="Your role is not permitted to assign claims to that team member")
-    item.assignee = target_name
-    # keep the linked Inbox ticket in sync
-    claims = Collection("claims")
-    for c in claims.all():
-        if c.get("jd2_item_id") == item_id:
-            c["assignee"] = target_name
-            claims.put(c.get("id"), c)
+    data = await file.read()
+    doc_id = uuid.uuid4().hex[:8]
+    name = file.filename or "document"
+    jd2_store.put_blob(item_id, doc_id, name, file.content_type or "application/octet-stream", data)
+    item.attachments = [a for a in item.attachments if a.name != name] + [
+        StoredDoc(id=doc_id, name=name, mime=file.content_type or "application/octet-stream", size=len(data))]
+    return jd2_store.save(item)
+
+
+class AssignBody(BaseModel):
+    assignee: str = ""   # username (a display name still works for old data); empty = unassign
+
+@router.put("/{item_id}/assign", response_model=JD2Item)
+async def assign_item(item_id: str, body: AssignBody, user=Depends(get_current_user)):
+    """Assign a claim to a team member (allowed targets come from Settings → Assignment
+    permissions). Clearing is always allowed. The linked Inbox ticket follows."""
+    item = jd2_store.get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Not found")
+    username, name = assignment.resolve(user, body.assignee)
+    item.assignee, item.assignee_username = name, username
+    assignment.sync_ticket(item_id, item.ticket_id, assignee=name, assignee_username=username)
+    audit.record("assign_claim", user.get("name") or user.get("username", ""),
+                 detail=f"JD2 claim {item.member_name or item_id} assigned to {name or 'nobody'}", ref=item_id)
     return jd2_store.save(item)
 
 
@@ -140,7 +165,10 @@ async def update_note(item_id: str, note: JD1Note, user=Depends(get_current_user
     item.member_name = note.header.member_name.value
     item.insurer = note.header.insurer.value
     item.claim_type = note.claim_type
-    item.claim_amount = note.header.total_claim_amount.value or note.section_b.claim_amount.value
+    item.claim_amount = _amount_of(note)
+    from app.routers.claims import _amount
+    assignment.sync_ticket(item_id, item.ticket_id, memberName=item.member_name or "—",
+                           insurer=item.insurer or "—", amount=_amount(item.claim_amount))
     return jd2_store.save(item)
 
 @router.post("/{item_id}/decision", response_model=JD2Item)
@@ -157,9 +185,6 @@ async def decide(item_id: str, body: JD2Decision, user=Depends(get_current_user)
     item.decided_at = datetime.now(timezone.utc)
     # keep the linked Inbox ticket's status in sync with JD2's decision — the JD2Status and
     # Claim Status enums share the same string values for approved/partially_approved/rejected.
-    claims = Collection("claims")
-    for c in claims.all():
-        if c.get("jd2_item_id") == item_id:
-            c["status"] = item.status.value
-            claims.put(c.get("id"), c)
+    assignment.sync_ticket(item_id, item.ticket_id, status=item.status.value)
+    audit.record("jd2_decision", item.decided_by, detail=f"{body.decision} — {item.member_name or item_id}", ref=item_id)
     return jd2_store.save(item)

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useMemo, Fragment } from 'react'
 import { Card, Badge, Icon } from './ui'
 import { reviewDoc, reviewDocPagesRange, type ReviewResult, type ReviewField, type PageDetail, type PageTable } from '../lib/review'
+import type { ReqField } from '../lib/jd1'
 import { refreshUsage } from '../lib/queryClient'
 import { useQuery } from '@tanstack/react-query'
 import { getConsistency } from '../lib/api'
@@ -44,11 +45,16 @@ function pageToText(p: PageDetail): string {
 }
 const isNumeric = (v: string) => /^[\s\d.,()%+-]+$/.test(v) && /\d/.test(v)
 
-export function DocReview({ file, mapFields, initialPages, onSavePages }: {
+export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFields, autoDetect = true, savedLabel = 'Kept with note' }: {
   file: File
   mapFields?: { id: string; label: string; hint?: string; section?: string }[]
   initialPages?: PageDetail[]
   onSavePages?: (pages: PageDetail[]) => void
+  /** receives the Required fields (with the officer's edits) so they travel to JD2 */
+  onSaveFields?: (fields: ReqField[]) => void
+  /** false = never start AI reading by itself (JD2 shows JD1's saved notes, no extra cost) */
+  autoDetect?: boolean
+  savedLabel?: string
 }) {
   // preview (rendered lazily — only the page being viewed)
   const [pdfDoc, setPdfDoc] = useState<any>(null)
@@ -155,7 +161,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
 
   // ---- full detection: stream page ranges in parallel, show each batch as it lands ----
   useEffect(() => {
-    if (!full || usingSaved) return
+    if (!full || usingSaved || !autoDetect) return
     const fileKey = fkey(file)
     if (startedRef.current === fileKey) return
     let alive = true
@@ -242,6 +248,17 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
     return () => clearTimeout(t)
   }, [pageItems, full])
 
+  // Required fields → parent (so JD2 gets them, with JD1's edits). Debounced like page notes.
+  const onSaveFieldsRef = useRef(onSaveFields)
+  useEffect(() => { onSaveFieldsRef.current = onSaveFields }, [onSaveFields])
+  useEffect(() => {
+    if (!res?.fields?.length) return
+    const t = setTimeout(() => {
+      onSaveFieldsRef.current?.(res.fields.map((f) => ({ name: f.name, value: edits[f.id] ?? f.value, section: f.section || '', page: f.page })))
+    }, 500)
+    return () => clearTimeout(t)
+  }, [res, edits])
+
   // keep the page-number box in sync when the page changes via arrows / clicks
   useEffect(() => { setPageInput(String(page + 1)) }, [page])
   function commitPageInput() {
@@ -318,7 +335,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
 
       <div className="grid grid-cols-2 gap-4 items-stretch">
         {/* left: document preview (only the current page is rendered) */}
-        <div className="min-w-0">
+        <div className="min-w-0 self-start sticky top-2">
           {numPages > 1 && (
             <div className="flex items-center gap-1.5 mb-2 text-xs">
               <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-40"><Icon name="chevron_left" className="text-[18px]" /></button>
@@ -401,7 +418,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                 {pageItems.length > 0 && <Badge className="bg-status-approved/10 text-status-approved">{pageItems.length}{pageProgress.total ? ` / ${pageProgress.total}` : ''} page(s)</Badge>}
                 {usingSaved && <Badge className="bg-status-pending/10 text-status-pending">Saved notes</Badge>}
                 <div className="ml-auto flex items-center gap-3">
-                  {usingSaved && (
+                  {usingSaved && autoDetect && (
                     <button onClick={() => { setUsingSaved(false); setPageItems([]); startedRef.current = '' }}
                       className="text-xs text-outline flex items-center gap-1" title="Discard and re-run AI detection">
                       <Icon name="autorenew" className="text-[14px]" />Re-run AI
@@ -409,7 +426,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                   )}
                   {onSavePages && pageItems.length > 0 && (
                     <span className="text-xs text-status-approved flex items-center gap-1" title="Kept with the JD1 note automatically as you edit — no extra save needed">
-                      <Icon name="check_circle" className="text-[14px]" />Kept with note
+                      <Icon name="check_circle" className="text-[14px]" />{savedLabel}
                     </span>
                   )}
                   {pageItems.length > 0 && (
@@ -425,7 +442,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                   <p className="text-xs text-text-main mt-1 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />Reading pages…{pageProgress.total ? ` ${pageProgress.done} / ${pageProgress.total}` : ''} (results appear as each batch finishes)</p>
                 </div>
               )}
-              {!pageLoading && numPages > 1 && pageItems.length > 0 && pageItems.length < numPages && (
+              {autoDetect && !pageLoading && numPages > 1 && pageItems.length > 0 && pageItems.length < numPages && (
                 <div className="flex items-center gap-2 bg-status-pending/10 rounded-lg px-3 py-2 mb-2 text-xs">
                   <Icon name="info" className="text-[16px] text-status-pending shrink-0" />
                   <span className="flex-1 text-text-main">Only {pageItems.length} of {numPages} pages have detail. Your edits are kept — this reads just the missing pages.</span>
@@ -463,6 +480,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                   </div>
                 )
               })}
+              {!autoDetect && pageItems.length === 0 && <Card className="p-3 text-xs text-text-main">JD1 did not run full detection on this file, so there are no page-by-page notes. The document itself is on the left.</Card>}
               {pageErr && pageItems.length === 0 && <Card className="p-3 text-xs text-status-rejected">{pageErr}</Card>}
               <div className="flex-1 min-h-0 overflow-y-auto pr-1">
                 {curPage ? (
@@ -476,8 +494,9 @@ export function DocReview({ file, mapFields, initialPages, onSavePages }: {
                         <Icon name={copied === curPage.page ? 'check' : 'content_copy'} className="text-[14px]" />{copied === curPage.page ? 'Copied' : 'Copy'}
                       </button>
                     </div>
-                    <textarea value={curPage.summary} onChange={(e) => updatePageSummary(curPage.page, e.target.value)} rows={3} placeholder="page summary"
-                      className="w-full text-xs text-text-main leading-relaxed mb-2 border border-outline-variant/60 rounded-md px-2 py-1.5" />
+                    <textarea value={curPage.summary} onChange={(e) => updatePageSummary(curPage.page, e.target.value)} placeholder="page summary"
+                      rows={Math.min(14, Math.max(5, Math.ceil((curPage.summary || '').length / 75) + (curPage.summary || '').split('\n').length))}
+                      className="w-full text-[13px] text-text-main leading-relaxed mb-2 border border-outline-variant/60 rounded-md px-2.5 py-2 resize-y min-h-[7rem]" />
                     {curPage.items.length > 0 && (
                       <div className="space-y-1">
                         {curPage.items.map((it, j) => (

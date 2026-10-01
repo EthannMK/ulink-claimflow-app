@@ -87,6 +87,7 @@ class Claim(BaseModel):
     id: str; reference: str; channel: Channel; category: Category; status: Status
     insurer: str; memberName: str; policyNumber: str | None = None
     assignee: str | None = None; suggestedAssignee: str | None = None
+    assignee_username: str | None = None   # who it is assigned to (login name); `assignee` is the display name
     receivedAt: datetime; documentsComplete: bool = False
     amount: float | None = None; summary: str | None = None
     jd2_item_id: str | None = None    # set when the ticket is handed to JD2
@@ -231,6 +232,16 @@ class FileNotes(BaseModel):
     file: str = ""              # source filename these full-detection pages came from
     pages: list[PageDetail] = []
 
+class ReqField(BaseModel):
+    name: str = ""
+    value: str = ""
+    section: str = ""
+    page: int = 0               # 0-based page the value was found on (0 = unknown / first)
+
+class FileFields(BaseModel):
+    file: str = ""              # source filename
+    fields: list[ReqField] = []  # JD1's "Required fields" for this file, with JD1's edits
+
 
 class JD1Note(BaseModel):
     claim_type: str = ""        # reimbursement / LOG / API-eclaim
@@ -249,6 +260,7 @@ class JD1Note(BaseModel):
     provider: str = "stub"
     notes: str = ""
     page_notes: list[FileNotes] = []   # JD1's saved/edited "Full detection" notes, per uploaded file
+    required_fields: list[FileFields] = []   # JD1's "Required fields" per uploaded file
 
 
 # ---- JD2 queue (JD1 -> JD2 handoff) --------------------------------------------
@@ -273,7 +285,10 @@ class JD2Item(BaseModel):
     claim_type: str = ""
     claim_amount: str = ""
     status: JD2Status = JD2Status.pending
-    assignee: str | None = None         # user this claim is reassigned to (name or username)
+    assignee: str | None = None         # display name of the user this claim is assigned to
+    assignee_username: str | None = None
+    ticket_id: str | None = None        # the linked Inbox ticket
+    ticket_ref: str = ""
     note: JD1Note                # the full JD1 Process Note
     attachments: list[StoredDoc] = []   # the JD1-uploaded documents (bytes served separately)
     decision: str | None = None  # approve / partial / reject

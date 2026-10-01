@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getClaim } from '../lib/api'
 import { Card, Badge, Icon, Button } from '../components/ui'
 import { DeleteTicketButton } from '../components/DeleteTicketButton'
+import { AssignPicker } from '../components/AssignPicker'
+import { assignTicket } from '../lib/jd1'
 import { categoryMeta, statusMeta } from '../lib/format'
 
 const steps = ['Received', 'Category detected', 'Documents scanned', 'Data extracted', 'Completeness checked', 'Policy benefits checked', 'Summary ready', 'Ready for review']
@@ -19,7 +21,13 @@ function SectionHead({ icon, title, tone = 'primary', extra }: { icon: string; t
 export function ClaimWorkspacePage() {
   const { id } = useParams(); const nav = useNavigate()
   const [flash, setFlash] = useState('')
-  const { data: c, isLoading } = useQuery({ queryKey: ['claim', id], queryFn: () => getClaim(id!) })
+  const { data: c, isLoading, refetch } = useQuery({ queryKey: ['claim', id], queryFn: () => getClaim(id!) })
+  const qc = useQueryClient()
+  async function assign(username: string) {
+    if (!c) return
+    try { await assignTicket(c.id, username); await refetch(); qc.invalidateQueries({ queryKey: ['claims'] }); setFlash(username ? 'Assigned. ✓' : 'Unassigned.') }
+    catch (e: any) { setFlash('Assign failed: ' + (e?.message ?? 'unknown')) }
+  }
   if (isLoading) return <p className="text-outline">Loading…</p>
   if (!c) return <p className="text-outline">Claim not found.</p>
   const active = c.documentsComplete ? steps.length : 4
@@ -39,8 +47,10 @@ export function ClaimWorkspacePage() {
         </div>
         <div className="ml-auto flex gap-2">
           <DeleteTicketButton id={c.id} reference={c.reference} />
-          <Button variant="outline" onClick={() => setFlash('Claim reassigned. ✓')}>Reassign</Button>
-          <Button onClick={() => nav('/jd2')}>Pass to JD2</Button>
+          <AssignPicker value={c.assignee_username} currentName={c.assignee} onChange={assign} />
+          {c.jd2_item_id
+            ? <Button onClick={() => nav(`/jd2/${c.jd2_item_id}`)}><Icon name="gavel" className="text-[16px]" />Open in JD2</Button>
+            : <Button onClick={() => nav('/jd1')} title="Scan the documents and send the note to JD2 from JD1"><Icon name="document_scanner" className="text-[16px]" />Continue in JD1</Button>}
         </div>
       </div>
       {flash && <div className="mb-4 text-sm text-status-approved flex items-center gap-1"><Icon name="check_circle" className="text-[18px]" />{flash}</div>}
@@ -109,7 +119,7 @@ export function ClaimWorkspacePage() {
             <div className="flex flex-wrap gap-2 mt-3">
               <Button size="sm" onClick={() => setFlash('Reply sent to member. ✓')}>Approve &amp; send</Button>
               <Button size="sm" variant="outline" onClick={() => setFlash('Document request sent to member. ✓')}>Request docs</Button>
-              <Button size="sm" variant="ghost" onClick={() => nav('/jd2')}>Pass to JD2</Button>
+              {c.jd2_item_id && <Button size="sm" variant="ghost" onClick={() => nav(`/jd2/${c.jd2_item_id}`)}>Open in JD2</Button>}
             </div>
           </Card>
         </div>

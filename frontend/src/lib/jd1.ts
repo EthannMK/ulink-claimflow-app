@@ -29,6 +29,9 @@ export interface ConsistencyCheck { label: string; status: 'ok' | 'warning' | 'f
 export interface SupportingAnalysis { documents: SupportingDoc[]; checks: ConsistencyCheck[]; summary: string }
 
 export interface FileNotes { file: string; pages: PageDetail[] }
+/** JD1's "Required fields" for one uploaded file (with JD1's edits). page is 0-based. */
+export interface ReqField { name: string; value: string; section: string; page: number }
+export interface FileFields { file: string; fields: ReqField[] }
 
 export interface JD1Note {
   claim_type: string
@@ -47,6 +50,7 @@ export interface JD1Note {
   provider: string
   notes: string
   page_notes: FileNotes[]
+  required_fields?: FileFields[]
 }
 
 // ---- amount helpers + client-side reconciliation (after JD1 edits an amount) ----
@@ -100,25 +104,62 @@ export interface StoredDoc { id: string; name: string; mime: string; size: numbe
 export interface JD2Item {
   id: string; created_at: string; handed_by: string
   member_name: string; insurer: string; claim_type: string; claim_amount: string
-  status: JD2Status; assignee?: string | null; note: JD1Note; attachments: StoredDoc[]
+  status: JD2Status; assignee?: string | null; assignee_username?: string | null
+  ticket_id?: string | null; ticket_ref?: string
+  note: JD1Note; attachments: StoredDoc[]
   decision: string | null; reasons: string; decided_by: string | null; decided_at: string | null
 }
 
 function jsonHeaders(): Record<string, string> { return { ...authHeaders(), 'Content-Type': 'application/json' } }
 
-async function fileToBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  let binary = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
-  return btoa(binary)
+
+async function okJson<T>(r: Response, what: string): Promise<T> {
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}))
+    const detail = typeof d.detail === 'string' ? d.detail : ''
+    throw new Error(detail || (r.status === 413 ? `${what}: the file is too large to upload` : `${what} failed (${r.status})`))
+  }
+  return r.json()
 }
 
-export async function handoffToJD2(note: JD1Note, files: File[] = []): Promise<JD2Item> {
-  const attachments = await Promise.all(files.map(async (f) => ({ name: f.name, mime: f.type || 'application/octet-stream', data: await fileToBase64(f) })))
-  const r = await fetch(`${apiBase()}/api/jd2/handoff`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ note, attachments }) })
-  if (!r.ok) throw new Error(`Handoff failed (${r.status})`)
-  return r.json()
+/** Cloud Run accepts at most 32 MB per request, so each document is uploaded on its own. */
+export const MAX_UPLOAD_BYTES = 31 * 1024 * 1024
+
+/** Send the JD1 note to JD2 (the server links / creates the Inbox ticket), then upload each
+ *  document separately. Returns the JD2 item plus any files that could not be attached. */
+export async function handoffToJD2(note: JD1Note, files: File[] = [], ticketId?: string | null,
+  onProgress?: (text: string) => void): Promise<{ item: JD2Item; failed: string[] }> {
+  onProgress?.('Sending the note to JD2…')
+  let item = await okJson<JD2Item>(await fetch(`${apiBase()}/api/jd2/handoff`, {
+    method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ note, ticket_id: ticketId || null }),
+  }), 'Send to JD2')
+  const failed: string[] = []
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i]
+    onProgress?.(`Uploading document ${i + 1} of ${files.length}: ${f.name}`)
+    if (f.size > MAX_UPLOAD_BYTES) { failed.push(`${f.name} (over 31 MB)`); continue }
+    try {
+      const fd = new FormData(); fd.append('file', f, f.name)
+      item = await okJson<JD2Item>(await fetch(`${apiBase()}/api/jd2/${item.id}/documents`, { method: 'POST', headers: authHeaders(), body: fd }), 'Upload')
+    } catch (e: any) { failed.push(`${f.name} (${e?.message ?? 'upload failed'})`) }
+  }
+  return { item, failed }
+}
+
+/** People the signed-in user may assign claims to (every role can call this). */
+export interface Assignee { username: string; name: string; role: string }
+export async function getAssignees(): Promise<Assignee[]> {
+  return (await okJson<{ items: Assignee[] }>(await fetch(`${apiBase()}/api/assignees`, { headers: authHeaders() }), 'Loading team')).items
+}
+export async function assignTicket(id: string, username: string): Promise<unknown> {
+  return okJson(await fetch(`${apiBase()}/api/claims/${id}/assign`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ assignee: username }) }), 'Assign')
+}
+/** Download a JD2 attachment as a File (for the in-page viewer). */
+export async function fetchDocFile(itemId: string, doc: StoredDoc): Promise<File> {
+  const r = await fetch(`${apiBase()}/api/jd2/${itemId}/documents/${doc.id}`, { headers: authHeaders() })
+  if (!r.ok) throw new Error(`Could not load ${doc.name} (${r.status})`)
+  const blob = await r.blob()
+  return new File([blob], doc.name, { type: doc.mime || blob.type })
 }
 
 // ---- tickets (Inbox) ----
@@ -147,31 +188,21 @@ export async function fetchDocBlobUrl(itemId: string, docId: string): Promise<{ 
   return { url, revoke: () => URL.revokeObjectURL(url) }
 }
 export async function getJD2Queue(): Promise<JD2Item[]> {
-  const r = await fetch(`${apiBase()}/api/jd2/queue`, { headers: authHeaders() })
-  if (!r.ok) throw new Error(`Queue failed (${r.status})`)
-  return (await r.json()).items
+  return (await okJson<{ items: JD2Item[] }>(await fetch(`${apiBase()}/api/jd2/queue`, { headers: authHeaders() }), 'Loading the JD2 queue')).items
 }
 export async function getJD2Item(id: string): Promise<JD2Item> {
-  const r = await fetch(`${apiBase()}/api/jd2/${id}`, { headers: authHeaders() })
-  if (!r.ok) throw new Error(`Not found (${r.status})`)
-  return r.json()
+  return okJson(await fetch(`${apiBase()}/api/jd2/${id}`, { headers: authHeaders() }), 'Loading the claim')
 }
 export async function updateJD2Note(id: string, note: JD1Note): Promise<JD2Item> {
-  const r = await fetch(`${apiBase()}/api/jd2/${id}/note`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(note) })
-  if (!r.ok) throw new Error(`Save failed (${r.status})`)
-  return r.json()
+  return okJson(await fetch(`${apiBase()}/api/jd2/${id}/note`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(note) }), 'Save')
 }
 export async function assignJD2(id: string, assignee: string): Promise<JD2Item> {
-  const r = await fetch(`${apiBase()}/api/jd2/${id}/assign`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ assignee }) })
-  if (!r.ok) throw new Error(`Reassign failed (${r.status})`)
-  return r.json()
+  return okJson(await fetch(`${apiBase()}/api/jd2/${id}/assign`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ assignee }) }), 'Assign')
 }
 export async function deleteJD2Item(id: string): Promise<void> {
   const r = await fetch(`${apiBase()}/api/jd2/${id}`, { method: 'DELETE', headers: authHeaders() })
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Delete failed (${r.status})`) }
 }
 export async function decideJD2(id: string, decision: 'approve' | 'partial' | 'reject', reasons: string): Promise<JD2Item> {
-  const r = await fetch(`${apiBase()}/api/jd2/${id}/decision`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ decision, reasons }) })
-  if (!r.ok) throw new Error(`Decision failed (${r.status})`)
-  return r.json()
+  return okJson(await fetch(`${apiBase()}/api/jd2/${id}/decision`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ decision, reasons }) }), 'Decision')
 }

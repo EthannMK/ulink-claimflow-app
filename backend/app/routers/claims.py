@@ -59,13 +59,11 @@ def get_claim(claim_id: str):
         raise HTTPException(status_code=404, detail="Claim not found")
     return c
 
-@router.post("/claims/from-jd1", response_model=Claim)
-def create_from_jd1(body: TicketFromJD1, user=Depends(get_current_user)):
-    """JD1 upload → auto-create a ticket in the Inbox."""
-    note = body.note
+def new_ticket_for_note(note: JD1Note, channel_name: str = "webform") -> Claim:
+    """Build and save a new Inbox ticket for a JD1 note (also used by the JD2 handoff)."""
     is_log = (note.claim_type or "").upper() == "LOG"
     try:
-        channel = Channel(body.channel)
+        channel = Channel(channel_name)
     except ValueError:
         channel = Channel.webform
     summary = ""
@@ -88,6 +86,39 @@ def create_from_jd1(body: TicketFromJD1, user=Depends(get_current_user)):
         summary=summary,
     )
     return _put(claim)
+
+
+@router.post("/claims/from-jd1", response_model=Claim)
+def create_from_jd1(body: TicketFromJD1, user=Depends(get_current_user)):
+    """JD1 upload → auto-create a ticket in the Inbox."""
+    return new_ticket_for_note(body.note, body.channel)
+
+
+@router.get("/assignees")
+def assignees(user=Depends(get_current_user)):
+    """People the signed-in user may assign a claim to (any role can read this; filtered by
+    Settings → Assignment permissions). Names, usernames and roles only."""
+    from app import assignment
+    return {"items": assignment.assignable_users(user)}
+
+
+class AssignBody(BaseModel):
+    assignee: str = ""   # username; empty = unassign
+
+
+@router.put("/claims/{claim_id}/assign", response_model=Claim)
+def assign_claim(claim_id: str, body: AssignBody, user=Depends(get_current_user)):
+    """Assign an Inbox ticket. If it is already in JD2, the JD2 claim is assigned too."""
+    from app import assignment
+    c = _get(claim_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    username, name = assignment.resolve(user, body.assignee)
+    c.assignee, c.assignee_username = name, username
+    assignment.sync_jd2(c.jd2_item_id, assignee=name, assignee_username=username)
+    audit.record("assign_claim", user.get("name") or user.get("username", ""),
+                 detail=f"Ticket {c.reference} assigned to {name or 'nobody'}", ref=claim_id)
+    return _put(c)
 
 @router.patch("/claims/{claim_id}", response_model=Claim)
 def update_claim(claim_id: str, body: TicketUpdate, user=Depends(get_current_user)):

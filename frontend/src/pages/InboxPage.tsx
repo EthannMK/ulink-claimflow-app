@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { listClaims } from '../lib/api'
-import { deleteTicket } from '../lib/jd1'
+import { deleteTicket, assignTicket } from '../lib/jd1'
+import { AssignPicker } from '../components/AssignPicker'
+import { getUsername, getName } from '../lib/auth'
 import { canDeleteTickets } from '../components/DeleteTicketButton'
 import { Card, Badge, Icon, Button } from '../components/ui'
 import { channelIcon, categoryMeta, statusMeta, timeAgo } from '../lib/format'
@@ -17,18 +19,26 @@ export function InboxPage() {
   const [channel, setChannel] = useState('all')
   const [status, setStatus] = useState('all')
   const [q, setQ] = useState('')
+  const [who, setWho] = useState<'all' | 'mine' | 'unassigned'>('all')
+  const qc = useQueryClient()
+  const me = getUsername(), myName = getName()
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [flash, setFlash] = useState('')
   const canDelete = canDeleteTickets()   // Super Admin + Admin
   const items = useMemo(() => (data?.items ?? []).filter(
     (c) => (tab === 'all' || c.category === tab) && (channel === 'all' || c.channel === channel)
       && (status === 'all' || c.status === status)
+      && (who === 'all' || (who === 'unassigned' ? !c.assignee : (c.assignee_username ? c.assignee_username === me : c.assignee === myName)))
       && (q.trim() === '' || `${c.reference} ${c.memberName} ${c.insurer} ${c.policyNumber ?? ''}`.toLowerCase().includes(q.toLowerCase()))
-  ), [data, tab, channel, status, q])
+  ), [data, tab, channel, status, q, who, me, myName])
   const routeFor = (c: any) => c.jd2_item_id ? `/jd2/${c.jd2_item_id}` : c.category === 'log_request' ? `/log/${c.id}` : `/claim/${c.id}`
 
   function toggleSel(id: string) {
     setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  async function assign(id: string, username: string) {
+    try { await assignTicket(id, username); refetch(); qc.invalidateQueries({ queryKey: ['claim', id] }) }
+    catch (e: any) { setFlash('Assign failed: ' + (e?.message ?? 'unknown')) }
   }
   async function removeTicket(id: string) {
     if (!window.confirm('Delete this ticket permanently? This cannot be undone and is recorded in the audit log.')) return
@@ -73,6 +83,9 @@ export function InboxPage() {
           <option value="awaiting_docs">Awaiting documents</option><option value="ready_for_review">Ready for review</option>
           <option value="approved">Approved</option><option value="partially_approved">Partially approved</option>
           <option value="rejected">Rejected</option><option value="closed">Closed</option>
+        </select>
+        <select value={who} onChange={(e) => setWho(e.target.value as any)} className="text-sm bg-white border border-outline-variant rounded-lg px-3 py-2">
+          <option value="all">Everyone's tickets</option><option value="mine">Assigned to me</option><option value="unassigned">Unassigned</option>
         </select>
         <div className="flex items-center gap-2 bg-white border border-outline-variant rounded-lg px-3 py-2 text-sm text-outline">
           <Icon name="search" className="text-[18px]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search ref, member, insurer…" className="outline-none w-48 text-text-main" />
@@ -135,9 +148,10 @@ export function InboxPage() {
                 <td className="px-4 py-3 text-text-main">{c.insurer}</td>
                 <td className="px-4 py-3"><Badge className={categoryMeta[c.category].cls}>{categoryMeta[c.category].label}</Badge></td>
                 <td className="px-4 py-3"><Badge className={statusMeta[c.status].cls}>{statusMeta[c.status].label}</Badge></td>
-                <td className="px-4 py-3">
-                  {c.assignee ?? (
-                    <span className="inline-flex items-center gap-1 text-status-ai text-xs bg-status-ai/10 px-2 py-1 rounded-full"><Icon name="smart_toy" className="text-[14px]" />{c.suggestedAssignee ?? 'Unassigned'}</span>)}
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <AssignPicker compact value={c.assignee_username} currentName={c.assignee} onChange={(u) => assign(c.id, u)}
+                    disabled={['approved', 'partially_approved', 'rejected', 'closed'].includes(c.status)} />
+                  {!c.assignee && c.suggestedAssignee && <div className="text-[10px] text-status-ai mt-0.5">AI suggests {c.suggestedAssignee}</div>}
                 </td>
                 <td className="px-4 py-3 text-text-main">{timeAgo(c.receivedAt)}</td>
                 <td className="px-4 py-3 text-center">{c.documentsComplete

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, updateTicket,
-  type JD1Note, type NoteField, type Section, type InvoiceItem, type DraftMail } from '../lib/jd1'
+  type JD1Note, type NoteField, type Section, type InvoiceItem, type DraftMail, type ReqField } from '../lib/jd1'
 import type { PageDetail } from '../lib/review'
 import { backendOn, getName } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
@@ -60,6 +60,12 @@ export function JD1ReviewPage() {
   const [savedAt, setSavedAt] = useWorkspaceState('savedAt', '')
   const [ticketId, setTicketId] = useWorkspaceState<string | null>('ticketId', null)
   const [ticketRef, setTicketRef] = useWorkspaceState('ticketRef', '')
+  // full detection + required fields per file — kept even before the note exists, so
+  // whatever JD1 reviewed always travels to JD2 (it used to be dropped if detection ran first)
+  const [pagesByFile, setPagesByFile] = useWorkspaceState<Record<string, PageDetail[]>>('pagesByFile', {})
+  const [fieldsByFile, setFieldsByFile] = useWorkspaceState<Record<string, ReqField[]>>('fieldsByFile', {})
+  const [sendStep, setSendStep] = useState('')
+  const sentRef = useRef(false)   // after a successful send, late saves from the viewer are ignored
 
   // restore a locally-saved draft note on first load (survives refresh / navigation)
   useEffect(() => {
@@ -96,16 +102,30 @@ export function JD1ReviewPage() {
     if (note?.claim_type) setReviewForm(note.claim_type.toUpperCase() === 'LOG' ? 'log' : 'claim')
   }, [note])
 
+  /** The note exactly as JD2 should receive it: + every file's full detection and required fields. */
+  function noteForJD2(n: JD1Note): JD1Note {
+    const copy: JD1Note = structuredClone(n)
+    const notes = new Map((copy.page_notes || []).map((fn) => [fn.file, fn.pages]))
+    for (const [file, pages] of Object.entries(pagesByFile)) if (pages.length) notes.set(file, pages)
+    copy.page_notes = [...notes].filter(([, pages]) => pages.length).map(([file, pages]) => ({ file, pages }))
+    const fields = new Map((copy.required_fields || []).map((ff) => [ff.file, ff.fields]))
+    for (const [file, list] of Object.entries(fieldsByFile)) if (list.length) fields.set(file, list)
+    copy.required_fields = [...fields].map(([file, list]) => ({ file, fields: list }))
+    return copy
+  }
+
   async function sendToJD2() {
     if (!note) return
-    setSending(true); setFlash('')
+    setSending(true); setFlash(''); setSendStep('')
     try {
-      const item = await handoffToJD2(note, files)
-      if (ticketId) { try { await updateTicket(ticketId, { status: 'ready_for_review', jd2_item_id: item.id }) } catch { /* ignore */ } }
-      localStorage.removeItem('jd1.note.draft'); nav(`/jd2/${item.id}`)
+      const { item, failed } = await handoffToJD2(noteForJD2(note), files, ticketId, setSendStep)
+      sentRef.current = true
+      localStorage.removeItem('jd1.note.draft')
+      nav(`/jd2/${item.id}`, { state: { justSent: true, failed } })
+      setTimeout(() => jd1Workspace.clear(), 0)   // the next claim starts on a clean JD1 page
     }
     catch (e: any) { setFlash('Send to JD2 failed: ' + (e?.message ?? 'unknown')) }
-    finally { setSending(false) }
+    finally { setSending(false); setSendStep('') }
   }
 
   function analyze() {
@@ -138,6 +158,8 @@ export function JD1ReviewPage() {
   }, [run.status, run.consumed])
 
   function savePageNotes(fileName: string, pages: PageDetail[]) {
+    if (sentRef.current) return
+    setPagesByFile((m) => ({ ...m, [fileName]: pages }))
     if (!note) return
     const copy: JD1Note = structuredClone(note)
     const list = copy.page_notes ? [...copy.page_notes] : []
@@ -221,7 +243,7 @@ export function JD1ReviewPage() {
             <Icon name="upload_file" className="text-[20px] text-primary" />
             <span className="text-text-main">{files.length ? 'Change files' : 'Upload claim packet (PDFs & images)'}</span>
             <input type="file" multiple accept="image/*,application/pdf" className="hidden"
-              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef('') }} />
+              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef(''); setPagesByFile({}); setFieldsByFile({}) }} />
           </label>
           {files.length > 0 && <span className="text-xs text-outline">{files.length} file(s)</span>}
           {ticketRef && <span className="text-xs text-primary flex items-center gap-1"><Icon name="confirmation_number" className="text-[14px]" />Ticket {ticketRef}</span>}
@@ -234,6 +256,7 @@ export function JD1ReviewPage() {
           </div>
         )}
         {flash && <p className="text-xs text-status-rejected mt-2">{flash}</p>}
+        {sendStep && <p className="text-xs text-primary mt-2 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />{sendStep}</p>}
         {!backendOn() && <p className="text-xs text-outline mt-2">Connect the backend to run the JD1 assistant.</p>}
       </Card>
 
@@ -281,8 +304,9 @@ export function JD1ReviewPage() {
             const active = avail.includes(reviewForm) ? reviewForm : (avail[0] ?? 'claim')
             return <DocReview key={reviewIdx + active + files[reviewIdx].name} file={files[reviewIdx]}
               mapFields={fieldsFor(ins, active).map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))}
-              initialPages={note?.page_notes?.find((fn) => fn.file === files[reviewIdx].name)?.pages}
-              onSavePages={(pages) => savePageNotes(files[reviewIdx].name, pages)} />
+              initialPages={pagesByFile[files[reviewIdx].name] ?? note?.page_notes?.find((fn) => fn.file === files[reviewIdx].name)?.pages}
+              onSavePages={(pages) => savePageNotes(files[reviewIdx].name, pages)}
+              onSaveFields={(list) => { if (!sentRef.current) { const name = files[reviewIdx].name; setFieldsByFile((m) => ({ ...m, [name]: list })) } }} />
           })()}
         </Card>
       )}
@@ -307,7 +331,7 @@ export function JD1ReviewPage() {
             )}
             <div className="relative">
               <Button onClick={() => setMenuOpen((o) => !o)}>
-                <Icon name="alt_route" className="text-[16px]" />Choose action<Icon name="expand_more" className="text-[16px]" />
+                <Icon name={sending ? 'autorenew' : 'alt_route'} className={`text-[16px] ${sending ? 'animate-spin' : ''}`} />{sending ? 'Sending to JD2…' : 'Choose action'}<Icon name="expand_more" className="text-[16px]" />
               </Button>
               {menuOpen && (
                 <div className="absolute right-0 mt-1 w-64 bg-white border border-outline-variant rounded-lg shadow-lg z-20 overflow-hidden">
