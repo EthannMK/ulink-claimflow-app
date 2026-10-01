@@ -38,13 +38,23 @@ export interface CostComponent { component: string; source: string; cost: number
 export interface CloudCosts {
   month: string; is_current: boolean; currency: string; google_ok: boolean; google_error: string; table: string
   updated: string | null; fetched_at: string
-  totals: { cost: number; credits: number; net: number; last_month_net: number | null }
-  forecast: { net: number; pace_per_day: number; days_left: number; low: number; high: number; method: string } | null
+  totals: { cost: number; credits: number; net: number; last_month_net: number | null; last_month_gross: number | null }
+  forecast: { net: number; pace_per_day: number; days_left: number; low: number; high: number; method: string; gross: number; gross_pace_per_day: number } | null
   budget: { amount: number; used_pct: number | null; forecast_pct: number | null } | null
-  credits_info: { trial_total: number; used: number; left: number; days_left_at_pace: number | null } | null
+  credits_info: { trial_total: number; used: number; left: number; this_month: number; days_left_at_pace: number | null
+                  by_type: { type: string; name: string; amount: number }[] } | null
+  sources: {
+    google: { ok: boolean; error: string; updated: string | null }
+    backup_ai: { ok: boolean; error: string; checked: string | null; credits_total: number | null; usage_total: number | null; credits_left: number | null; covered_days: number }
+  }
+  pricing: {
+    users: { user: string; name: string; calls: number; jd1_notes: number; ai: number; infra: number; total: number; per_note: number | null; client_tokens: number | null }[]
+    ai_scale: number; all_in_cost: number; jd1_notes: number; per_jd1_note: number | null; token_rate: number | null
+    break_even_per_1m_tokens: number | null; basis: string
+  }
   components: CostComponent[]
-  by_day: { day: string; net: number; components: Record<string, number>; future: boolean; projected?: number }[]
-  by_month: { month: string; google: number; other: number; credits: number; net: number; forecast?: number }[]
+  by_day: { day: string; net: number; gross: number; components: Record<string, number>; future: boolean; projected?: number }[]
+  by_month: { month: string; google: number; other: number; credits: number; net: number; gross: number; forecast?: number }[]
   skus: { component: string; sku: string; cost: number; credits: number; net: number }[]
   ai: { google_bill: { component: string; net: number }[]; backup: number; note: string
         by_feature: { feature: string; calls: number; tokens: number; cost: number; by_provider: Record<string, number> }[] }
