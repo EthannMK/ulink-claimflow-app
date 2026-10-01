@@ -30,7 +30,7 @@ export interface SupportingAnalysis { documents: SupportingDoc[]; checks: Consis
 
 export interface FileNotes { file: string; pages: PageDetail[] }
 /** JD1's "Required fields" for one uploaded file (with JD1's edits). page is 0-based. */
-export interface ReqField { name: string; value: string; section: string; page: number }
+export interface ReqField { name: string; value: string; section: string; page: number; ai_value?: string }
 export interface FileFields { file: string; fields: ReqField[] }
 
 export interface JD1Note {

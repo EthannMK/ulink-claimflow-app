@@ -2,7 +2,7 @@ import logging
 import threading
 import uuid
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from app.models import JD1Note
 from app.security import get_current_user
 from app.adapters.jd1 import read_packet, draft_client_mail
@@ -13,7 +13,7 @@ log = logging.getLogger("claimflow.jd1")
 _JOBS: dict[str, tuple[threading.Event, str]] = {}   # running streamed scans: job id -> (cancel flag, owner)
 
 @router.post("/jd1", response_model=JD1Note)
-async def jd1(files: list[UploadFile] = File(...), user=Depends(get_current_user)):
+async def jd1(files: list[UploadFile] = File(...), corrections: str = Form(""), user=Depends(get_current_user)):
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
     packet: list[tuple[str, bytes, str]] = []
@@ -25,13 +25,13 @@ async def jd1(files: list[UploadFile] = File(...), user=Depends(get_current_user
         raise HTTPException(status_code=400, detail="All files were empty")
     request_ctx.set_user(user.get("username", ""), "JD1 note")
     try:
-        return read_packet(packet)
+        return read_packet(packet, corrections)
     except usage.UsageCapExceeded as e:
         raise usage.cap_http_error(e)
 
 
 @router.post("/jd1/stream")
-async def jd1_stream(files: list[UploadFile] = File(...), user=Depends(get_current_user)):
+async def jd1_stream(files: list[UploadFile] = File(...), corrections: str = Form(""), user=Depends(get_current_user)):
     """Same as POST /jd1, but streams live progress as newline-delimited JSON while it works:
       {"type":"start"} · {"type":"step","text":..,"pct":..} · {"type":"warn",..} ·
       {"type":"stream","chars":n} · {"type":"ping"} (keep-alive every 2 s) ·
@@ -63,7 +63,7 @@ async def jd1_stream(files: list[UploadFile] = File(...), user=Depends(get_curre
         progress.set_cancel_event(stop)
         tally = usage.start_tally()      # client tokens this scan used (tokens only — never dollars)
         try:
-            note = read_packet(packet)
+            note = read_packet(packet, corrections)
             q.put({"type": "result", "note": note.model_dump(), "tokens_used": usage.tally_tokens(tally), "t": time.time()})
         except progress.Cancelled:
             log.info(f"[jd1-stream] cancelled by {username}")

@@ -44,6 +44,12 @@ async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn() } finally { active--; waiting.shift()?.() }
 }
 
+/** Forget this file's cached page results (used by "Re-run AI"). */
+export function forgetPages(file: File) {
+  const pre = `pages:${file.name}:${file.size}:${file.lastModified}:`
+  for (const k of [...pageCache.keys()]) if (k.startsWith(pre)) pageCache.delete(k)
+}
+
 export function reviewDocPages(file: File): Promise<PageAnalysis> {
   return reviewDocPagesRange(file, 0, 0)
 }

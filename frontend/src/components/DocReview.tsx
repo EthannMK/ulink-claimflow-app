@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo, Fragment } from 'react'
 import { Card, Badge, Icon } from './ui'
-import { reviewDoc, reviewDocPagesRange, type ReviewResult, type ReviewField, type PageDetail, type PageTable } from '../lib/review'
+import { reviewDoc, reviewDocPagesRange, forgetPages, type ReviewResult, type ReviewField, type PageDetail, type PageTable } from '../lib/review'
 import type { ReqField } from '../lib/jd1'
 import { refreshUsage } from '../lib/queryClient'
 import { useQuery } from '@tanstack/react-query'
@@ -45,13 +45,17 @@ function pageToText(p: PageDetail): string {
 }
 const isNumeric = (v: string) => /^[\s\d.,()%+-]+$/.test(v) && /\d/.test(v)
 
-export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFields, autoDetect = true, savedLabel = 'Kept with note' }: {
+export function DocReview({ file, mapFields, initialPages, initialFieldValues, onSavePages, onSaveFields, onUserEdit, autoDetect = true, savedLabel = 'Kept with note' }: {
   file: File
   mapFields?: { id: string; label: string; hint?: string; section?: string }[]
   initialPages?: PageDetail[]
   onSavePages?: (pages: PageDetail[]) => void
   /** receives the Required fields (with the officer's edits) so they travel to JD2 */
   onSaveFields?: (fields: ReqField[]) => void
+  /** officer's earlier corrections to Required fields (field name -> value), re-applied after reading */
+  initialFieldValues?: Record<string, string>
+  /** called on every change the officer makes (not on AI results) — drives "Unsaved changes" */
+  onUserEdit?: () => void
   /** false = never start AI reading by itself (JD2 shows JD1's saved notes, no extra cost) */
   autoDetect?: boolean
   savedLabel?: string
@@ -89,6 +93,12 @@ export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFi
   useEffect(() => { onSavePagesRef.current = onSavePages }, [onSavePages])
 
   const hasMap = !!mapFields?.length
+  const mapKey = useMemo(() => JSON.stringify((mapFields ?? []).map((f) => ({ label: f.label, hint: f.hint || '', section: f.section || '' }))), [mapFields])
+  const initialFieldsRef = useRef(initialFieldValues)
+  useEffect(() => { initialFieldsRef.current = initialFieldValues }, [initialFieldValues])
+  const onUserEditRef = useRef(onUserEdit)
+  useEffect(() => { onUserEditRef.current = onUserEdit }, [onUserEdit])
+  const userEdit = () => onUserEditRef.current?.()
   const [mapped, setMapped] = useState(hasMap)
   const useMapped = mapped && hasMap
   const full = !useMapped
@@ -105,7 +115,10 @@ export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFi
       // came back while full detection was still running — show what we have and resume
       setPageItems(mergeKeep(seed ?? [], det.pages)); setUsingSaved(false)
       setPageProgress({ done: det.done, total: det.total }); setPageLoading(true)
-    } else if (seed && seed.length) { setPageItems(seed); setUsingSaved(true) } else { setPageItems([]); setUsingSaved(false) }
+    } else if (seed && seed.length) {
+      // saved notes + any batches that finished while this view was closed
+      setPageItems(det?.finished ? mergeKeep(seed, det.pages) : seed); setUsingSaved(true)
+    } else { setPageItems([]); setUsingSaved(false) }
     ;(async () => {
       try {
         if (isPdf(file)) {
@@ -151,26 +164,42 @@ export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFi
     if (!hasMap) { setLoading(false); return }
     let alive = true
     setLoading(true); setErr(''); setRes(null); setEdits({})
-    const fieldsArg = JSON.stringify(mapFields!.map((f) => ({ label: f.label, hint: f.hint || '', section: f.section || '' })))
-    reviewDoc(file, fieldsArg)
-      .then((r) => { if (alive) { if (r.error) setErr(r.error); setRes(r) } })
+    reviewDoc(file, mapKey)
+      .then((r) => {
+        if (!alive) return
+        if (r.error) setErr(r.error)
+        setRes(r)
+        const prev = initialFieldsRef.current   // keep what the officer corrected before
+        if (prev) {
+          const e: Record<string, string> = {}
+          for (const f of r.fields || []) if (prev[f.name] !== undefined && prev[f.name] !== f.value) e[f.id] = prev[f.name]
+          setEdits(e)
+        }
+      })
       .catch((e) => { if (alive) setErr(e?.message ?? 'Review failed') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [file, mapFields, hasMap])
+  }, [file, mapKey, hasMap])
 
   // ---- full detection: stream page ranges in parallel, show each batch as it lands ----
   useEffect(() => {
     if (!full || usingSaved || !autoDetect) return
     const fileKey = fkey(file)
-    if (startedRef.current === fileKey) return
+    const det0 = DETECT.get(fileKey)
+    if (det0?.finished && !fillRef.current) {
+      // already read (maybe while this tab was hidden) — just show it, nothing to send
+      if (det0.pages.length) setPageItems((prev) => mergeKeep(prev, det0.pages))
+      setPageLoading(false); setPageProgress({ done: det0.done, total: det0.total })
+      startedRef.current = fileKey
+      return
+    }
     let alive = true
-    const resuming = DETECT.has(fileKey) && !DETECT.get(fileKey)!.finished
+    // re-attach to a run that is still going (the requests are cached, nothing is sent twice)
+    const resuming = !!det0 && !det0.finished
     const filling = fillRef.current
 
     // Whole-document fallback (used when we can't get a page count from PDF.js).
     const wholeDoc = () => {
-      if (startedRef.current === fileKey) return
       startedRef.current = fileKey
       if (!DETECT.has(fileKey)) DETECT.set(fileKey, { pages: [], doneRanges: new Set(), done: 0, total: 0, finished: false })
       const det = DETECT.get(fileKey)!
@@ -184,6 +213,9 @@ export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFi
         .catch((e) => { if (alive) setPageErr(e?.message ?? 'Page analysis failed') })
         .finally(() => { if (alive) setPageLoading(false) })
     }
+
+    // a whole-document read is already running -> stay on it (don't start page batches too)
+    if (resuming && det0!.total === 0) { wholeDoc(); return () => { alive = false } }
 
     // If PDF.js hasn't reported the page count yet, wait briefly, then fall back.
     if (isPdf(file) && !pdfDoc) {
@@ -254,7 +286,10 @@ export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFi
   useEffect(() => {
     if (!res?.fields?.length) return
     const t = setTimeout(() => {
-      onSaveFieldsRef.current?.(res.fields.map((f) => ({ name: f.name, value: edits[f.id] ?? f.value, section: f.section || '', page: f.page })))
+      onSaveFieldsRef.current?.(res.fields.map((f) => {
+        const v = edits[f.id] ?? f.value
+        return { name: f.name, value: v, section: f.section || '', page: f.page, ai_value: v !== f.value ? f.value : '' }
+      }))
     }, 500)
     return () => clearTimeout(t)
   }, [res, edits])
@@ -271,18 +306,20 @@ export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFi
   const curPage = pageItems.find((p) => p.page === page + 1)   // Full-detection result for the page on screen
   const display: ReviewField[] = res?.fields || []
   const pageBoxes = useMapped ? display.filter((f) => f.page === page && f.box.w > 0) : []
-  function focusField(f: ReviewField) { setHover(f.id); if (f.box.w > 0 && f.page !== page) setPage(f.page) }
 
   async function copyPage(p: { page: number; title: string; summary: string; items: { label: string; value: string }[] }) {
     try { await navigator.clipboard.writeText(pageToText(p)); setCopied(p.page); setTimeout(() => setCopied(null), 1500) } catch { /* ignore */ }
   }
   function updatePageTitle(pg: number, title: string) {
+    userEdit()
     setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, title } : p)))
   }
   function updatePageSummary(pg: number, summary: string) {
+    userEdit()
     setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, summary } : p)))
   }
   function updateTableCell(pg: number, ti: number, ri: number, ci: number, value: string) {
+    userEdit()
     setPageItems((prev) => prev.map((p) => (p.page !== pg ? p : {
       ...p, tables: (p.tables ?? []).map((t, i) => (i !== ti ? t : { ...t, rows: t.rows.map((r, j) => (j !== ri ? r : r.map((c, k) => (k === ci ? value : c)))) })),
     })))
@@ -306,14 +343,17 @@ export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFi
     !consistency?.enabled || pageLoading || pageItems.length < 2 ? [] : findConflicts(pageItems, consistency.fields).filter((c) => !dismissed.has(c.id))
   ), [consistency, pageLoading, pageItems, dismissed])
   function applyEverywhere(c: Conflict, value: string) {
+    userEdit()
     setPageItems((prev) => applyValue(prev, c, value))
     setDismissed((d) => new Set(d).add(c.id))
   }
   function restoreItem(pg: number, idx: number) {
+    userEdit()
     setPageItems((prev) => prev.map((p) => (p.page !== pg ? p : { ...p, items: p.items.map((it, j) => (j === idx ? { ...it, value: it.ai_value || it.value, ai_value: '' } : it)) })))
   }
   function updatePageItemValue(pg: number, idx: number, value: string) {
-    setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, items: p.items.map((it, j) => (j === idx ? { ...it, value } : it)) } : p)))
+    userEdit()
+    setPageItems((prev) => prev.map((p) => (p.page === pg ? { ...p, items: p.items.map((it, j) => (j === idx ? { ...it, value, ai_value: it.ai_value || it.value } : it)) } : p)))
   }
   async function copyAll() {
     if (!pageItems.length) return
@@ -394,14 +434,15 @@ export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFi
                   return (
                     <Fragment key={f.id}>
                       {showSec && <div className="text-[11px] font-semibold uppercase tracking-wide text-primary/70 pt-2 pb-0.5">{f.section}</div>}
-                      <div onMouseEnter={() => focusField(f)} onMouseLeave={() => setHover(null)}
-                        className="p-2 rounded-md border"
-                        style={{ borderColor: hover === f.id ? 'rgba(202,138,4,0.9)' : 'rgba(0,0,0,0.08)', backgroundColor: hover === f.id ? 'rgba(254,249,195,0.6)' : 'transparent' }}>
+                      <div className={`p-2 rounded-md border ${val !== f.value ? 'border-primary/40 bg-primary/[0.03]' : 'border-outline-variant/60'}`}>
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-text-main truncate">{f.name}{f.box.w > 0 && f.page !== page && <span className="text-outline"> · p{f.page + 1}</span>}</span>
+                          <span className="text-xs text-text-main truncate">{f.name}</span>
+                          {f.page > 0 && f.page !== page && <button onClick={() => setPage(f.page)} className="text-[11px] text-primary shrink-0">page {f.page + 1}</button>}
                         </div>
-                        <input value={val} onChange={(e) => setEdits({ ...edits, [f.id]: e.target.value })}
+                        <input value={val} onChange={(e) => { userEdit(); setEdits((m) => ({ ...m, [f.id]: e.target.value })) }}
                           className="w-full text-sm border border-outline-variant rounded-md px-2 py-1 mt-1" placeholder="not found — enter manually" />
+                        {val !== f.value && <p className="text-[11px] text-outline mt-0.5">AI read: “{f.value || 'nothing'}”
+                          <button onClick={() => { userEdit(); setEdits((m) => { const n = { ...m }; delete n[f.id]; return n }) }} className="ml-2 text-primary hover:underline">Restore</button></p>}
                       </div>
                     </Fragment>
                   )
@@ -419,7 +460,7 @@ export function DocReview({ file, mapFields, initialPages, onSavePages, onSaveFi
                 {usingSaved && <Badge className="bg-status-pending/10 text-status-pending">Saved notes</Badge>}
                 <div className="ml-auto flex items-center gap-3">
                   {usingSaved && autoDetect && (
-                    <button onClick={() => { setUsingSaved(false); setPageItems([]); startedRef.current = '' }}
+                    <button onClick={() => { DETECT.delete(fkey(file)); forgetPages(file); setUsingSaved(false); setPageItems([]); startedRef.current = '' }}
                       className="text-xs text-outline flex items-center gap-1" title="Discard and re-run AI detection">
                       <Icon name="autorenew" className="text-[14px]" />Re-run AI
                     </button>

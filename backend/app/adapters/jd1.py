@@ -435,11 +435,26 @@ def _mb(n: int) -> str:
     return f"{n / 1_048_576:.1f} MB" if n >= 1_048_576 else f"{max(1, n // 1024)} KB"
 
 
-def read_packet(files: list[tuple[str, bytes, str]]) -> JD1Note:
-    """files: list of (filename, data, mime)."""
+def _corrections_part(corrections: str) -> dict | None:
+    """JD1's own corrections from a previous read (required fields / full detection / note
+    fields the officer fixed). Sent as an extra block so a re-generated note uses them."""
+    lines = [ln.strip() for ln in (corrections or "").splitlines() if ln.strip()][:200]
+    if not lines:
+        return None
+    return {"text": "OFFICER-VERIFIED VALUES — the JD1 officer checked the documents and corrected these values "
+                    "(often messy handwriting). Use them exactly in the note; they override what the scan seems to show. "
+                    "Do not mention that they were corrected.\n" + "\n".join(lines)[:8000]}
+
+
+def read_packet(files: list[tuple[str, bytes, str]], corrections: str = "") -> JD1Note:
+    """files: list of (filename, data, mime). corrections: optional officer-verified values."""
     progress.emit(f"Received {len(files)} file(s), {_mb(sum(len(d) for _n, d, _m in files))} in total", pct=2)
     docs: list[ClassifiedDoc] = []
     parts: list[dict] = [{"text": prompts.get("jd1_note") + _NAME_RULE}]
+    _fix = _corrections_part(corrections)
+    if _fix:
+        parts.append(_fix)
+        progress.emit(f"Using {len(_fix['text'].splitlines()) - 1} value(s) you corrected", pct=3)
     reference_only = {"Policy wording", "Table of Benefits"}
 
     for name, data, mime in files:

@@ -235,6 +235,7 @@ class FileNotes(BaseModel):
 class ReqField(BaseModel):
     name: str = ""
     value: str = ""
+    ai_value: str = ""          # what the AI read, when JD1 changed it
     section: str = ""
     page: int = 0               # 0-based page the value was found on (0 = unknown / first)
 

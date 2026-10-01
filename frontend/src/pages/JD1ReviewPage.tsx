@@ -66,6 +66,8 @@ export function JD1ReviewPage() {
   const [fieldsByFile, setFieldsByFile] = useWorkspaceState<Record<string, ReqField[]>>('fieldsByFile', {})
   const [sendStep, setSendStep] = useState('')
   const sentRef = useRef(false)   // after a successful send, late saves from the viewer are ignored
+  // note fields JD1 changed by hand ("section.key" -> value): kept when the note is re-generated
+  const [noteEdits, setNoteEdits] = useWorkspaceState<Record<string, string>>('noteEdits', {})
 
   // restore a locally-saved draft note on first load (survives refresh / navigation)
   useEffect(() => {
@@ -73,17 +75,30 @@ export function JD1ReviewPage() {
     if (jd1Workspace.has('note')) return   // coming back to the page — keep what was on screen
     try {
       const raw = localStorage.getItem('jd1.note.draft')
-      if (raw) { setNote(JSON.parse(raw)); setSavedAt('restored'); setDirty(false) }
+      if (raw) {
+        const n: JD1Note = JSON.parse(raw)
+        setNote(n); setSavedAt('restored'); setDirty(false)
+        setPagesByFile(Object.fromEntries((n.page_notes || []).map((fn) => [fn.file, fn.pages])))
+        setFieldsByFile(Object.fromEntries((n.required_fields || []).map((ff) => [ff.file, ff.fields])))
+        setNoteEdits(JSON.parse(localStorage.getItem('jd1.note.edits') || '{}'))
+      }
     } catch { /* ignore corrupt draft */ }
   }, [])
 
+  /** One Save for everything: note fields, full-detection edits and required-field edits. */
   function saveDraft() {
     if (!note) return
-    try { localStorage.setItem('jd1.note.draft', JSON.stringify(note)); setDirty(false); setSavedAt(new Date().toLocaleTimeString()) }
+    try {
+      const full = noteForJD2(note)
+      localStorage.setItem('jd1.note.draft', JSON.stringify(full))
+      localStorage.setItem('jd1.note.edits', JSON.stringify(noteEdits))
+      setNote(full); setDirty(false); setSavedAt(new Date().toLocaleTimeString())
+    }
     catch { setFlash('Could not save draft (storage full).') }
   }
   function discardDraft() {
-    localStorage.removeItem('jd1.note.draft'); setDirty(false); setSavedAt(''); setNote(null)
+    localStorage.removeItem('jd1.note.draft'); localStorage.removeItem('jd1.note.edits')
+    setDirty(false); setSavedAt(''); setNote(null); setNoteEdits({})
   }
 
   // auto-detect the insurer from the selected file's name
@@ -128,12 +143,24 @@ export function JD1ReviewPage() {
     finally { setSending(false); setSendStep('') }
   }
 
+  /** What JD1 corrected by hand — sent with a re-generate so the new note uses it. */
+  function correctionsText(): string {
+    const lines: string[] = []
+    for (const [file, list] of Object.entries(fieldsByFile))
+      for (const f of list) if (f.ai_value && f.value !== f.ai_value) lines.push(`${f.name}: ${f.value}   (${file})`)
+    for (const [file, pages] of Object.entries(pagesByFile))
+      for (const p of pages) for (const it of p.items)
+        if (it.ai_value && it.value !== it.ai_value) lines.push(`${it.label}: ${it.value}   (${file}, page ${p.page})`)
+    for (const [k, v] of Object.entries(noteEdits)) lines.push(`${k.split('.').pop()!.replace(/_/g, ' ')}: ${v}   (JD1 note)`)
+    return lines.join('\n')
+  }
+
   function analyze() {
     if (!files.length || running) return
     setFlash('')
     if (!backendOn()) { setFlash('Backend is off — start the API and set VITE_USE_MOCKS=false to run the JD1 assistant.'); return }
     setNote(null)
-    jd1Runner.start(files)   // runs in the background; the effect below applies the result
+    jd1Runner.start(files, correctionsText())   // runs in the background; the effect below applies the result
   }
 
   // apply a finished scan — also when it finished while you were on another page
@@ -144,7 +171,15 @@ export function JD1ReviewPage() {
     const n = run.note
     jd1Runner.consume()
     if (!files.length && run.files.length) setFiles(run.files)
-    setNote(n); setDirty(false); setSavedAt(''); localStorage.removeItem('jd1.note.draft')
+    // keep everything JD1 corrected: hand-edited note fields, full detection, required fields
+    const merged: any = structuredClone(n)
+    for (const [k, v] of Object.entries(noteEdits)) {
+      const [sec, key] = k.split('.')
+      if (merged[sec]) merged[sec][key] = { ...(merged[sec][key] ?? { confidence: 0, remark: '' }), value: v }
+    }
+    const kept = noteForJD2(merged as JD1Note)
+    const hasEdits = Object.keys(noteEdits).length > 0 || Object.keys(pagesByFile).length > 0 || Object.keys(fieldsByFile).length > 0
+    setNote(kept); setDirty(hasEdits); setSavedAt(''); localStorage.removeItem('jd1.note.draft')
     if (n.notes && n.provider !== 'stub' && /error|HTTP \d/i.test(n.notes)) setFlash(n.notes)
     // auto-create (or update) the Inbox ticket — best-effort, never blocks the note
     ;(async () => {
@@ -167,9 +202,7 @@ export function JD1ReviewPage() {
     if (idx >= 0) list[idx] = { file: fileName, pages }
     else list.push({ file: fileName, pages })
     copy.page_notes = list
-    setNote(copy)
-    try { localStorage.setItem('jd1.note.draft', JSON.stringify(copy)); setDirty(false); setSavedAt(new Date().toLocaleTimeString()) }
-    catch { setFlash('Could not save draft (storage full).') }
+    setNote(copy)   // kept in memory; the Save button writes everything to the draft
   }
 
   function editField(sec: 'section_a' | 'section_b' | 'section_c' | 'header', key: string, value: string) {
@@ -177,6 +210,7 @@ export function JD1ReviewPage() {
     const copy: any = structuredClone(note)
     copy[sec][key] = { ...copy[sec][key], value }
     setNote(copy); setDirty(true)
+    setNoteEdits((m) => ({ ...m, [`${sec}.${key}`]: value }))
   }
 
   // JD1 corrects an invoice amount — record the original→new audit trail, then re-reconcile.
@@ -243,7 +277,7 @@ export function JD1ReviewPage() {
             <Icon name="upload_file" className="text-[20px] text-primary" />
             <span className="text-text-main">{files.length ? 'Change files' : 'Upload claim packet (PDFs & images)'}</span>
             <input type="file" multiple accept="image/*,application/pdf" className="hidden"
-              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef(''); setPagesByFile({}); setFieldsByFile({}) }} />
+              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef(''); setPagesByFile({}); setFieldsByFile({}); setNoteEdits({}); setDirty(false); localStorage.removeItem('jd1.note.edits') }} />
           </label>
           {files.length > 0 && <span className="text-xs text-outline">{files.length} file(s)</span>}
           {ticketRef && <span className="text-xs text-primary flex items-center gap-1"><Icon name="confirmation_number" className="text-[14px]" />Ticket {ticketRef}</span>}
@@ -268,7 +302,7 @@ export function JD1ReviewPage() {
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Icon name="document_scanner" className="text-[18px] text-primary" />
             <h3 className="font-semibold text-sm">Document &amp; extracted fields</h3>
-            <span className="text-xs text-outline">Rendering on the left, populated fields on the right — hover to highlight, edit to correct.</span>
+            <span className="text-xs text-outline">Document on the left, what the AI read on the right — edit any value to correct it, then press Save.</span>
             <div className="ml-auto flex items-center gap-2 text-xs">
               <span className="text-text-main">Insurer (auto-detected):</span>
               <select value={reviewInsurerId} onChange={(e) => setReviewInsurerId(e.target.value)} className="border border-outline-variant rounded-md px-2 py-1" title="Detected from the file name — change if wrong">
@@ -306,6 +340,8 @@ export function JD1ReviewPage() {
               mapFields={fieldsFor(ins, active).map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))}
               initialPages={pagesByFile[files[reviewIdx].name] ?? note?.page_notes?.find((fn) => fn.file === files[reviewIdx].name)?.pages}
               onSavePages={(pages) => savePageNotes(files[reviewIdx].name, pages)}
+              initialFieldValues={Object.fromEntries((fieldsByFile[files[reviewIdx].name] ?? note?.required_fields?.find((ff) => ff.file === files[reviewIdx].name)?.fields ?? []).map((f) => [f.name, f.value]))}
+              onUserEdit={() => setDirty(true)}
               onSaveFields={(list) => { if (!sentRef.current) { const name = files[reviewIdx].name; setFieldsByFile((m) => ({ ...m, [name]: list })) } }} />
           })()}
         </Card>
@@ -321,11 +357,12 @@ export function JD1ReviewPage() {
             <Button variant="outline" onClick={analyze} disabled={!files.length || running}>
               <Icon name={running ? 'autorenew' : 'auto_awesome'} className={`text-[16px] ${running ? 'animate-spin' : ''}`} />{running ? 'Reading…' : note ? 'Re-generate note' : 'Generate JD1 note'}
             </Button>
+            {!note && dirty && <span className="text-xs text-status-pending flex items-center gap-1" title="Your edits are kept while you work and go into the note when you generate it"><Icon name="edit" className="text-[13px]" />Edits kept — generate the note to save them</span>}
             {note && (
               <div className="flex items-center gap-2">
                 {dirty ? <span className="text-xs text-status-pending flex items-center gap-1"><Icon name="edit" className="text-[13px]" />Unsaved changes</span>
                   : savedAt ? <span className="text-xs text-status-approved flex items-center gap-1"><Icon name="check_circle" className="text-[13px]" />{savedAt === 'restored' ? 'Restored draft' : `Saved · ${savedAt}`}</span> : null}
-                <Button variant="outline" onClick={saveDraft} disabled={!dirty}><Icon name="save" className="text-[16px]" />Save</Button>
+                <Button variant={dirty ? 'primary' : 'outline'} onClick={saveDraft} disabled={!dirty} title="Saves the note, full-detection edits and required-field edits"><Icon name="save" className="text-[16px]" />Save all changes</Button>
                 {(savedAt || dirty) && <button onClick={discardDraft} className="text-xs text-status-rejected" title="Discard the saved draft and clear the note">Discard</button>}
               </div>
             )}

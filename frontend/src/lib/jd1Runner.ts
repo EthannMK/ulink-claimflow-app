@@ -80,9 +80,10 @@ function handle(ev: any) {
   }
 }
 
-async function run(files: File[], signal: AbortSignal) {
+async function run(files: File[], signal: AbortSignal, corrections = '') {
   const fd = new FormData()
   files.forEach((f) => fd.append('files', f, f.name))
+  if (corrections.trim()) fd.append('corrections', corrections)   // JD1's own fixes, used by a re-generate
   try {
     const r = await fetch(`${apiBase()}/api/jd1/stream`, { method: 'POST', headers: authHeaders(), body: fd, signal })
     if (!r.ok || !r.body) {
@@ -113,12 +114,12 @@ export const jd1Runner = {
   get: () => state,
   subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn) } },
   /** Start a scan (ignored while one is already running). */
-  start(files: File[]) {
+  start(files: File[], corrections = '') {
     if (state.status === 'running' || !files.length) return
     controller = new AbortController()
     state = { ...IDLE, status: 'running', startedAt: Date.now(), lastEventAt: Date.now(), files, consumed: false, current: 'Uploading files…' }
     listeners.forEach((l) => l())
-    void run(files, controller.signal)
+    void run(files, controller.signal, corrections)
   },
   /** Cancel the scan: tells the server to stop the AI (so it stops costing), then closes the connection.
    *  Only the AI work done before the cancel is counted in AI usage. */
