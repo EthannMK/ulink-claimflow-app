@@ -74,12 +74,16 @@ export function CloudCostsPanel() {
   const [comp, setComp] = useState('')
   const [asTable, setAsTable] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshErr, setRefreshErr] = useState('')
   const { data, error, isLoading, refetch } = useQuery({ queryKey: ['cloud-costs', month], queryFn: () => getCloudCosts(month), staleTime: 5 * 60_000 })
   useEffect(() => { setComp('') }, [month])
 
   async function refresh() {
     setRefreshing(true)
-    try { const d = await getCloudCosts(month, true); qc.setQueryData(['cloud-costs', month], d) } finally { setRefreshing(false) }
+    setRefreshErr('')
+    try { const d = await getCloudCosts(month, true); qc.setQueryData(['cloud-costs', month], d) }
+    catch (e: any) { setRefreshErr('Refresh failed: ' + (e?.message ?? 'unknown')) }
+    finally { setRefreshing(false) }
   }
 
   const d = data as CloudCosts | undefined
@@ -116,10 +120,12 @@ export function CloudCostsPanel() {
             {d.components.map((c) => <option key={c.component} value={c.component}>{c.component}</option>)}
           </select>
         )}
-        <span className="ml-auto text-xs text-outline">{d?.updated ? `Google data as of ${new Date(d.updated).toLocaleString()}` : ''}</span>
-        <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}><Icon name="refresh" className={`text-[16px] ${refreshing ? 'animate-spin' : ''}`} />Refresh</Button>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={refresh} disabled={refreshing} title="Re-reads the Google Cloud bill, the backup AI billing and the app's records">
+          <Icon name="refresh" className={`text-[16px] ${refreshing ? 'animate-spin' : ''}`} />{refreshing ? 'Refreshing…' : 'Refresh all sources'}</Button>
       </div>
 
+      {d && <SourceStatus d={d} />}
+      {refreshErr && <p className="text-xs text-status-rejected">{refreshErr}</p>}
       {isLoading && <Card className="p-8 text-center text-sm text-text-main"><Icon name="autorenew" className="text-[16px] animate-spin align-middle mr-1" />Reading the bill…</Card>}
       {error && <Card className="p-4 text-sm text-status-rejected">{String((error as Error).message)}</Card>}
       {d && d.google_error && (
@@ -133,19 +139,23 @@ export function CloudCostsPanel() {
       {d && (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <Tile label={d.is_current ? 'Spent this month' : 'Spent in month'} value={usd(d.totals.net)}
-              sub={d.totals.credits ? `${usd(d.totals.cost)} usage − ${usd(-d.totals.credits)} credits` : 'after credits'} />
-            <Tile label="Forecast month end" value={d.forecast ? usd(d.forecast.net) : '—'}
-              sub={d.forecast ? `range ${usd(d.forecast.low)}–${usd(d.forecast.high)} · ${usd(d.forecast.pace_per_day, 3)}/day` : 'only for the current month'} />
-            <Tile label="Last month" value={usd(d.totals.last_month_net)}
-              sub={d.forecast && d.totals.last_month_net != null ? `${d.forecast.net >= d.totals.last_month_net ? '▲' : '▼'} ${usd(Math.abs(d.forecast.net - d.totals.last_month_net))} vs forecast` : undefined} />
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            <Tile label={d.is_current ? 'Real cost this month' : 'Real cost in month'} value={usd(d.totals.cost)}
+              sub={`you pay ${usd(d.totals.net)} after ${usd(-d.totals.credits)} credits`} />
+            <Tile label="Forecast month end" value={d.forecast ? usd(d.forecast.gross) : '—'}
+              sub={d.forecast ? `real cost · ${usd(d.forecast.gross_pace_per_day, 3)}/day · you pay ≈ ${usd(d.forecast.net)}` : 'only for the current month'} />
+            <Tile label="Last month" value={usd(d.totals.last_month_gross)} sub={d.totals.last_month_net != null ? `you paid ${usd(d.totals.last_month_net)}` : undefined} />
             <Tile label="Monthly budget" value={d.budget ? usd(d.budget.amount, 0) : 'not set'}
-              sub={d.budget ? `${d.budget.used_pct ?? 0}% used${d.budget.forecast_pct != null ? ` · forecast ${d.budget.forecast_pct}%` : ''}` : 'set it below'}
+              sub={d.budget ? `${d.budget.used_pct ?? 0}% used${d.budget.forecast_pct != null ? ` · forecast ${d.budget.forecast_pct}%` : ''}` : 'optional — set it below'}
               tone={d.budget?.forecast_pct != null ? (d.budget.forecast_pct >= 100 ? 'bad' : d.budget.forecast_pct >= 80 ? 'warn' : 'ok') : undefined} />
-            <Tile label="Free credits left" value={d.credits_info ? usd(d.credits_info.left) : '—'}
-              sub={d.credits_info ? `${usd(d.credits_info.used)} of ${usd(d.credits_info.trial_total, 0)} used${d.credits_info.days_left_at_pace ? ` · ~${d.credits_info.days_left_at_pace} days at this pace` : ''}` : 'enter your trial credit below'} />
+            <Tile label="Google free credits left" value={d.credits_info ? usd(d.credits_info.left) : '—'}
+              sub={d.credits_info ? `${usd(d.credits_info.used)} of ${usd(d.credits_info.trial_total, 0)} used${d.credits_info.days_left_at_pace ? ` · ~${d.credits_info.days_left_at_pace} days at this pace` : ''}` : 'shown once the bill is connected'} />
+            <Tile label="Backup AI balance" value={d.sources.backup_ai.credits_left != null ? usd(d.sources.backup_ai.credits_left) : '—'}
+              sub={d.sources.backup_ai.usage_total != null ? `${usd(d.sources.backup_ai.usage_total)} used of ${usd(d.sources.backup_ai.credits_total)} topped up` : 'live from the provider'}
+              tone={d.sources.backup_ai.credits_left != null && d.sources.backup_ai.credits_left < 2 ? 'warn' : undefined} />
           </div>
+
+          <PricingCard d={d} />
 
           {/* chart */}
           <Card className="p-5">
@@ -180,7 +190,7 @@ export function CloudCostsPanel() {
                   {d.components.map((c) => (
                     <tr key={c.component} onClick={() => { setComp(c.component); setView('day') }} className={`border-t border-outline-variant/40 cursor-pointer hover:bg-primary/[0.03] ${comp === c.component ? 'bg-primary/[0.05]' : ''}`}>
                       <td className="py-1.5 pr-2"><div className="font-medium text-on-surface">{c.component}</div>
-                        <div className="text-[10px] text-outline">{c.source === 'App estimate' ? 'billed separately · app estimate' : 'Google Cloud bill'}</div></td>
+                        <div className="text-[10px] text-outline">{c.source === 'Google Cloud bill' ? 'Google Cloud bill' : `billed separately · ${c.source}`}</div></td>
                       <td className="text-right tabular-nums">{usd(c.cost, 3)}</td>
                       <td className="text-right tabular-nums text-status-approved">{c.credits ? usd(c.credits, 3) : ''}</td>
                       <td className="text-right tabular-nums font-semibold">{usd(c.net, 3)}</td>
@@ -190,6 +200,14 @@ export function CloudCostsPanel() {
                   ))}
                 </tbody>
               </table>
+              {d.credits_info && d.credits_info.by_type.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-outline-variant/60">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-outline mb-1">Credits applied this month</div>
+                  {d.credits_info.by_type.map((c, i) => (
+                    <div key={i} className="flex justify-between text-xs py-0.5"><span className="text-text-main">{c.name || c.type} <span className="text-outline">· {c.type}</span></span><span className="tabular-nums text-status-approved">{usd(c.amount, 3)}</span></div>
+                  ))}
+                </div>
+              )}
             </Card>
 
             {/* AI */}
@@ -197,7 +215,7 @@ export function CloudCostsPanel() {
               <div className="flex items-center gap-2 mb-2"><Icon name="smart_toy" className="text-primary text-[18px]" /><h3 className="font-semibold text-sm">AI spend · {monthLabel(d.month)}</h3></div>
               <div className="text-sm space-y-1 mb-3">
                 {d.ai.google_bill.map((x) => <div key={x.component} className="flex justify-between"><span className="text-text-main">{x.component} <span className="text-[10px] text-outline">(Google bill)</span></span><b className="tabular-nums">{usd(x.net, 3)}</b></div>)}
-                <div className="flex justify-between"><span className="text-text-main">Backup AI service <span className="text-[10px] text-outline">(estimate)</span></span><b className="tabular-nums">{usd(d.ai.backup, 3)}</b></div>
+                <div className="flex justify-between"><span className="text-text-main">Backup AI service <span className="text-[10px] text-outline">({d.sources.backup_ai.ok ? 'provider billing' : 'estimate'})</span></span><b className="tabular-nums">{usd(d.ai.backup, 3)}</b></div>
               </div>
               <div className="text-[11px] font-semibold uppercase tracking-wide text-outline mb-1">By feature (app records)</div>
               {d.ai.by_feature.length === 0 && <p className="text-xs text-outline">No AI calls this month.</p>}
@@ -223,7 +241,7 @@ export function CloudCostsPanel() {
               </table>
             </details>
           )}
-          <p className="text-[11px] text-outline">Google publishes billing data several times a day; costs usually appear within 24 hours, so today's numbers are still filling in. The backup AI service isn't on the Google bill, so it comes from the app's own per-call records. Forecast = spent so far + the average of the last 7 days × days left.</p>
+          <p className="text-[11px] text-outline">Google publishes billing data several times a day; costs usually appear within 24 hours, so today's numbers are still filling in. The backup AI service is read from its own billing (last 30 complete days); newer days use the app's per-call records until it reports them. Forecast = spent so far + the average of the last 7 days × days left. “Real cost” is before free credits — price on it, because credits run out.</p>
         </>
       )}
 
@@ -248,7 +266,7 @@ function SetupCard({ onSaved, connected, table }: { onSaved: () => void; connect
   return (
     <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} className="bg-white rounded-xl border border-outline-variant shadow-sm">
       <summary className="px-5 py-3 text-sm font-semibold cursor-pointer flex items-center gap-2">
-        <Icon name="settings" className="text-[18px] text-primary" />Connect the Google Cloud bill · budget · free credits
+        <Icon name="settings" className="text-[18px] text-primary" />Connect the Google Cloud bill · budget
         {connected ? <Badge className="bg-status-approved/10 text-status-approved">Connected</Badge> : <Badge className="bg-status-pending/10 text-status-pending">Not connected</Badge>}
       </summary>
       <div className="px-5 pb-5 text-sm">
@@ -258,8 +276,6 @@ function SetupCard({ onSaved, connected, table }: { onSaved: () => void; connect
               <input value={f.dataset} onChange={(e) => setF({ ...f, dataset: e.target.value })} className="text-sm border border-outline-variant rounded-md px-2 py-1 w-72 text-on-surface" /></label>
             <label className="text-xs text-outline flex flex-col gap-0.5">Monthly budget (USD)
               <input value={f.budget_usd ?? ''} onChange={(e) => setF({ ...f, budget_usd: num(e.target.value) })} inputMode="decimal" placeholder="none" className="text-sm border border-outline-variant rounded-md px-2 py-1 w-32 text-on-surface" /></label>
-            <label className="text-xs text-outline flex flex-col gap-0.5">Free trial credit (USD)
-              <input value={f.trial_credit_usd ?? ''} onChange={(e) => setF({ ...f, trial_credit_usd: num(e.target.value) })} inputMode="decimal" placeholder="e.g. 300" className="text-sm border border-outline-variant rounded-md px-2 py-1 w-32 text-on-surface" /></label>
             <Button size="sm" onClick={save}>Save</Button>
             {msg && <span className={`text-xs ${msg === 'Saved.' ? 'text-status-approved' : 'text-status-rejected'}`}>{msg}</span>}
           </div>
@@ -274,5 +290,66 @@ function SetupCard({ onSaved, connected, table }: { onSaved: () => void; connect
         </ol>
       </div>
     </details>
+  )
+}
+
+function Chip({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border ${ok ? 'border-status-approved/30 bg-status-approved/5' : 'border-status-pending/40 bg-status-pending/5'}`} title={detail}>
+      <Icon name={ok ? 'check_circle' : 'schedule'} className={`text-[14px] ${ok ? 'text-status-approved' : 'text-status-pending'}`} />
+      <b className="font-semibold text-on-surface">{label}</b><span className="text-text-main truncate max-w-[22rem]">{detail}</span>
+    </span>
+  )
+}
+
+/** Where each number comes from, and how fresh it is. */
+function SourceStatus({ d }: { d: CloudCosts }) {
+  const g = d.sources.google, o = d.sources.backup_ai
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Chip ok={g.ok} label="Google Cloud bill" detail={g.ok ? `data as of ${g.updated ? new Date(g.updated).toLocaleString() : '—'}` : 'not connected yet'} />
+      <Chip ok={o.ok} label="Backup AI billing" detail={o.ok ? `live · checked ${o.checked ? new Date(o.checked).toLocaleTimeString() : ''} · ${o.covered_days} days reported` : (o.error || 'using the app estimate')} />
+      <Chip ok label="App records" detail={`live · ${new Date(d.fetched_at).toLocaleTimeString()}`} />
+    </div>
+  )
+}
+
+/** What the platform really costs per user / per scan — the numbers to price from. */
+function PricingCard({ d }: { d: CloudCosts }) {
+  const p = d.pricing
+  const under = p.break_even_per_1m_tokens != null && p.token_rate != null && p.token_rate < p.break_even_per_1m_tokens
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <Icon name="sell" className="text-primary text-[18px]" /><h3 className="font-semibold text-sm">What it costs you · for pricing</h3>
+        <span className="text-xs text-outline">{monthLabel(d.month)} · real cost before credits</span>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div><div className="text-[11px] uppercase tracking-wide text-outline">All-in cost</div><div className="text-xl font-bold tabular-nums">{usd(p.all_in_cost)}</div><div className="text-[11px] text-text-main">infrastructure + all AI</div></div>
+        <div><div className="text-[11px] uppercase tracking-wide text-outline">Per JD1 note</div><div className="text-xl font-bold tabular-nums">{usd(p.per_jd1_note, 3)}</div><div className="text-[11px] text-text-main">{p.jd1_notes} notes this month</div></div>
+        <div><div className="text-[11px] uppercase tracking-wide text-outline">Break-even per 1M client tokens</div><div className={`text-xl font-bold tabular-nums ${under ? 'text-status-rejected' : ''}`}>{usd(p.break_even_per_1m_tokens, 3)}</div>
+          <div className="text-[11px] text-text-main">your token rate: {usd(p.token_rate, 4)}{under ? ' — below cost' : ''}</div></div>
+        <div><div className="text-[11px] uppercase tracking-wide text-outline">AI records → real bill</div><div className="text-xl font-bold tabular-nums">×{p.ai_scale}</div><div className="text-[11px] text-text-main">how far the app's estimate is from the bill</div></div>
+      </div>
+      {p.users.length === 0 ? <p className="text-xs text-outline">No AI use recorded this month.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-outline text-left"><tr><th className="py-1">User</th><th className="text-right">AI calls</th><th className="text-right">JD1 notes</th><th className="text-right">AI cost</th><th className="text-right">Infra share</th><th className="text-right">Total</th><th className="text-right">Per note</th><th className="text-right">Client tokens</th></tr></thead>
+            <tbody>
+              {p.users.map((u) => (
+                <tr key={u.user} className="border-t border-outline-variant/40">
+                  <td className="py-1.5"><div className="font-medium">{u.name}</div><div className="text-[10px] text-outline">{u.user}</div></td>
+                  <td className="text-right tabular-nums">{u.calls}</td><td className="text-right tabular-nums">{u.jd1_notes}</td>
+                  <td className="text-right tabular-nums">{usd(u.ai, 3)}</td><td className="text-right tabular-nums text-text-main">{usd(u.infra, 3)}</td>
+                  <td className="text-right tabular-nums font-semibold">{usd(u.total, 3)}</td><td className="text-right tabular-nums">{usd(u.per_note, 3)}</td>
+                  <td className="text-right tabular-nums text-text-main">{u.client_tokens != null ? u.client_tokens.toLocaleString() : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-[11px] text-outline mt-2">{p.basis} Charge more than the break-even to cover support and margin.</p>
+    </Card>
   )
 }

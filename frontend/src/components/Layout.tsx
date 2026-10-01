@@ -1,4 +1,5 @@
-import { Outlet, Link } from 'react-router-dom'
+import { Outlet, Link, useLocation } from 'react-router-dom'
+import { PageErrorBoundary } from './PageErrorBoundary'
 import { useQuery } from '@tanstack/react-query'
 import { getMySecurity } from '../lib/api'
 import { Icon } from './ui'
@@ -7,6 +8,7 @@ import { TopBar } from './TopBar'
 import { ChatWidget } from './ChatWidget'
 export function Layout() {
   const sec = useQuery({ queryKey: ['me', 'security'], queryFn: getMySecurity, staleTime: 60_000 })
+  const loc = useLocation()
   return (
     <div className="h-screen flex bg-surface">
       <Sidebar />
@@ -19,7 +21,7 @@ export function Layout() {
             <Link to="/profile" className="font-semibold underline">Change password</Link>
           </div>
         )}
-        <main className="flex-1 overflow-y-auto p-6"><Outlet /></main>
+        <main className="flex-1 overflow-y-auto p-6"><PageErrorBoundary resetKey={loc.pathname}><Outlet /></PageErrorBoundary></main>
       </div>
       <ChatWidget />
     </div>

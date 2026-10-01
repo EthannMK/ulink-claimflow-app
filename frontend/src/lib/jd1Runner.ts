@@ -127,7 +127,8 @@ export const jd1Runner = {
     if (state.status !== 'running') return
     const id = jobId
     if (id) void fetch(`${apiBase()}/api/jd1/cancel/${id}`, { method: 'POST', headers: authHeaders() }).catch(() => {})
-    setTimeout(() => controller?.abort(), 300)
+    const c = controller   // not a newer scan started within the next 300 ms
+    setTimeout(() => c?.abort(), 300)
     setTimeout(refreshUsage, 2500)   // closing the connection also stops it, as a backup
     addStep({ kind: 'error', text: 'Scan cancelled — the AI was stopped' })
     set({ status: 'error', error: 'Cancelled by you', endedAt: Date.now(), consumed: true })

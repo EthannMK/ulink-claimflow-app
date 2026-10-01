@@ -66,6 +66,9 @@ export function JD1ReviewPage() {
   const [fieldsByFile, setFieldsByFile] = useWorkspaceState<Record<string, ReqField[]>>('fieldsByFile', {})
   const [sendStep, setSendStep] = useState('')
   const sentRef = useRef(false)   // after a successful send, late saves from the viewer are ignored
+  const filesRef = useRef(files); filesRef.current = files
+  // invoice amounts JD1 corrected (description -> amount): re-applied after a re-generate
+  const [invEdits, setInvEdits] = useWorkspaceState<Record<string, string>>('invEdits', {})
   // note fields JD1 changed by hand ("section.key" -> value): kept when the note is re-generated
   const [noteEdits, setNoteEdits] = useWorkspaceState<Record<string, string>>('noteEdits', {})
 
@@ -115,7 +118,7 @@ export function JD1ReviewPage() {
   // default the form type from the detected claim type (LOG vs reimbursement/claim)
   useEffect(() => {
     if (note?.claim_type) setReviewForm(note.claim_type.toUpperCase() === 'LOG' ? 'log' : 'claim')
-  }, [note])
+  }, [note?.claim_type])
 
   /** The note exactly as JD2 should receive it: + every file's full detection and required fields. */
   function noteForJD2(n: JD1Note): JD1Note {
@@ -151,6 +154,7 @@ export function JD1ReviewPage() {
     for (const [file, pages] of Object.entries(pagesByFile))
       for (const p of pages) for (const it of p.items)
         if (it.ai_value && it.value !== it.ai_value) lines.push(`${it.label}: ${it.value}   (${file}, page ${p.page})`)
+    for (const [k, v] of Object.entries(invEdits)) lines.push(`Invoice "${k}" amount: ${v}   (JD1 note)`)
     for (const [k, v] of Object.entries(noteEdits)) lines.push(`${k.split('.').pop()!.replace(/_/g, ' ')}: ${v}   (JD1 note)`)
     return lines.join('\n')
   }
@@ -159,8 +163,7 @@ export function JD1ReviewPage() {
     if (!files.length || running) return
     setFlash('')
     if (!backendOn()) { setFlash('Backend is off — start the API and set VITE_USE_MOCKS=false to run the JD1 assistant.'); return }
-    setNote(null)
-    jd1Runner.start(files, correctionsText())   // runs in the background; the effect below applies the result
+    jd1Runner.start(files, correctionsText())   // the current note stays until the new one arrives   // runs in the background; the effect below applies the result
   }
 
   // apply a finished scan — also when it finished while you were on another page
@@ -176,6 +179,13 @@ export function JD1ReviewPage() {
     for (const [k, v] of Object.entries(noteEdits)) {
       const [sec, key] = k.split('.')
       if (merged[sec]) merged[sec][key] = { ...(merged[sec][key] ?? { confidence: 0, remark: '' }), value: v }
+    }
+    if (merged.invoices?.items?.length && Object.keys(invEdits).length) {
+      for (const it of merged.invoices.items) {
+        const v = invEdits[it.description || it.provider || it.id]
+        if (v !== undefined && v !== it.amount) { it.audit = [...(it.audit || []), { field: 'amount', old: it.amount, new: v, by: getName(), at: new Date().toISOString() }]; it.amount = v; it.readable = /\d/.test(v) }
+      }
+      merged.invoices = reconcileInvoices(merged.invoices)
     }
     const kept = noteForJD2(merged as JD1Note)
     const hasEdits = Object.keys(noteEdits).length > 0 || Object.keys(pagesByFile).length > 0 || Object.keys(fieldsByFile).length > 0
@@ -193,23 +203,16 @@ export function JD1ReviewPage() {
   }, [run.status, run.consumed])
 
   function savePageNotes(fileName: string, pages: PageDetail[]) {
-    if (sentRef.current) return
+    if (sentRef.current || !filesRef.current.some((f) => f.name === fileName)) return   // file was replaced meanwhile
     setPagesByFile((m) => ({ ...m, [fileName]: pages }))
-    if (!note) return
-    const copy: JD1Note = structuredClone(note)
-    const list = copy.page_notes ? [...copy.page_notes] : []
-    const idx = list.findIndex((fn) => fn.file === fileName)
-    if (idx >= 0) list[idx] = { file: fileName, pages }
-    else list.push({ file: fileName, pages })
-    copy.page_notes = list
-    setNote(copy)   // kept in memory; the Save button writes everything to the draft
+    // functional update: never overwrite note edits typed after these pages arrived
+    setNote((n) => n && { ...n, page_notes: [...(n.page_notes ?? []).filter((fn) => fn.file !== fileName), { file: fileName, pages }] })
   }
 
   function editField(sec: 'section_a' | 'section_b' | 'section_c' | 'header', key: string, value: string) {
     if (!note) return
-    const copy: any = structuredClone(note)
-    copy[sec][key] = { ...copy[sec][key], value }
-    setNote(copy); setDirty(true)
+    setNote((n) => { if (!n) return n; const copy: any = structuredClone(n); copy[sec][key] = { ...copy[sec][key], value }; return copy })
+    setDirty(true)
     setNoteEdits((m) => ({ ...m, [`${sec}.${key}`]: value }))
   }
 
@@ -224,6 +227,7 @@ export function JD1ReviewPage() {
     if (!it || it.amount === draft) return
     it.audit = [...(it.audit || []), { field: 'amount', old: it.amount, new: draft, by: getName(), at: new Date().toISOString() }]
     it.amount = draft
+    setInvEdits((m) => ({ ...m, [it.description || it.provider || it.id]: draft }))
     it.readable = /\d/.test(draft)
     copy.invoices = reconcileInvoices(copy.invoices)
     setNote(copy); setDirty(true)
@@ -277,7 +281,7 @@ export function JD1ReviewPage() {
             <Icon name="upload_file" className="text-[20px] text-primary" />
             <span className="text-text-main">{files.length ? 'Change files' : 'Upload claim packet (PDFs & images)'}</span>
             <input type="file" multiple accept="image/*,application/pdf" className="hidden"
-              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef(''); setPagesByFile({}); setFieldsByFile({}); setNoteEdits({}); setDirty(false); localStorage.removeItem('jd1.note.edits') }} />
+              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef(''); setPagesByFile({}); setFieldsByFile({}); setNoteEdits({}); setInvEdits({}); setDirty(false); localStorage.removeItem('jd1.note.edits') }} />
           </label>
           {files.length > 0 && <span className="text-xs text-outline">{files.length} file(s)</span>}
           {ticketRef && <span className="text-xs text-primary flex items-center gap-1"><Icon name="confirmation_number" className="text-[14px]" />Ticket {ticketRef}</span>}

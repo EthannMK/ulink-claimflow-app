@@ -43,7 +43,7 @@ class TicketUpdate(BaseModel):
 
 
 @router.get("/claims", response_model=ClaimList)
-def list_claims(status: str = "", category: str = "", page: int = 1):
+def list_claims(status: str = "", category: str = "", page: int = 1, user=Depends(get_current_user)):
     items = [Claim.model_validate(d) for d in _claims.all()]
     if status:
         items = [c for c in items if c.status == status]
@@ -53,7 +53,7 @@ def list_claims(status: str = "", category: str = "", page: int = 1):
     return ClaimList(items=items, page=page, total=len(items))
 
 @router.get("/claims/{claim_id}", response_model=Claim)
-def get_claim(claim_id: str):
+def get_claim(claim_id: str, user=Depends(get_current_user)):
     c = _get(claim_id)
     if not c:
         raise HTTPException(status_code=404, detail="Claim not found")

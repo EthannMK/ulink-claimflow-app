@@ -218,6 +218,7 @@ function ClaimView({ id }: { id: string }) {
   const [flash, setFlash] = useState('')
   const [ok, setOk] = useState(loc.state?.justSent ? 'Sent to JD2. The Inbox ticket is now “Ready for review”.' : '')
   const [tab, setTab] = useState<Tab>('overview')
+  const [ver, setVer] = useState(0)   // bumps on Discard so the document viewer reloads the saved notes
   const isSuper = getRole() === 'super_admin'
 
   useEffect(() => {
@@ -262,7 +263,7 @@ function ClaimView({ id }: { id: string }) {
     catch (e: any) { setFlash('Save failed: ' + (e?.message ?? 'unknown')) }
     finally { setSaving(false) }
   }
-  function discard() { if (item) { setDraft(item.note); setDirty(false) } }
+  function discard() { if (item) { setDraft(item.note); setDirty(false); setVer((v) => v + 1) } }
   async function decide(decision: 'approve' | 'partial' | 'reject') {
     if (!item) return
     if (decision !== 'approve' && !reasons.trim()) { setFlash('Please write the reasons / deductions first.'); return }
@@ -400,7 +401,7 @@ function ClaimView({ id }: { id: string }) {
       )}
 
       {tab === 'documents' && (
-        <DocumentsTab item={item} note={n} decided={decided} onPages={setPages} onDownloadNotes={downloadNotes} pageFiles={pageFiles} />
+        <DocumentsTab key={ver} item={item} note={n} decided={decided} onPages={setPages} onDownloadNotes={downloadNotes} pageFiles={pageFiles} />
       )}
 
       {tab === 'fields' && (
@@ -529,7 +530,7 @@ function DocumentsTab({ item, note, decided, onPages, onDownloadNotes, pageFiles
       {sel && !file && !err && <Card className="p-8 text-center text-sm text-text-main"><Icon name="autorenew" className="text-[16px] animate-spin align-middle mr-1" />Opening {sel.name}…</Card>}
       {sel && file && (
         <Card className="p-4">
-          <DocReview key={sel.id} file={file} autoDetect={false}
+          <DocReview key={sel.id} file={file} autoDetect={false} readOnly={decided}
             initialPages={pageFiles.find((fn) => fn.file === sel.name)?.pages}
             savedLabel={decided ? 'Read-only' : 'Press “Save changes” to keep edits'}
             onSavePages={(pages) => onPages(sel.name, pages)} />

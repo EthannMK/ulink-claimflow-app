@@ -15,19 +15,22 @@ const SUGGESTIONS: Record<string, string[]> = {
 // Conversation lives outside React so it survives page changes (cleared on sign-out/reload).
 let convo: Msg[] = []
 let busy = false
+let gen = 0   // bumps on Clear: an answer still streaming for the old chat is dropped
 const subs = new Set<() => void>()
 let snap = { convo, busy }
 const emit = () => { snap = { convo, busy }; subs.forEach((f) => f()) }
 const setConvo = (next: Msg[]) => { convo = next; emit() }
-export function clearChat() { convo = []; busy = false; emit() }
+export function clearChat() { gen++; convo = []; busy = false; emit() }
 
 async function ask(text: string) {
   if (busy) return
+  const myGen = gen
   const history = [...convo, { role: 'user', content: text, at: Date.now() } as Msg]
   setConvo([...history, { role: 'assistant', content: '', at: Date.now(), pending: true }])
   busy = true; emit()
-  const put = (content: string, done: boolean) =>
-    setConvo([...history, { role: 'assistant', content, at: Date.now(), pending: !done }])
+  const put = (content: string, done: boolean) => {
+    if (myGen === gen) setConvo([...history, { role: 'assistant', content, at: Date.now(), pending: !done }])
+  }
   try {
     const r = await fetch(`${apiBase()}/api/assistant/stream`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -53,7 +56,7 @@ async function ask(text: string) {
     if (!last) put('Sorry, I couldn\'t answer just now. Please try again.', true)
   } catch {
     put('Cannot reach the assistant — please check your connection and try again.', true)
-  } finally { busy = false; emit() }
+  } finally { if (myGen === gen) { busy = false; emit() } }
 }
 
 const time = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

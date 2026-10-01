@@ -9,11 +9,16 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export async function listClaims(): Promise<ClaimList> {
   if (!backendOn()) { await wait(120); return { items: mockClaims, page: 1, total: mockClaims.length } }
-  return (await fetch(`${apiBase()}/api/claims`, { headers: authHeaders() })).json()
+  const r = await fetch(`${apiBase()}/api/claims`, { headers: authHeaders() })
+  if (!r.ok) throw new Error(`Loading tickets failed (${r.status})`)
+  return r.json()
 }
 export async function getClaim(id: string): Promise<Claim | undefined> {
   if (!backendOn()) { await wait(100); return mockClaims.find((c) => c.id === id) }
-  return (await fetch(`${apiBase()}/api/claims/${id}`, { headers: authHeaders() })).json()
+  const r = await fetch(`${apiBase()}/api/claims/${id}`, { headers: authHeaders() })
+  if (r.status === 404) return undefined
+  if (!r.ok) throw new Error(`Loading the ticket failed (${r.status})`)
+  return r.json()
 }
 export async function listUsers(): Promise<User[]> {
   if (!backendOn()) { await wait(90); return mockUsers }

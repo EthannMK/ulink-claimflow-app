@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo, Fragment } from 'react'
 import { Card, Badge, Icon } from './ui'
 import { reviewDoc, reviewDocPagesRange, forgetPages, type ReviewResult, type ReviewField, type PageDetail, type PageTable } from '../lib/review'
 import type { ReqField } from '../lib/jd1'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { refreshUsage } from '../lib/queryClient'
 import { useQuery } from '@tanstack/react-query'
 import { getConsistency } from '../lib/api'
@@ -45,7 +46,7 @@ function pageToText(p: PageDetail): string {
 }
 const isNumeric = (v: string) => /^[\s\d.,()%+-]+$/.test(v) && /\d/.test(v)
 
-export function DocReview({ file, mapFields, initialPages, initialFieldValues, onSavePages, onSaveFields, onUserEdit, autoDetect = true, savedLabel = 'Kept with note' }: {
+export function DocReview({ file, mapFields, initialPages, initialFieldValues, onSavePages, onSaveFields, onUserEdit, autoDetect = true, savedLabel = 'Kept with note', readOnly = false }: {
   file: File
   mapFields?: { id: string; label: string; hint?: string; section?: string }[]
   initialPages?: PageDetail[]
@@ -59,6 +60,8 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
   /** false = never start AI reading by itself (JD2 shows JD1's saved notes, no extra cost) */
   autoDetect?: boolean
   savedLabel?: string
+  /** decided claims: show everything, change nothing */
+  readOnly?: boolean
 }) {
   // preview (rendered lazily — only the page being viewed)
   const [pdfDoc, setPdfDoc] = useState<any>(null)
@@ -73,6 +76,8 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
   const [res, setRes] = useState<ReviewResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
+  const [previewErr, setPreviewErr] = useState('')
+  const [fillTick, setFillTick] = useState(0)   // bumps "Read the missing pages"
   const [hover, setHover] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, string>>({})
 
@@ -107,7 +112,7 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
   useEffect(() => {
     let alive = true
     setPdfDoc(null); setImgCache({}); setImgUrl(''); setNumPages(1); setPage(0)
-    setRes(null); setErr(''); setEdits({}); setHover(null)
+    setRes(null); setErr(''); setPreviewErr(''); setEdits({}); setHover(null)
     const seed = initialPagesRef.current
     const det = DETECT.get(fkey(file))
     setPageProgress({ done: 0, total: 0 }); setPageErr(''); setPageLoading(false); setMapped(hasMap); startedRef.current = ''
@@ -123,7 +128,7 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
       try {
         if (isPdf(file)) {
           const pdfjs: any = await import('pdfjs-dist')
-          pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+          pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl   // shipped with the app
           const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
           if (!alive) return
           setPdfDoc(doc); setNumPages(doc.numPages)
@@ -131,11 +136,16 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
           const u = URL.createObjectURL(file); if (!alive) return
           setImgUrl(u); setNumPages(1)
         }
-      } catch { if (alive) setErr('Could not open the document preview.') }
+      } catch { if (alive) setPreviewErr('Could not open the document preview — the AI reading still works. Try reloading the page.') }
     })()
     return () => {
       alive = false
       if (pageItemsRef.current.length) onSavePagesRef.current?.(pageItemsRef.current)
+      const r = resRef.current
+      if (r?.fields?.length) {
+        const ed = editsRef.current
+        onSaveFieldsRef.current?.(r.fields.map((f) => { const v = ed[f.id] ?? f.value; return { name: f.name, value: v, section: f.section || '', page: f.page, ai_value: v !== f.value ? f.value : '' } }))
+      }
     }
   }, [file])
 
@@ -207,10 +217,11 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
       setPageErr(''); setPageLoading(true); setPageProgress({ done: 0, total: 0 })
       reviewDocPagesRange(file, 0, 0)
         .then((r) => {
-          det.pages = mergePages(det.pages, r.pages ?? []); det.finished = true
-          if (alive) { if (r.pages?.length) setPageItems((p) => mergeKeep(p, r.pages)); else if (r.error) setPageErr(r.error) }
+          if (r.pages?.length) { det.pages = mergePages(det.pages, r.pages); det.finished = true }
+          else DETECT.delete(fileKey)   // nothing came back — let the next attempt start fresh
+          if (alive) { if (r.pages?.length) setPageItems((p) => mergeKeep(p, r.pages)); else setPageErr(r.error || 'No page detail returned — try again.') }
         })
-        .catch((e) => { if (alive) setPageErr(e?.message ?? 'Page analysis failed') })
+        .catch((e) => { DETECT.delete(fileKey); if (alive) setPageErr(e?.message ?? 'Page analysis failed') })
         .finally(() => { if (alive) setPageLoading(false) })
     }
 
@@ -267,7 +278,7 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
         })
     })
     return () => { alive = false }
-  }, [full, file, pdfDoc, numPages, usingSaved])
+  }, [full, file, pdfDoc, numPages, usingSaved, fillTick])
 
   // Keep the JD1 note's page_notes in sync with what's on screen — the original AI read if
   // untouched, or JD1's edited version if changed. Debounced: syncing on every streamed AI
@@ -275,12 +286,16 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
   // visibly slowed the page down. This waits for a short quiet period instead — the
   // file-change cleanup above still flushes immediately if you navigate away inside that window.
   useEffect(() => {
-    if (!full || !pageItems.length) return
-    const t = setTimeout(() => { onSavePages?.(pageItems) }, 600)
+    if (!pageItems.length) return
+    const t = setTimeout(() => { onSavePagesRef.current?.(pageItems) }, 300)
     return () => clearTimeout(t)
-  }, [pageItems, full])
+  }, [pageItems])
 
   // Required fields → parent (so JD2 gets them, with JD1's edits). Debounced like page notes.
+  const resRef = useRef<ReviewResult | null>(null)
+  useEffect(() => { resRef.current = res }, [res])
+  const editsRef = useRef<Record<string, string>>({})
+  useEffect(() => { editsRef.current = edits }, [edits])
   const onSaveFieldsRef = useRef(onSaveFields)
   useEffect(() => { onSaveFieldsRef.current = onSaveFields }, [onSaveFields])
   useEffect(() => {
@@ -335,6 +350,7 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
     fillRef.current = missing
     startedRef.current = ''
     setUsingSaved(false)
+    setFillTick((t) => t + 1)   // re-run the reader even when nothing else changed
   }
   // ---- handwriting variants across pages ("use the clearest value") ----
   const { data: consistency } = useQuery({ queryKey: ['settings', 'consistency'], queryFn: getConsistency, staleTime: 60_000 })
@@ -404,7 +420,7 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
             </div>
           )}
           <div className="relative border border-outline-variant rounded-lg overflow-hidden bg-surface-container">
-            {curImg ? <img src={curImg} className="w-full block" alt="document" /> : <div className="h-64 grid place-items-center text-xs text-outline"><Icon name="autorenew" className="text-[16px] animate-spin mr-1" />Rendering page…</div>}
+            {curImg ? <img src={curImg} className="w-full block" alt="document" /> : previewErr ? <div className="h-64 grid place-items-center text-xs text-status-rejected px-4 text-center">{previewErr}</div> : <div className="h-64 grid place-items-center text-xs text-outline"><Icon name="autorenew" className="text-[16px] animate-spin mr-1" />Rendering page…</div>}
             {pageBoxes.map((f) => {
               const on = hover === f.id
               return (
@@ -421,7 +437,7 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
         </div>
 
         {/* right: fields (Required) OR page-by-page analysis (Full) */}
-        <div className="flex flex-col min-w-0 min-h-0">
+        <fieldset disabled={readOnly} className="flex flex-col min-w-0 min-h-0 border-0 p-0 m-0">
           {useMapped ? (
             <>
               <div className="flex items-center gap-2 mb-2">
@@ -618,10 +634,10 @@ export function DocReview({ file, mapFields, initialPages, initialFieldValues, o
                   <p className="text-xs text-outline">No detail for this page{numPages > 1 ? ' yet — use the page box on the left to move between pages.' : '.'}</p>
                 )}
               </div>
-              <p className="text-[11px] text-outline mt-2">Use the page box on the left (◀ ▶ or type a number + Enter) — the document and its detected data change together. Edit any field directly — corrections are kept with this ticket automatically. “Copy all” exports every page.</p>
+              <p className="text-[11px] text-outline mt-2">Use the page box on the left (◀ ▶ or type a number + Enter) — the document and its detected data change together. Edit any field to correct it. “Copy all” exports every page.</p>
             </>
           )}
-        </div>
+        </fieldset>
       </div>
     </div>
   )

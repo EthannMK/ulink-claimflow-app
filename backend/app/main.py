@@ -2,6 +2,9 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+import mimetypes
+# the PDF viewer's worker ships as .mjs — browsers only run it if it is served as JavaScript
+mimetypes.add_type("text/javascript", ".mjs")
 from app.routers import health, claims, auth, users, scan, jd1, jd2, assistant, extract, review, audit, ai_settings, access_settings, usage, teams, prompts, cloud_costs
 
 import logging
