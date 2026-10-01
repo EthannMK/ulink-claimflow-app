@@ -33,6 +33,36 @@ export async function changeMyPassword(current_password: string, new_password: s
 }
 export type AssignPermissions = Record<string, string[]>
 const DEFAULT_ASSIGN_PERMISSIONS: AssignPermissions = { super_admin: ['super_admin', 'admin', 'user'], admin: ['super_admin', 'admin', 'user'], user: ['super_admin', 'admin', 'user'] }
+// ---- Cloud costs (Super Admin): Google Cloud bill + backup AI, by component / day / month ----
+export interface CostComponent { component: string; source: string; cost: number; credits: number; net: number; share: number }
+export interface CloudCosts {
+  month: string; is_current: boolean; currency: string; google_ok: boolean; google_error: string; table: string
+  updated: string | null; fetched_at: string
+  totals: { cost: number; credits: number; net: number; last_month_net: number | null }
+  forecast: { net: number; pace_per_day: number; days_left: number; low: number; high: number; method: string } | null
+  budget: { amount: number; used_pct: number | null; forecast_pct: number | null } | null
+  credits_info: { trial_total: number; used: number; left: number; days_left_at_pace: number | null } | null
+  components: CostComponent[]
+  by_day: { day: string; net: number; components: Record<string, number>; future: boolean; projected?: number }[]
+  by_month: { month: string; google: number; other: number; credits: number; net: number; forecast?: number }[]
+  skus: { component: string; sku: string; cost: number; credits: number; net: number }[]
+  ai: { google_bill: { component: string; net: number }[]; backup: number; note: string
+        by_feature: { feature: string; calls: number; tokens: number; cost: number; by_provider: Record<string, number> }[] }
+}
+export interface CostSettings { dataset: string; budget_usd: number | null; trial_credit_usd: number | null; default_dataset?: string }
+export async function getCloudCosts(month: string, refresh = false): Promise<CloudCosts> {
+  const q = new URLSearchParams({ month, months: '6', ...(refresh ? { refresh: 'true' } : {}) })
+  return jsonOrThrow(await fetch(`${apiBase()}/api/cloud-costs/overview?${q}`, { headers: authHeaders() }), 'Loading cloud costs')
+}
+export async function getCostSettings(): Promise<CostSettings> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/cloud-costs/settings`, { headers: authHeaders() }), 'Loading cost settings')
+}
+export async function saveCostSettings(s: CostSettings): Promise<CostSettings> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/cloud-costs/settings`, {
+    method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dataset: s.dataset, budget_usd: s.budget_usd, trial_credit_usd: s.trial_credit_usd }),
+  }), 'Saving cost settings')
+}
 export interface ConsistencySettings { enabled: boolean; fields: ('name' | 'nrc' | 'dob' | 'policy')[] }
 export async function getConsistency(): Promise<ConsistencySettings> {
   if (!backendOn()) return { enabled: true, fields: ['name'] }

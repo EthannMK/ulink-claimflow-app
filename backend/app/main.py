@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from app.routers import health, claims, auth, users, scan, jd1, jd2, assistant, extract, review, audit, ai_settings, access_settings, usage, teams, prompts
+from app.routers import health, claims, auth, users, scan, jd1, jd2, assistant, extract, review, audit, ai_settings, access_settings, usage, teams, prompts, cloud_costs
 
 import logging
 from app.config import settings
@@ -37,6 +37,7 @@ app.include_router(access_settings.router)
 app.include_router(usage.router)
 app.include_router(teams.router)
 app.include_router(prompts.router)
+app.include_router(cloud_costs.router)
 
 # ---- serve the built frontend (single Cloud Run URL = API + web app) ----
 # The Docker build drops the Vite build into /app/static. If present, serve it with SPA fallback.

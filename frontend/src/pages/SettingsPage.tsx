@@ -5,6 +5,7 @@ import { usePersistent, useEditable, genId } from '../lib/persist'
 import { DEFAULT_INSURERS, FORM_LABELS, formTypesOf, type InsurerConfig, type InsurerField, type FieldType, type FormType } from '../lib/insurers'
 import { getAssignPermissions, updateAssignPermissions, getConsistency, saveConsistency, type AssignPermissions, type ConsistencySettings } from '../lib/api'
 import { FIELD_LABELS, type ConsistencyField } from '../lib/consistency'
+import { CloudCostsPanel } from '../components/CloudCostsPanel'
 import { getRole } from '../lib/auth'
 
 function EditBar({ editing, edit, save, cancel }: { editing: boolean; edit: () => void; save: () => void; cancel: () => void }) {
@@ -24,18 +25,19 @@ interface Tob { id: string; plan: string; insurer: string; benefits: Benefit[]; 
 const RULE_CATEGORIES = ['Eligibility', 'Documentation', 'Coverage', 'Payment', 'Fraud', 'Waiting period']
 const BENEFIT_CATEGORIES = ['Inpatient', 'Outpatient', 'Day Care', 'Maternity', 'Dental', 'Optical', 'Chronic', 'Other']
 
-const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits', 'Employer mapping', 'Assignment permissions', 'Data consistency'] as const
+const SECTIONS = ['Insurers & Fields', 'Reply templates', 'Document checklists', 'Adjudication Rules', 'Tables of Benefits', 'Employer mapping', 'Assignment permissions', 'Data consistency', 'Cloud costs'] as const
 interface EmpMap { id: string; domain: string; employer: string }
 const inp = 'w-full text-sm border border-outline-variant rounded-md px-2 py-1.5'
 const FIELD_TYPES: FieldType[] = ['text', 'number', 'amount', 'date', 'time', 'select', 'textarea']
 
 export function SettingsPage() {
   const [tab, setTab] = useState<(typeof SECTIONS)[number]>('Reply templates')
+  const isSuperAdmin = getRole() === 'super_admin'   // Cloud costs is Super Admin only
   return (
     <div>
       <PageTitle title="Settings" sub="Templates, checklists, rules and benefits the AI and staff use. Changes are saved automatically." />
-      <div className="flex items-center gap-1 mb-4 bg-surface-container rounded-xl p-1 w-fit">
-        {SECTIONS.map((s) => (
+      <div className="flex items-center gap-1 mb-4 bg-surface-container rounded-xl p-1 w-fit flex-wrap">
+        {SECTIONS.filter((s) => s !== 'Cloud costs' || isSuperAdmin).map((s) => (
           <button key={s} onClick={() => setTab(s)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === s ? 'bg-white text-primary shadow-sm' : 'text-text-main hover:text-primary'}`}>{s}</button>
         ))}
@@ -48,6 +50,7 @@ export function SettingsPage() {
       {tab === 'Employer mapping' && <EmployerMapping />}
       {tab === 'Assignment permissions' && <AssignPermissionsSection />}
       {tab === 'Data consistency' && <ConsistencySection />}
+      {tab === 'Cloud costs' && isSuperAdmin && <CloudCostsPanel />}
     </div>
   )
 }
