@@ -23,7 +23,8 @@ export const statusMeta: Record<Status, { label: string; cls: string }> = {
 }
 export function timeAgo(iso: string): string {
   const d = (Date.now() - new Date(iso).getTime()) / 60000
-  if (d < 60) return `${Math.max(1, Math.round(d))}m ago`
+  if (d < 1) return 'just now'
+  if (d < 60) return `${Math.round(d)}m ago`
   if (d < 1440) return `${Math.round(d / 60)}h ago`
   return `${Math.round(d / 1440)}d ago`
 }

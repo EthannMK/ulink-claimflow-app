@@ -9,6 +9,11 @@ Two sources, kept apart so nothing is counted twice:
 
 Everything is grouped by component, by day (local time, APP_TZ_OFFSET_MIN) and by month, and
 the current month gets a forecast from the recent daily pace.
+
+Currency: the Google bill is in the billing account's currency, the backup AI in USD. Every
+amount is converted to USD here (Google's own `currency_conversion_rate` per row), so the two
+can be added up. The page then shows everything in ONE display currency: the bill's currency
+(Google's rate), USD, or any other currency (free daily rates, or a rate the Super Admin sets).
 """
 from __future__ import annotations
 import calendar
@@ -32,6 +37,12 @@ _TABLE_CACHE: dict[str, str] = {}
 OTHER_AI = "Backup AI service (OpenRouter)"
 DEFAULT_TRIAL_USD = 300.0
 AI_RE = re.compile(r"vertex|gemini|ai platform|generative", re.I)
+# cost / currency_conversion_rate = USD (Google's definition); guard against 0/NULL
+_R = "IFNULL(NULLIF(currency_conversion_rate, 0), 1)"
+_FX_URL = "https://open.er-api.com/v6/latest/USD"     # free, no key, updated daily
+_FX: dict[str, tuple[float, dict]] = {}
+_FX_SECONDS = 12 * 3600
+COMMON_CURRENCIES = ["USD", "MMK", "THB", "SGD", "EUR", "GBP", "JPY", "CNY", "INR", "MYR", "VND", "AUD"]
 
 
 # ---------------------------------------------------------------- settings
@@ -44,7 +55,9 @@ def get_settings() -> dict:
     return {"dataset": (d.get("dataset") or default_dataset()).strip(),
             "budget_usd": d.get("budget_usd"),
             # Google's standard free trial is $300; there is no Google API that returns the remaining balance
-            "trial_credit_usd": d.get("trial_credit_usd") if d.get("trial_credit_usd") not in (None, "") else DEFAULT_TRIAL_USD}
+            "trial_credit_usd": d.get("trial_credit_usd") if d.get("trial_credit_usd") not in (None, "") else DEFAULT_TRIAL_USD,
+            "display_currency": (d.get("display_currency") or "").upper(),     # "" = the bill's currency
+            "fx_overrides": d.get("fx_overrides") or {}}
 
 
 def save_settings(dataset: str, budget_usd: float | None, trial_credit_usd: float | None) -> dict:
@@ -54,10 +67,76 @@ def save_settings(dataset: str, budget_usd: float | None, trial_credit_usd: floa
     for v in (budget_usd, trial_credit_usd):
         if v is not None and (v < 0 or v > 1_000_000):
             raise ValueError("Amounts must be between 0 and 1,000,000")
-    doc = {"dataset": dataset, "budget_usd": budget_usd, "trial_credit_usd": trial_credit_usd}
+    old = _settings.get(_DOC) or {}
+    doc = {**old, "dataset": dataset, "budget_usd": budget_usd, "trial_credit_usd": trial_credit_usd}
     _settings.put(_DOC, doc)
     _CACHE.clear(); _TABLE_CACHE.clear()
-    return doc
+    return get_settings()
+
+
+def save_currency(code: str, rate: float | None) -> dict:
+    """Display currency ('' = the bill's own currency) + an optional fixed rate (units per 1 USD)."""
+    code = (code or "").strip().upper()
+    if code and not re.fullmatch(r"[A-Z]{3}", code):
+        raise ValueError("Use a 3-letter currency code, e.g. USD, MMK, THB")
+    if rate is not None and not (0 < rate < 10_000_000):
+        raise ValueError("The rate must be a positive number (units of the currency per 1 USD)")
+    old = _settings.get(_DOC) or {}
+    fx = dict(old.get("fx_overrides") or {})
+    if code and code != "USD":
+        if rate is None:
+            fx.pop(code, None)
+        else:
+            fx[code] = float(rate)
+    _settings.put(_DOC, {**old, "display_currency": code, "fx_overrides": fx})
+    _CACHE.clear()
+    return get_settings()
+
+
+def _live_rates(force: bool = False) -> tuple[dict, str]:
+    """{code: units per 1 USD} from a free daily feed (cached 12 h). Never raises."""
+    hit = _FX.get("usd")
+    if hit and not force and time.time() - hit[0] < _FX_SECONDS:
+        return hit[1].get("rates", {}), hit[1].get("date", "")
+    try:
+        r = httpx.get(_FX_URL, timeout=10)
+        j = r.json() if r.status_code == 200 else {}
+        rates = {k: float(v) for k, v in (j.get("rates") or {}).items() if isinstance(v, (int, float)) and v > 0}
+        if rates:
+            _FX["usd"] = (time.time(), {"rates": rates, "date": j.get("time_last_update_utc", "")})
+            return rates, j.get("time_last_update_utc", "")
+    except Exception as e:
+        log.info("fx rates: %s", e)
+    return (hit[1].get("rates", {}), hit[1].get("date", "")) if hit else ({}, "")
+
+
+def currency_info(cfg: dict, bill_currency: str | None, bill_rate: float | None, refresh: bool = False) -> dict:
+    """Which currency the page shows, and its rate (units per 1 USD)."""
+    bill = (bill_currency or "").upper() or None
+    want = cfg.get("display_currency") or bill or "USD"
+    fx = {k.upper(): float(v) for k, v in (cfg.get("fx_overrides") or {}).items()}
+    live, live_date = {}, ""
+    if want != "USD" and want not in fx and not (bill and want == bill and bill_rate):
+        live, live_date = _live_rates(refresh)
+    if want == "USD":
+        rate, source = 1.0, "base"
+    elif want in fx:
+        rate, source = fx[want], "manual"
+    elif bill and want == bill and bill_rate:
+        rate, source = float(bill_rate), "google"
+    elif want in live:
+        rate, source = live[want], "live"
+    else:   # unknown rate -> fall back to USD rather than show wrong numbers
+        rate, source, want = 1.0, "unavailable", "USD"
+    opts = []
+    for c in ([bill] if bill else []) + COMMON_CURRENCIES + sorted(fx):
+        if c and c not in opts:
+            opts.append(c)
+    if want not in opts:
+        opts.append(want)
+    return {"code": want, "rate": rate, "source": source, "bill": bill, "bill_rate": bill_rate,
+            "manual_rate": fx.get(want), "live_date": live_date if source == "live" else "",
+            "auto": not cfg.get("display_currency"), "options": opts}
 
 
 # ---------------------------------------------------------------- BigQuery (REST, no extra library)
@@ -174,28 +253,33 @@ def _month_list(month: str, n: int) -> list[str]:
 def _google(month: str, months: list[str]) -> dict:
     """All Google Cloud numbers for the month (+ monthly history) from the billing export."""
     table = _find_table(get_settings()["dataset"])
-    credits = "IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)"
+    credits = f"IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0) / {_R}"
     tz = _tz()
     day_rows = _bq(f"""
         SELECT FORMAT_DATE('%Y-%m-%d', DATE(usage_start_time, '{tz}')) AS day, service.description AS component,
-               SUM(cost) AS cost, SUM({credits}) AS credits
+               SUM(cost / {_R}) AS cost, SUM({credits}) AS credits
         FROM `{table}` WHERE invoice.month = @m GROUP BY day, component""", {"m": month})
     sku_rows = _bq(f"""
-        SELECT service.description AS component, sku.description AS sku, SUM(cost) AS cost, SUM({credits}) AS credits
+        SELECT service.description AS component, sku.description AS sku, SUM(cost / {_R}) AS cost, SUM({credits}) AS credits
         FROM `{table}` WHERE invoice.month = @m GROUP BY component, sku ORDER BY cost DESC LIMIT 25""", {"m": month})
     month_rows = _bq(f"""
-        SELECT invoice.month AS month, service.description AS component, SUM(cost) AS cost, SUM({credits}) AS credits
+        SELECT invoice.month AS month, service.description AS component, SUM(cost / {_R}) AS cost, SUM({credits}) AS credits
         FROM `{table}` WHERE invoice.month >= @first AND invoice.month <= @last GROUP BY month, component""",
         {"first": months[0], "last": months[-1]})
     credit_rows = _bq(f"""
-        SELECT c.type AS type, c.name AS name, SUM(c.amount) AS amount
+        SELECT c.type AS type, c.name AS name, SUM(c.amount / {_R}) AS amount
         FROM `{table}`, UNNEST(credits) c WHERE invoice.month = @m GROUP BY type, name ORDER BY amount""", {"m": month})
     meta = _bq(f"""
         SELECT ANY_VALUE(currency) AS currency, FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%SZ', MAX(export_time)) AS updated,
-               SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c WHERE c.type = 'PROMOTION'), 0)) AS promo
+               ARRAY_AGG({_R} ORDER BY export_time DESC LIMIT 1)[SAFE_OFFSET(0)] AS rate,
+               SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c WHERE c.type = 'PROMOTION'), 0) / {_R}) AS promo
         FROM `{table}`""", {})
+    # the month exactly as Google's console shows it (bill currency, no conversion) — to compare
+    native = _bq(f"""
+        SELECT SUM(cost) AS cost, SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) AS credits
+        FROM `{table}` WHERE invoice.month = @m""", {"m": month})
     return {"table": table, "day_rows": day_rows, "sku_rows": sku_rows, "month_rows": month_rows, "credit_rows": credit_rows,
-            "meta": meta[0] if meta else {}}
+            "meta": meta[0] if meta else {}, "native": native[0] if native else {}}
 
 
 def _openrouter_live() -> tuple[dict | None, str]:
@@ -253,6 +337,8 @@ def build(month: str, today: date, google: dict | None, google_error: str, app_r
     comp: dict[str, dict] = {}      # component -> totals
     day_comp: dict[tuple[str, str], float] = {}
     day_gross: dict[str, float] = {}
+    day_comp_gross: dict[tuple[str, str], float] = {}
+    day_comp_cred: dict[tuple[str, str], float] = {}
 
     def add(component: str, source: str, day: str | None, cost: float, cred: float):
         c = comp.setdefault(component, {"component": component, "source": source, "cost": 0.0, "credits": 0.0})
@@ -260,6 +346,8 @@ def build(month: str, today: date, google: dict | None, google_error: str, app_r
         if day:
             day_comp[(day, component)] = day_comp.get((day, component), 0.0) + cost + cred
             day_gross[day] = day_gross.get(day, 0.0) + cost
+            day_comp_gross[(day, component)] = day_comp_gross.get((day, component), 0.0) + cost
+            day_comp_cred[(day, component)] = day_comp_cred.get((day, component), 0.0) + cred
 
     if google:
         for r in google["day_rows"]:
@@ -315,6 +403,14 @@ def build(month: str, today: date, google: dict | None, google_error: str, app_r
         for x in by_day:
             if x["future"]:
                 x["projected"] = round(pace, 4)
+        # each component: spent so far + its own last-7-day pace for the days left
+        recent_days = [d for d in days if d < today.isoformat()][-7:]
+        for c in components:
+            g = sum(day_comp_gross.get((d, c["component"]), 0.0) for d in recent_days) / len(recent_days) if recent_days else 0.0
+            cr = sum(day_comp_cred.get((d, c["component"]), 0.0) for d in recent_days) / len(recent_days) if recent_days else 0.0
+            c["forecast"] = round(c["cost"] + g * left, 4)                   # real cost at month end
+            c["forecast_net"] = round(c["net"] + (g + cr) * left, 4)         # what you would pay
+            c["pace_per_day"] = round(g, 4)
 
     # ---- months (history + this month's forecast)
     mon: dict[str, dict] = {mm: {"month": mm, "google": 0.0, "other": 0.0, "credits": 0.0} for mm in months}
@@ -354,6 +450,7 @@ def build(month: str, today: date, google: dict | None, google_error: str, app_r
 
     budget = cfg.get("budget_usd")
     meta = (google or {}).get("meta", {})
+    native = (google or {}).get("native", {}) or {}
     promo_used = -_num(meta.get("promo"))
     trial = cfg.get("trial_credit_usd") if cfg.get("trial_credit_usd") not in (None, "") else DEFAULT_TRIAL_USD
     credit_types = [{"type": (r.get("type") or "OTHER").replace("_", " ").title(), "name": r.get("name") or "", "amount": _num(r.get("amount"))}
@@ -388,7 +485,11 @@ def build(month: str, today: date, google: dict | None, google_error: str, app_r
                "break_even_per_1m_tokens": round(all_in / client_tokens * 1_000_000, 4) if client_tokens else None,
                "basis": "Real cost before credits (credits run out, so price on this). AI is the app's per-call records scaled to the real AI bill; other infrastructure is shared in proportion to AI use."}
     return {
-        "month": month, "is_current": is_current, "currency": meta.get("currency") or "USD",
+        "month": month, "is_current": is_current, "currency": "USD",   # every amount below is USD
+        "currency_info": currency_info(cfg, meta.get("currency"), _num(meta.get("rate")) or None),
+        "bill_native": None if google is None else {
+            "currency": meta.get("currency") or "USD", "cost": round(_num(native.get("cost")), 2),
+            "credits": round(_num(native.get("credits")), 2), "net": round(_num(native.get("cost")) + _num(native.get("credits")), 2)},
         "google_ok": google is not None, "google_error": google_error, "table": (google or {}).get("table", ""),
         "updated": meta.get("updated"),
         "totals": {"cost": round(total_cost, 4), "credits": round(total_credits, 4), "net": round(mtd_net, 4),
@@ -426,6 +527,7 @@ def overview(month: str = "", months_back: int = 6, refresh: bool = False) -> di
         return hit[1]
     if refresh:
         _TABLE_CACHE.clear()   # a billing table Google created since the last look is found now
+        _FX.clear()            # and today's exchange rates
     google, err = None, ""
     try:
         google = _google(month, months)

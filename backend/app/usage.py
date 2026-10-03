@@ -19,23 +19,53 @@ from app.db import Collection
 
 _log = Collection("ai_usage")
 
-# Approximate list pricing, USD per 1,000,000 tokens. Edit these to match your
-# actual billing — this only drives the in-app cap/estimate shown in the
-# Usage dashboard, it is never sent anywhere. Providers with no real charge
-# (a free tier) are priced at 0 so they never count against anyone's cap.
-PRICE_PER_1M_TOKENS: dict[str, dict[str, float]] = {
-    "vertex":     {"in": 0.10, "out": 0.40},   # Vertex AI — paid via your GCP credit
-    "openrouter": {"in": 0.10, "out": 0.40},   # depends on the model/key you use — treat as paid once on a real key
-}
+# Google's published Vertex AI prices, USD per 1,000,000 tokens, for the GLOBAL endpoint
+# (regional endpoints cost 10% more). Output includes the model's "thinking" tokens.
+# Rows: (model name prefix, valid from YYYY-MM-DD, input, output, cached input). Google does not
+# offer a price API for Vertex, so update this table when Google changes its price list
+# (cloud.google.com/vertex-ai/generative-ai/pricing). Checked 2026-10-03.
+VERTEX_PRICES: list[tuple[str, str, float, float, float]] = [
+    ("gemini-3.8-flash", "2000-01-01", 0.75, 3.75, 0.075), ("gemini-3.8-flash", "2027-01-01", 1.50, 7.50, 0.15),
+    ("gemini-3.7-flash", "2000-01-01", 0.75, 3.75, 0.075), ("gemini-3.7-flash", "2027-01-01", 1.50, 7.50, 0.15),
+    ("gemini-3.6-flash", "2000-01-01", 0.75, 3.75, 0.075), ("gemini-3.6-flash", "2027-01-01", 1.50, 7.50, 0.15),
+    ("gemini-3.5-flash-lite", "2000-01-01", 0.30, 2.50, 0.03),
+    ("gemini-3.5-flash", "2000-01-01", 1.50, 9.00, 0.15),
+    ("gemini-3.1-flash-lite", "2000-01-01", 0.25, 1.50, 0.025),
+]
+# Any other model: priced like the main model (better to over- than under-estimate).
+FALLBACK_PRICE = {"in": 0.75, "out": 3.75, "cached": 0.075}
 
 
-def _cost(provider: str, tokens_in: int, tokens_out: int, model: str = "") -> float:
-    """Estimated USD. Uses the provider's live price for this exact model when the
-    model catalog has fetched it (OpenRouter publishes prices), else the table above."""
-    p_in, p_out = PRICE_PER_1M_TOKENS.get(provider, {"in": 0.0, "out": 0.0}).values()
+def vertex_price(model: str, day: str = "") -> tuple[float, float, float]:
+    """(input, output, cached input) USD per 1M tokens for a Vertex model on a given day."""
+    from app.config import settings
+    m = (model or "").lower().split("/")[-1]
+    day = day or time.strftime("%Y-%m-%d", time.gmtime())
+    best = None
+    for prefix, start, p_in, p_out, p_c in VERTEX_PRICES:
+        if m.startswith(prefix) and start <= day and (best is None or (len(prefix), start) > (len(best[0]), best[1])):
+            best = (prefix, start, p_in, p_out, p_c)
+    p = (best[2], best[3], best[4]) if best else (FALLBACK_PRICE["in"], FALLBACK_PRICE["out"], FALLBACK_PRICE["cached"])
+    if (settings.vertex_location or "global") != "global":
+        p = tuple(round(x * 1.1, 6) for x in p)
+    return p
+
+
+def _cost(provider: str, tokens_in: int, tokens_out: int, model: str = "", cached_in: int = 0) -> float:
+    """USD for one call.
+    Vertex: Google's price list above (input, output incl. thinking, cheaper cached input).
+    OpenRouter: the live price of that exact model (model catalog, fetched if needed)."""
+    if provider == "vertex":
+        p_in, p_out, p_c = vertex_price(model)
+        cached = min(max(cached_in or 0, 0), tokens_in)
+        return round(((tokens_in - cached) * p_in + cached * p_c + tokens_out * p_out) / 1_000_000, 6)
+    p_in, p_out = FALLBACK_PRICE["in"], FALLBACK_PRICE["out"]
     try:
-        from app.model_catalog import cached_price
-        live = cached_price(provider, model) if model else None
+        from app import model_catalog
+        live = model_catalog.cached_price(provider, model) if model else None
+        if live is None and model:
+            model_catalog.list_models(provider)          # not loaded since the last restart -> load once
+            live = model_catalog.cached_price(provider, model)
         if live:
             p_in, p_out = live
     except Exception:
@@ -154,10 +184,17 @@ def tally_tokens(t: list) -> int:
 
 
 def record(username: str, provider: str, model: str, tokens_in: int, tokens_out: int,
-           ok: bool, purpose: str = "", seconds: float = 0.0) -> float:
+           ok: bool, purpose: str = "", seconds: float = 0.0, cached_in: int = 0,
+           billed_usd: float | None = None) -> float:
     """Log one AI call and (if it had a real cost) add it to the user's running
-    total. Returns the cost in USD of this call (0.0 for free providers/failed calls)."""
-    cost = _cost(provider, tokens_in or 0, tokens_out or 0, model) if ok else 0.0
+    total. Returns the cost in USD of this call (0.0 for free providers/failed calls).
+    billed_usd = what the provider itself says it charged (OpenRouter) — used as-is."""
+    if not ok:
+        cost = 0.0
+    elif billed_usd is not None and billed_usd >= 0:
+        cost = round(float(billed_usd), 6)
+    else:
+        cost = _cost(provider, tokens_in or 0, tokens_out or 0, model, cached_in or 0)
     t = _tally.get()
     if t is not None:
         t.append(cost)
@@ -166,6 +203,7 @@ def record(username: str, provider: str, model: str, tokens_in: int, tokens_out:
         "id": entry_id, "ts": time.time(), "user": username or "", "provider": provider or "",
         "model": model or "", "tokens_in": tokens_in or 0, "tokens_out": tokens_out or 0,
         "cost_usd": cost, "ok": bool(ok), "purpose": purpose, "seconds": round(float(seconds or 0.0), 2),
+        "cached_in": int(cached_in or 0), "cost_source": ("provider" if (ok and billed_usd is not None) else "price list"),
     })
     if username and cost:
         from app import store
@@ -202,6 +240,40 @@ def my_usage(username: str, include_usd: bool = False) -> dict:
             "real_tokens": sum((e.get("tokens_in") or 0) + (e.get("tokens_out") or 0) for e in entries),
             "usd_per_1m_tokens": billing_rate(),
         })
+    return out
+
+
+def my_history(username: str, limit: int = 50, include_usd: bool = False) -> list[dict]:
+    """A user's own AI use, newest first, one row per use: calls of the same task made within a
+    few minutes of each other (e.g. all page batches of one full detection) are one row.
+    Only the task name and the client tokens charged — never the provider, model or dollars
+    (dollars are added for the Super Admin only)."""
+    if not username:
+        return []
+    entries = sorted((e for e in _log.all() if e.get("user") == username), key=lambda e: e.get("ts", 0))
+    gap = 180
+    rows: list[dict] = []
+    open_by_task: dict[str, dict] = {}
+    for e in entries:
+        task = e.get("purpose") or "Other"
+        r = open_by_task.get(task)
+        if not r or e.get("ts", 0) - r["last_ts"] > gap:
+            r = {"task": task, "first_ts": e.get("ts", 0), "last_ts": e.get("ts", 0), "calls": 0, "failed": 0, "usd": 0.0}
+            rows.append(r)
+            open_by_task[task] = r
+        r["last_ts"] = e.get("ts", 0)
+        r["calls"] += 1
+        r["failed"] += 0 if e.get("ok", True) else 1
+        r["usd"] += float(e.get("cost_usd") or 0.0)
+    out = []
+    for r in reversed(rows[-limit:]):
+        item = {"task": r["task"], "when": r["first_ts"], "ended": r["last_ts"], "steps": r["calls"],
+                "tokens": to_tokens(r["usd"]) or 0,
+                # a failed try followed by a successful backup try is still a finished task
+                "status": "ok" if r["calls"] > r["failed"] else "failed"}
+        if include_usd:
+            item["usd"] = round(r["usd"], 6)
+        out.append(item)
     return out
 
 

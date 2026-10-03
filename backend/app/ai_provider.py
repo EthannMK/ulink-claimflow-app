@@ -218,9 +218,26 @@ def _vertex_call(parts: list, model: str) -> tuple[str, dict]:
     body = r.json()
     cands = body.get("candidates") or []
     txt = "".join(p.get("text", "") for p in cands[0].get("content", {}).get("parts", [])) if cands else ""
-    um = body.get("usageMetadata") or {}
-    return txt, {"in": int(um.get("promptTokenCount") or 0), "out": int(um.get("candidatesTokenCount") or 0)}
+    return txt, _vertex_tokens(body.get("usageMetadata") or {})
 
+
+
+def _vertex_tokens(um: dict) -> dict:
+    """Tokens Google bills: input (incl. images), output = answer + thinking, and the cached part of the input."""
+    return {"in": int(um.get("promptTokenCount") or 0),
+            "out": int(um.get("candidatesTokenCount") or 0) + int(um.get("thoughtsTokenCount") or 0),
+            "cached": int(um.get("cachedContentTokenCount") or 0)}
+
+
+def _openrouter_tokens(u: dict) -> dict:
+    """OpenRouter reports the tokens AND what it actually charged (`cost`, USD) for the call."""
+    t = {"in": int(u.get("prompt_tokens") or 0), "out": int(u.get("completion_tokens") or 0)}
+    if u.get("cost") is not None:
+        try:
+            t["cost"] = float(u["cost"])
+        except (TypeError, ValueError):
+            pass
+    return t
 
 
 def _openrouter_call(parts: list, model: str) -> tuple[str, dict]:
@@ -237,13 +254,13 @@ def _openrouter_call(parts: list, model: str) -> tuple[str, dict]:
     r = _post(
         "https://openrouter.ai/api/v1/chat/completions",
         {"Authorization": f"Bearer {settings.openrouter_api_key}"},
-        {"model": model or settings.openrouter_model, "messages": [{"role": "user", "content": content}]},
+        {"model": model or settings.openrouter_model, "messages": [{"role": "user", "content": content}],
+         "usage": {"include": True}},
         timeout=90,
     )
     body = r.json()
     txt = body["choices"][0]["message"]["content"]
-    u = body.get("usage") or {}
-    return txt, {"in": int(u.get("prompt_tokens") or 0), "out": int(u.get("completion_tokens") or 0)}
+    return txt, _openrouter_tokens(body.get("usage") or {})
 
 
 # ---- streaming variants (used only when a live-progress listener is active) ----
@@ -280,7 +297,7 @@ def _parse_vertex_stream(payloads, on_text) -> tuple[str, dict]:
                     on_text(out)
         um = j.get("usageMetadata")
         if um:
-            tok = {"in": int(um.get("promptTokenCount") or 0), "out": int(um.get("candidatesTokenCount") or 0)}
+            tok = _vertex_tokens(um)
     return out, tok
 
 
@@ -301,7 +318,7 @@ def _parse_openrouter_stream(payloads, on_text) -> tuple[str, dict]:
                 on_text(out)
         u = j.get("usage")
         if u:
-            tok = {"in": int(u.get("prompt_tokens") or 0), "out": int(u.get("completion_tokens") or 0)}
+            tok = _openrouter_tokens(u)
     return out, tok
 
 
@@ -446,7 +463,9 @@ def generate_text(parts: list) -> str:
             secs = _t.time() - t0
             if txt and txt.strip():
                 log.info(f"[ai] {name} OK {secs:.1f}s (vision={need_vision}, live={live})")
-                usage.record(who, name, model, tok.get("in", 0), tok.get("out", 0), ok=True, purpose=feature, seconds=secs)
+                billed_model = model or (settings.vertex_model if name == "vertex" else settings.openrouter_model) or ""
+                usage.record(who, name, billed_model, tok.get("in", 0), tok.get("out", 0), ok=True, purpose=feature, seconds=secs,
+                             cached_in=tok.get("cached", 0), billed_usd=tok.get("cost"))
                 progress.emit(f"AI finished in {secs:.0f}s — read {tok.get('in', 0):,} tokens, wrote {tok.get('out', 0):,}",
                               kind="step", ai_seconds=round(secs, 1))
                 return txt

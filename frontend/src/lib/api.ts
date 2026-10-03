@@ -39,10 +39,15 @@ export async function changeMyPassword(current_password: string, new_password: s
 export type AssignPermissions = Record<string, string[]>
 const DEFAULT_ASSIGN_PERMISSIONS: AssignPermissions = { super_admin: ['super_admin', 'admin', 'user'], admin: ['super_admin', 'admin', 'user'], user: ['super_admin', 'admin', 'user'] }
 // ---- Cloud costs (Super Admin): Google Cloud bill + backup AI, by component / day / month ----
-export interface CostComponent { component: string; source: string; cost: number; credits: number; net: number; share: number }
+export interface CostComponent { component: string; source: string; cost: number; credits: number; net: number; share: number; forecast?: number; forecast_net?: number; pace_per_day?: number }
 export interface CloudCosts {
   month: string; is_current: boolean; currency: string; google_ok: boolean; google_error: string; table: string
   updated: string | null; fetched_at: string
+  /** every amount in this object is USD; the page converts it with `rate` (units of `code` per 1 USD) */
+  currency_info: { code: string; rate: number; source: 'base' | 'google' | 'live' | 'manual' | 'unavailable'; bill: string | null
+                   bill_rate: number | null; manual_rate: number | null; live_date: string; auto: boolean; options: string[] }
+  /** the month as Google's console shows it, in the bill's own currency */
+  bill_native: { currency: string; cost: number; credits: number; net: number } | null
   totals: { cost: number; credits: number; net: number; last_month_net: number | null; last_month_gross: number | null }
   forecast: { net: number; pace_per_day: number; days_left: number; low: number; high: number; method: string; gross: number; gross_pace_per_day: number } | null
   budget: { amount: number; used_pct: number | null; forecast_pct: number | null } | null
@@ -68,6 +73,11 @@ export interface CostSettings { dataset: string; budget_usd: number | null; tria
 export async function getCloudCosts(month: string, refresh = false): Promise<CloudCosts> {
   const q = new URLSearchParams({ month, months: '6', ...(refresh ? { refresh: 'true' } : {}) })
   return jsonOrThrow(await fetch(`${apiBase()}/api/cloud-costs/overview?${q}`, { headers: authHeaders() }), 'Loading cloud costs')
+}
+export async function saveCostCurrency(code: string, rate: number | null): Promise<unknown> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/cloud-costs/currency`, {
+    method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ code, rate }),
+  }), 'Saving the currency')
 }
 export async function getCostSettings(): Promise<CostSettings> {
   return jsonOrThrow(await fetch(`${apiBase()}/api/cloud-costs/settings`, { headers: authHeaders() }), 'Loading cost settings')
@@ -197,6 +207,13 @@ export interface ProviderAccount {
   api_key_configured: boolean; management_key_configured: boolean
   key: null | { error?: string; label?: string; usage_usd?: number | null; limit_usd?: number | null; limit_remaining_usd?: number | null; is_free_tier?: boolean }
   credits: null | { error?: string; total_credits_usd?: number | null; total_usage_usd?: number | null; balance_usd?: number | null }
+}
+/** One row per scan / AI task of the signed-in user: task name + client tokens (no provider or model). */
+export interface MyUse { task: string; when: number; ended: number; steps: number; tokens: number; status: 'ok' | 'failed'; usd?: number }
+export async function getMyHistory(limit = 50): Promise<MyUse[]> {
+  if (!backendOn()) { await wait(80); return [] }
+  const d = await jsonOrThrow<{ items: MyUse[] }>(await fetch(`${apiBase()}/api/usage/me/history?limit=${limit}`, { headers: authHeaders() }), 'Loading your AI use')
+  return d.items
 }
 export async function getMyUsage(): Promise<MyUsage> {
   if (!backendOn()) { await wait(80); return { requests: 0, used_tokens: 0, cap_tokens: null, remaining_tokens: null, today_tokens: 0, daily_cap_tokens: null, daily_remaining_tokens: null } }

@@ -59,8 +59,8 @@ def _run_test(pid: str, text: str, sample: str, data: bytes, name: str, mime: st
         from app.routers.review import _PAGE_ABS_SUFFIX, _HW_SUFFIX
         head = text + _HW_SUFFIX + _PAGE_ABS_SUFFIX
     elif pid == "jd1_note":
-        from app.adapters.jd1 import _NAME_RULE
-        head = text + _NAME_RULE
+        from app.adapters.jd1 import _NAME_RULE, _TYPE_RULE
+        head = text + _NAME_RULE + _TYPE_RULE
     elif pid == "help_assistant":
         from app.routers.assistant import _AREAS
         head = ("You are the built-in help assistant for 'Ulink ClaimFlow', a health-insurance claims and helpdesk system "

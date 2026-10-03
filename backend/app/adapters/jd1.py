@@ -22,19 +22,36 @@ MANDATORY = {
     "API-eclaim": ["Claim form", "Invoice / bill", "Medical report"],
 }
 
+_TYPE_PATTERNS = [
+    ("Policy wording", r"policy wording|contract wording|policy_wording"),
+    ("Table of Benefits", r"\btob\b|table of benefit"),
+    ("LOG / pre-authorization form", r"letter of guarantee|guarantee letter|pre.?authori[sz]ation|pre.?auth\b"),
+    ("Claim form", r"claim.?notification|e.?claim|claim.?submission|claim.?form"),
+    ("Invoice / bill", r"invoice|receipt|voucher|\bbill\b|charges"),
+    ("Medical report", r"discharge|endoscopy|diagnos|prescription|consultation|medical report"),
+    ("ID copy", r"\bnrc\b|passport|national registration|identity card"),
+    ("Provider CSR", r"\bcsr\b|provider confirmation"),
+]
+
+
 def classify_name(name: str, text: str = "") -> str:
-    """Cheap first-pass from filename + any digital text. Scanned/opaque files land in
-    'Other' here and get their real type from the vision model instead."""
-    s = (name + " " + text[:1500]).lower()
-    if re.search(r"policy wording|contract wording|policy_wording", s):  return "Policy wording"
-    if re.search(r"\btob\b|table of benefit", s):                        return "Table of Benefits"
-    if re.search(r"letter of guarantee|pre.?auth|\blog\b", s):           return "LOG / pre-authorization form"
-    if re.search(r"claim.?notification|e.?claim|claim.?submission|claim.?form", s): return "Claim form"
-    if re.search(r"invoice|receipt|voucher|\bbill\b|charges", s):        return "Invoice / bill"
-    if re.search(r"discharge|endoscopy|diagnos|prescription|consultation|medical report", s): return "Medical report"
-    if re.search(r"nrc|passport|national registration|identity card", s): return "ID copy"
-    if re.search(r"\bcsr\b|provider confirmation", s):                   return "Provider CSR"
-    return "Other"
+    """Cheap first-pass from the file name, then the document's own text. Scanned/opaque files
+    land in 'Other' here and get their real type from the vision model instead.
+    In the text, the type named FIRST wins (a document's title comes first) — so an invoice that
+    later says "payment by letter of guarantee" stays an invoice, not a LOG form."""
+    n = name.lower()
+    if re.search(r"\blog\b|letter.?of.?guarantee|guarantee.?letter|pre.?auth", n.replace("_", " ").replace("-", " ")):
+        return "LOG / pre-authorization form"
+    for dtype, pat in _TYPE_PATTERNS:
+        if re.search(pat, n):
+            return dtype
+    t = text[:1500].lower()
+    best = None
+    for dtype, pat in _TYPE_PATTERNS:
+        m = re.search(pat, t)
+        if m and (best is None or m.start() < best[0]):
+            best = (m.start(), dtype)
+    return best[1] if best else "Other"
 
 # canonical doc types the vision model may return, mapped to our checklist names
 CANON = {
@@ -47,6 +64,18 @@ CANON = {
 }
 def canon_type(t: str) -> str:
     return CANON.get((t or "").strip().lower(), "Other")
+
+def norm_claim_type(v) -> str:
+    """The AI's claim_type -> one of reimbursement / LOG / API-eclaim ('' if unusable)."""
+    t = re.sub(r"[^a-z]", "", str(v or "").lower())
+    if t in ("log", "letterofguarantee", "preauthorization", "preauthorisation"):
+        return "LOG"
+    if "eclaim" in t:
+        return "API-eclaim"
+    if t.startswith("reimburs"):
+        return "reimbursement"
+    return ""
+
 
 def detect_claim_type(docs: list[ClassifiedDoc]) -> str:
     types = {d.doc_type for d in docs}
@@ -162,6 +191,15 @@ _NAME_RULE = ("\n\nHANDWRITING: names, NRC numbers, dates of birth and policy nu
               "each variant with its page, e.g. 'Patient name: \"Aung Aung\" (printed, claim form p.1) vs \"Aung Aye\" "
               "(handwritten, unclear, bill p.35) — likely the same person, handwriting'. If the names look like "
               "DIFFERENT people, use status \"fail\" and say so.")
+
+# Always added too: how to decide the claim type (the JSON shape alone did not say).
+_TYPE_RULE = ("\n\nCLAIM TYPE: use \"LOG\" ONLY when the packet contains an actual Letter of Guarantee / "
+              "pre-authorization form (a request to the insurer, or the insurer's approval, to guarantee payment to a "
+              "hospital for a planned or ongoing treatment). Invoices, receipts, medical reports and claim forms alone are "
+              "NOT a LOG — even when an invoice mentions \"LOG\", a guarantee letter, direct billing or cashless payment. "
+              "Use \"API-eclaim\" only for an insurer's electronic e-claim submission. Everything else, and whenever you are "
+              "unsure, is \"reimbursement\". List \"LOG / pre-authorization form\" in doc_types_present only if such a "
+              "form is really in the packet.")
 
 _JD1_PROMPT = """You are a JD1 claims-intake officer at Ulink Assist (a health-insurance TPA in Myanmar).
 You are given the documents of ONE claim (some digital text, some scanned images that may be in Burmese or handwritten).
@@ -450,7 +488,7 @@ def read_packet(files: list[tuple[str, bytes, str]], corrections: str = "") -> J
     """files: list of (filename, data, mime). corrections: optional officer-verified values."""
     progress.emit(f"Received {len(files)} file(s), {_mb(sum(len(d) for _n, d, _m in files))} in total", pct=2)
     docs: list[ClassifiedDoc] = []
-    parts: list[dict] = [{"text": prompts.get("jd1_note") + _NAME_RULE}]
+    parts: list[dict] = [{"text": prompts.get("jd1_note") + _NAME_RULE + _TYPE_RULE}]
     _fix = _corrections_part(corrections)
     if _fix:
         parts.append(_fix)
@@ -540,9 +578,18 @@ def read_packet(files: list[tuple[str, bytes, str]], corrections: str = "") -> J
                        provider="ai", notes="Could not read the document clearly. Please try Generate again.")
 
     # checklist from what the vision model actually SAW (content), unioned with digital classification
-    ctype = d.get("claim_type") or claim_type_hint
     present = {canon_type(t) for t in d.get("doc_types_present", []) if isinstance(t, str)}
     present |= {dd.doc_type for dd in docs if dd.doc_type != "Other"}
+    ctype = norm_claim_type(d.get("claim_type")) or claim_type_hint
+    if ctype == "LOG" and "LOG / pre-authorization form" not in present:
+        # a LOG claim needs a LOG / pre-authorization form — without one it is a normal claim
+        progress.emit("Claim type: no LOG / pre-authorization form found — treated as a reimbursement claim", kind="step")
+        ctype = "reimbursement"
+        checks = d.get("consistency_checks") if isinstance(d.get("consistency_checks"), list) else []
+        checks.append({"label": "Claim type", "status": "warning",
+                       "detail": "The AI suggested a LOG claim, but no LOG / pre-authorization form was found in the "
+                                 "documents, so it is treated as a reimbursement claim. Switch the form type if this is wrong."})
+        d["consistency_checks"] = checks
     req = MANDATORY.get(ctype, MANDATORY["reimbursement"])
     missing2 = [t for t in req if t not in present]
 

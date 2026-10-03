@@ -27,6 +27,12 @@ def my_usage(user=Depends(get_current_user)):
     return usage.my_usage(user.get("username", ""), include_usd=user.get("role") == "super_admin")
 
 
+@router.get("/me/history")
+def my_history(limit: int = Query(50, ge=1, le=500), user=Depends(get_current_user)):
+    """Own AI use, one row per scan / task, in client tokens. No provider or model names."""
+    return {"items": usage.my_history(user.get("username", ""), limit, include_usd=user.get("role") == "super_admin")}
+
+
 class _Billing(BaseModel):
     usd_per_1m_tokens: float
 

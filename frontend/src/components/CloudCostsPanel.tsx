@@ -1,9 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getCloudCosts, getCostSettings, saveCostSettings, type CloudCosts, type CostSettings } from '../lib/api'
+import { getCloudCosts, getCostSettings, saveCostSettings, saveCostCurrency, type CloudCosts, type CostSettings } from '../lib/api'
 import { Card, Badge, Button, Icon } from './ui'
 
-const usd = (n: number | null | undefined, dp = 2) => (n == null ? '—' : `${n < 0 ? '-' : ''}$${Math.abs(n).toFixed(dp)}`)
+// Every amount from the server is USD; CUR converts it to the currency the page shows.
+let CUR = { code: 'USD', rate: 1 }
+function minorUnits(code: string) {
+  try { return new Intl.NumberFormat('en', { style: 'currency', currency: code }).resolvedOptions().maximumFractionDigits ?? 2 } catch { return 2 }
+}
+/** Format a USD amount in the page's currency. Small amounts keep more decimals. */
+const usd = (n: number | null | undefined, dp = 2) => {
+  if (n == null || !isFinite(n)) return '—'
+  const v = n * CUR.rate
+  const minor = minorUnits(CUR.code)
+  const digits = Math.abs(v) < 1 ? Math.max(dp, minor) : Math.min(dp, minor)
+  try {
+    return new Intl.NumberFormat('en', { style: 'currency', currency: CUR.code, currencyDisplay: CUR.code === 'USD' ? 'symbol' : 'code',
+      minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v)
+  } catch { return `${CUR.code} ${v.toFixed(digits)}` }
+}
 const monthLabel = (m: string) => new Date(+m.slice(0, 4), +m.slice(4) - 1, 1).toLocaleDateString([], { month: 'short', year: 'numeric' })
 const dayLabel = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString([], { day: 'numeric', month: 'short' })
 const STRIPES = 'repeating-linear-gradient(135deg, rgb(var(--c-primary, 0 51 102) / 0.35) 0 3px, transparent 3px 7px)'
@@ -87,6 +102,7 @@ export function CloudCostsPanel() {
   }
 
   const d = data as CloudCosts | undefined
+  CUR = d?.currency_info ? { code: d.currency_info.code, rate: d.currency_info.rate } : { code: 'USD', rate: 1 }
   const bars = useMemo(() => {
     if (!d) return []
     if (view === 'month') return d.by_month.map((m) => ({
@@ -101,6 +117,14 @@ export function CloudCostsPanel() {
         note: x.future ? 'Forecast at the recent daily pace' : undefined }
     })
   }, [d, view, comp])
+
+  const maxForecast = d ? Math.max(0.0001, ...d.components.map((c) => c.forecast ?? c.cost)) : 1
+
+  async function pickCurrency(code: string, rate?: number | null) {
+    setRefreshErr('')
+    try { await saveCostCurrency(code, rate ?? null); await qc.invalidateQueries({ queryKey: ['cloud-costs'] }) }
+    catch (e: any) { setRefreshErr(String(e?.message ?? e)) }
+  }
 
   return (
     <div className="space-y-4">
@@ -120,11 +144,19 @@ export function CloudCostsPanel() {
             {d.components.map((c) => <option key={c.component} value={c.component}>{c.component}</option>)}
           </select>
         )}
+        {d && <CurrencyPicker info={d.currency_info} onPick={pickCurrency} />}
         <Button variant="outline" size="sm" className="ml-auto" onClick={refresh} disabled={refreshing} title="Re-reads the Google Cloud bill, the backup AI billing and the app's records">
           <Icon name="refresh" className={`text-[16px] ${refreshing ? 'animate-spin' : ''}`} />{refreshing ? 'Refreshing…' : 'Refresh all sources'}</Button>
       </div>
 
       {d && <SourceStatus d={d} />}
+      {d?.bill_native && d.currency_info && (
+        <p className="text-[11px] text-outline">
+          Google Cloud console for {monthLabel(d.month)}: <b className="text-text-main">{fmtNative(d.bill_native.cost, d.bill_native.currency)}</b> usage,
+          {' '}{fmtNative(-d.bill_native.credits, d.bill_native.currency)} credits, you pay <b className="text-text-main">{fmtNative(d.bill_native.net, d.bill_native.currency)}</b>.
+          {' '}{currencyNote(d)}
+        </p>
+      )}
       {refreshErr && <p className="text-xs text-status-rejected">{refreshErr}</p>}
       {isLoading && <Card className="p-8 text-center text-sm text-text-main"><Icon name="autorenew" className="text-[16px] animate-spin align-middle mr-1" />Reading the bill…</Card>}
       {error && <Card className="p-4 text-sm text-status-rejected">{String((error as Error).message)}</Card>}
@@ -162,7 +194,7 @@ export function CloudCostsPanel() {
             <div className="flex items-center gap-2 mb-2">
               <Icon name="bar_chart" className="text-primary text-[18px]" />
               <h3 className="font-semibold text-sm">{view === 'day' ? `Daily cost · ${monthLabel(d.month)}${comp ? ` · ${comp}` : ''}` : 'Monthly cost'}</h3>
-              <span className="text-xs text-outline">net, after credits · {d.currency}</span>
+              <span className="text-xs text-outline">net, after credits · {CUR.code}</span>
               <span className="ml-auto flex items-center gap-3 text-xs text-text-main">
                 <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-primary/80" />Actual</span>
                 {(d.forecast || view === 'month') && <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: STRIPES, border: '1px dashed rgb(0 51 102 / 0.45)' }} />Forecast</span>}
@@ -182,20 +214,28 @@ export function CloudCostsPanel() {
             {/* components */}
             <Card className="p-5 lg:col-span-3">
               <div className="flex items-center gap-2 mb-2"><Icon name="stacked_bar_chart" className="text-primary text-[18px]" /><h3 className="font-semibold text-sm">By component · {monthLabel(d.month)}</h3>
-                <span className="ml-auto text-xs text-outline">click a row to see it by day</span></div>
+                <span className="ml-auto text-xs text-outline">real cost · click a row to see it by day</span></div>
               {d.components.length === 0 && <p className="text-xs text-outline">No costs recorded for this month yet.</p>}
+              {d.is_current && d.components.length > 0 && (
+                <div className="flex items-center gap-3 text-[11px] text-text-main mb-1">
+                  <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-primary/80" />Spent so far</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm" style={{ background: STRIPES, border: '1px dashed rgb(0 51 102 / 0.45)' }} />Forecast for the rest of the month</span>
+                </div>
+              )}
               <table className="w-full text-sm">
-                <thead className="text-xs text-outline text-left"><tr><th className="py-1">Component</th><th className="text-right">Usage</th><th className="text-right">Credits</th><th className="text-right">Net</th><th className="w-28 pl-3">Share</th></tr></thead>
+                <thead className="text-xs text-outline text-left"><tr><th className="py-1">Component</th><th className="text-right">Spent</th>{d.is_current && <th className="text-right">Forecast</th>}<th className="text-right">Credits</th><th className="text-right">You pay</th><th className="w-32 pl-3">{d.is_current ? 'Spent vs forecast' : 'Share'}</th></tr></thead>
                 <tbody>
                   {d.components.map((c) => (
                     <tr key={c.component} onClick={() => { setComp(c.component); setView('day') }} className={`border-t border-outline-variant/40 cursor-pointer hover:bg-primary/[0.03] ${comp === c.component ? 'bg-primary/[0.05]' : ''}`}>
                       <td className="py-1.5 pr-2"><div className="font-medium text-on-surface">{c.component}</div>
                         <div className="text-[10px] text-outline">{c.source === 'Google Cloud bill' ? 'Google Cloud bill' : `billed separately · ${c.source}`}</div></td>
                       <td className="text-right tabular-nums">{usd(c.cost, 3)}</td>
+                      {d.is_current && <td className="text-right tabular-nums text-text-main" title={c.pace_per_day != null ? `about ${usd(c.pace_per_day, 3)} a day lately` : undefined}>{c.forecast != null ? usd(c.forecast, 3) : '—'}</td>}
                       <td className="text-right tabular-nums text-status-approved">{c.credits ? usd(c.credits, 3) : ''}</td>
                       <td className="text-right tabular-nums font-semibold">{usd(c.net, 3)}</td>
-                      <td className="pl-3"><div className="h-1.5 rounded-full bg-surface-container overflow-hidden"><div className="h-full bg-primary/80 rounded-full" style={{ width: `${Math.round(c.share * 100)}%` }} /></div>
-                        <div className="text-[10px] text-outline">{Math.round(c.share * 100)}%</div></td>
+                      <td className="pl-3">{d.is_current && c.forecast != null ? <SpentVsForecast spent={c.cost} forecast={c.forecast} max={maxForecast} /> : (<>
+                        <div className="h-1.5 rounded-full bg-surface-container overflow-hidden"><div className="h-full bg-primary/80 rounded-full" style={{ width: `${Math.round(c.share * 100)}%` }} /></div>
+                        <div className="text-[10px] text-outline">{Math.round(c.share * 100)}%</div></>)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -245,12 +285,12 @@ export function CloudCostsPanel() {
         </>
       )}
 
-      <SetupCard onSaved={() => { qc.invalidateQueries({ queryKey: ['cloud-costs'] }); refetch() }} connected={!!d?.google_ok} table={d?.table} />
+      <SetupCard onSaved={() => { qc.invalidateQueries({ queryKey: ['cloud-costs'] }); refetch() }} connected={!!d?.google_ok} table={d?.table} cur={CUR} />
     </div>
   )
 }
 
-function SetupCard({ onSaved, connected, table }: { onSaved: () => void; connected: boolean; table?: string }) {
+function SetupCard({ onSaved, connected, table, cur }: { onSaved: () => void; connected: boolean; table?: string; cur: { code: string; rate: number } }) {
   const { data } = useQuery({ queryKey: ['cost-settings'], queryFn: getCostSettings })
   const [f, setF] = useState<CostSettings | null>(null)
   const [msg, setMsg] = useState('')
@@ -260,9 +300,14 @@ function SetupCard({ onSaved, connected, table }: { onSaved: () => void; connect
   async function save() {
     if (!f) return
     setMsg('')
-    try { setF(await saveCostSettings(f)); setMsg('Saved.'); onSaved() } catch (e: any) { setMsg(String(e?.message ?? e)) }
+    const b = num(budgetText)
+    if (b != null && !(b >= 0)) { setMsg('Enter the budget as a number'); return }
+    try { setF(await saveCostSettings({ ...f, budget_usd: b == null ? null : +(b / cur.rate).toFixed(4) })); setMsg('Saved.'); onSaved() } catch (e: any) { setMsg(String(e?.message ?? e)) }
   }
   const num = (s: string) => (s.trim() === '' ? null : Number(s))
+  // the budget is stored in USD; it is typed and shown in the page's currency
+  const [budgetText, setBudgetText] = useState('')
+  useEffect(() => { if (data) setBudgetText(data.budget_usd == null ? '' : String(+(data.budget_usd * cur.rate).toFixed(2))) }, [data, cur.rate])
   return (
     <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} className="bg-white rounded-xl border border-outline-variant shadow-sm">
       <summary className="px-5 py-3 text-sm font-semibold cursor-pointer flex items-center gap-2">
@@ -274,8 +319,8 @@ function SetupCard({ onSaved, connected, table }: { onSaved: () => void; connect
           <div className="flex items-end gap-3 flex-wrap mb-3">
             <label className="text-xs text-outline flex flex-col gap-0.5">Billing dataset (project.dataset)
               <input value={f.dataset} onChange={(e) => setF({ ...f, dataset: e.target.value })} className="text-sm border border-outline-variant rounded-md px-2 py-1 w-72 text-on-surface" /></label>
-            <label className="text-xs text-outline flex flex-col gap-0.5">Monthly budget (USD)
-              <input value={f.budget_usd ?? ''} onChange={(e) => setF({ ...f, budget_usd: num(e.target.value) })} inputMode="decimal" placeholder="none" className="text-sm border border-outline-variant rounded-md px-2 py-1 w-32 text-on-surface" /></label>
+            <label className="text-xs text-outline flex flex-col gap-0.5">Monthly budget ({cur.code})
+              <input value={budgetText} onChange={(e) => setBudgetText(e.target.value)} inputMode="decimal" placeholder="none" className="text-sm border border-outline-variant rounded-md px-2 py-1 w-32 text-on-surface" /></label>
             <Button size="sm" onClick={save}>Save</Button>
             {msg && <span className={`text-xs ${msg === 'Saved.' ? 'text-status-approved' : 'text-status-rejected'}`}>{msg}</span>}
           </div>
@@ -351,5 +396,61 @@ function PricingCard({ d }: { d: CloudCosts }) {
       )}
       <p className="text-[11px] text-outline mt-2">{p.basis} Charge more than the break-even to cover support and margin.</p>
     </Card>
+  )
+}
+
+function fmtNative(v: number, code: string) {
+  try { return new Intl.NumberFormat('en', { style: 'currency', currency: code, currencyDisplay: 'code' }).format(v) } catch { return `${code} ${v.toFixed(2)}` }
+}
+
+function currencyNote(d: CloudCosts) {
+  const c = d.currency_info
+  if (c.code === c.bill) return 'This page shows the same currency.'
+  if (c.code === 'USD') return `This page shows USD, converted at Google's rate (1 USD = ${c.bill_rate ?? '?'} ${c.bill}).`
+  return `This page shows ${c.code}.`
+}
+
+/** Spent so far (solid) + the rest of the month's forecast (striped), on a shared scale. */
+function SpentVsForecast({ spent, forecast, max }: { spent: number; forecast: number; max: number }) {
+  const s = Math.max(spent, 0) / max * 100
+  const f = Math.max(forecast - spent, 0) / max * 100
+  return (
+    <div>
+      <div className="h-2 rounded-full bg-surface-container overflow-hidden flex">
+        <div className="h-full bg-primary/80" style={{ width: `${s}%` }} />
+        <div className="h-full" style={{ width: `${f}%`, background: STRIPES }} />
+      </div>
+      <div className="text-[10px] text-outline">{forecast > 0 ? `${Math.round(Math.max(spent, 0) / forecast * 100)}% of forecast` : '—'}</div>
+    </div>
+  )
+}
+
+/** Which currency the page shows. The bill's own currency uses Google's rate; others use a free
+ *  daily rate unless the Super Admin fixes one (useful for MMK, where the market rate differs). */
+function CurrencyPicker({ info, onPick }: { info: CloudCosts['currency_info']; onPick: (code: string, rate?: number | null) => void }) {
+  const [rate, setRate] = useState(info.manual_rate != null ? String(info.manual_rate) : '')
+  useEffect(() => { setRate(info.manual_rate != null ? String(info.manual_rate) : '') }, [info.code, info.manual_rate])
+  const fixed = info.code !== 'USD' && info.code !== info.bill
+  const src = info.source === 'google' ? "Google's rate" : info.source === 'live' ? 'daily market feed' : info.source === 'manual' ? 'your fixed rate' : info.source === 'unavailable' ? 'no rate found — set one' : ''
+  return (
+    <div className="flex items-center gap-1.5 text-sm">
+      <select value={info.auto ? '' : info.code} onChange={(e) => onPick(e.target.value)} title="Currency for every amount on this page"
+        className="bg-white border border-outline-variant rounded-lg px-2 py-2 text-sm">
+        <option value="">{info.bill ? `${info.bill} (bill currency)` : 'Bill currency'}</option>
+        {info.options.filter((c) => c !== info.bill).map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+      {info.code !== 'USD' && (
+        <span className="text-[11px] text-outline whitespace-nowrap" title={info.live_date ? `Rates updated ${info.live_date}` : undefined}>
+          1 USD = {+info.rate.toFixed(4)} {info.code}{src ? ` · ${src}` : ''}
+        </span>
+      )}
+      {fixed && (
+        <span className="flex items-center gap-1">
+          <input value={rate} onChange={(e) => setRate(e.target.value)} inputMode="decimal" placeholder="own rate"
+            className="w-24 text-xs border border-outline-variant rounded-md px-2 py-1" title={`Fix your own rate: ${info.code} per 1 USD`} />
+          <Button size="sm" variant="outline" onClick={() => onPick(info.code, rate.trim() ? Number(rate) : null)}>{rate.trim() ? 'Use rate' : 'Use daily rate'}</Button>
+        </span>
+      )}
+    </div>
   )
 }

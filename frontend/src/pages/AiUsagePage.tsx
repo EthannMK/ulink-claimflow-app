@@ -1,6 +1,6 @@
 import { useState, Fragment } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getMyUsage, getBilling, saveBilling, getUsageSummary, getUsageRecent, getUsageOptions, downloadUsageCsv, getProviderAccount, getUsageLimits, listUsers, type UsageSummary, type UsageFilters, type UserLimit } from '../lib/api'
+import { getMyUsage, getMyHistory, getBilling, saveBilling, getUsageSummary, getUsageRecent, getUsageOptions, downloadUsageCsv, getProviderAccount, getUsageLimits, listUsers, type UsageSummary, type UsageFilters, type UserLimit } from '../lib/api'
 import { getRole } from '../lib/auth'
 import { PageTitle, Card, Badge, Button, Icon } from '../components/ui'
 import { LimitEditor } from '../components/LimitEditor'
@@ -56,6 +56,48 @@ function MyAllowance() {
         <Meter label="Total" spent={data.used_tokens} cap={data.cap_tokens} hint="Ask your administrator if you need more."
           usdLine={data.spent_usd != null ? `Super Admin view: ${usd(data.spent_usd, 4)}${data.cap_usd != null ? ` of ${usd(data.cap_usd)}` : ''} · real tokens ${num(data.real_tokens ?? 0)}` : undefined} />
       </div>
+    </Card>
+  )
+}
+
+const TASK_LABEL: Record<string, string> = {
+  'JD1 note': 'JD1 scan (note)', 'Full detection': 'Full detection', 'Required fields': 'Required fields',
+  'Quick scan': 'Quick scan', 'Rules / benefits extraction': 'Rules / benefits reading', 'Client email draft': 'Client email draft',
+  'Help assistant': 'Help chat', 'Prompt test': 'Prompt test',
+}
+
+/** The signed-in user's own AI use, one row per scan / task — tokens only (no provider or model). */
+function MyHistory() {
+  const { data, error } = useQuery({ queryKey: ['usage', 'me', 'history'], queryFn: () => getMyHistory(50), refetchInterval: 30_000 })
+  const [all, setAll] = useState(false)
+  if (error) return <Card className="p-4 text-sm text-status-rejected mb-5">{String((error as Error).message)}</Card>
+  const rows = data ?? []
+  const shown = all ? rows : rows.slice(0, 10)
+  return (
+    <Card className="p-5 mb-5">
+      <div className="flex items-center gap-2 mb-3"><Icon name="receipt_long" className="text-primary" /><span className="font-semibold text-primary">My recent AI use</span>
+        <span className="ml-auto text-xs text-outline">each scan or task and the tokens it used</span></div>
+      {!data && <p className="text-sm text-outline">Loading…</p>}
+      {data && rows.length === 0 && <p className="text-sm text-outline">No AI use yet. Your scans will appear here.</p>}
+      {rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-outline text-left"><tr><th className="py-1">When</th><th>Used for</th><th className="text-right">Tokens</th><th className="pl-4">Status</th></tr></thead>
+            <tbody>
+              {shown.map((r, i) => (
+                <tr key={`${r.when}-${i}`} className="border-t border-outline-variant/40">
+                  <td className="py-1.5 whitespace-nowrap text-text-main">{new Date(r.when * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                  <td className="text-on-surface">{TASK_LABEL[r.task] ?? r.task}{r.steps > 1 && <span className="text-[11px] text-outline"> · {r.steps} steps</span>}</td>
+                  <td className="text-right tabular-nums font-medium">{tok(r.tokens)}{r.usd != null && <div className="text-[10px] text-outline font-normal">{usd(r.usd, 4)}</div>}</td>
+                  <td className="pl-4">{r.status === 'ok' ? <Badge className="bg-status-approved/10 text-status-approved">Done</Badge>
+                    : <Badge className="bg-surface-container text-text-main">Failed · {r.tokens ? 'partly charged' : 'not charged'}</Badge>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length > 10 && <button onClick={() => setAll((v) => !v)} className="text-xs text-primary hover:underline mt-2">{all ? 'Show fewer' : `Show all ${rows.length}`}</button>}
+        </div>
+      )}
     </Card>
   )
 }
@@ -398,7 +440,7 @@ function AdminDashboard() {
           </table>
         </div>
       </Card>
-      <p className="text-[11px] text-outline mt-3">Costs are estimates from the tokens each provider reports, using the price table in <code>backend/app/usage.py</code>.</p>
+      <p className="text-[11px] text-outline mt-3">Costs: the backup AI service reports what it charged for each call; the main AI service is priced from its published price list (<code>backend/app/usage.py</code>), including the AI's thinking tokens.</p>
     </>
   )
 }
@@ -409,6 +451,7 @@ export function AiUsagePage() {
     <div>
       <PageTitle title="AI Usage" sub={isSuper ? 'Your own allowance, plus usage and costs across all users.' : 'How much of your AI allowance you have used.'} />
       <MyAllowance />
+      {!isSuper && <MyHistory />}
       {isSuper && <AdminDashboard />}
     </div>
   )

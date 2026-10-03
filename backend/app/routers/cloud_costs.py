@@ -36,3 +36,20 @@ def put_settings(body: CostSettings, user=Depends(require_role(Role.super_admin)
     audit.record("cloud_costs_settings", user.get("name") or user.get("username", ""),
                  detail=f"Billing dataset {saved['dataset']}, budget {saved['budget_usd']}, trial credit {saved['trial_credit_usd']}")
     return {**saved, "default_dataset": cloud_costs.default_dataset()}
+
+
+class CurrencyChoice(BaseModel):
+    code: str = ""              # "" = the Google bill's own currency
+    rate: float | None = None   # optional fixed rate: units of this currency per 1 USD
+
+
+@router.put("/currency")
+def put_currency(body: CurrencyChoice, user=Depends(require_role(Role.super_admin))):
+    """Which currency the Cloud costs page shows (all amounts are converted from USD)."""
+    try:
+        saved = cloud_costs.save_currency(body.code, body.rate)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    audit.record("cloud_costs_settings", user.get("name") or user.get("username", ""),
+                 detail=f"Cost currency {body.code or 'bill currency'}" + (f" at {body.rate} per USD" if body.rate else ""))
+    return saved
