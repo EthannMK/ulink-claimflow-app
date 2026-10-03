@@ -44,10 +44,13 @@ async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn() } finally { active--; waiting.shift()?.() }
 }
 
-/** Forget this file's cached page results (used by "Re-run AI"). */
+const freshFiles = new Set<string>()
+
+/** Forget this file's cached page results (used by "Re-run AI") — the next read also skips the server's saved copy. */
 export function forgetPages(file: File) {
   const pre = `pages:${file.name}:${file.size}:${file.lastModified}:`
   for (const k of [...pageCache.keys()]) if (k.startsWith(pre)) pageCache.delete(k)
+  freshFiles.add(pre)
 }
 
 export function reviewDocPages(file: File): Promise<PageAnalysis> {
@@ -59,9 +62,12 @@ export function reviewDocPagesRange(file: File, start: number, count: number): P
   const key = `pages:${file.name}:${file.size}:${file.lastModified}:${start}:${count}`
   const hit = pageCache.get(key)
   if (hit) return hit
+  const pre = `pages:${file.name}:${file.size}:${file.lastModified}:`
+  const fresh = freshFiles.has(pre)
   const p = withSlot(async () => {
     const fd = new FormData(); fd.append('file', file, file.name)
     fd.append('start', String(start)); fd.append('count', String(count))
+    if (fresh) fd.append('fresh', 'true')
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 120_000)   // never hang a batch > 2 min
     try {
@@ -72,5 +78,7 @@ export function reviewDocPagesRange(file: File, start: number, count: number): P
   }).then((r) => { if (!r.pages?.length) pageCache.delete(key); return r })   // never keep an empty answer
     .catch((e) => { pageCache.delete(key); throw e })
   pageCache.set(key, p)
+  // a re-run requests all its page ranges in one go; after that, normal (saved) reads again
+  if (fresh) setTimeout(() => freshFiles.delete(pre), 0)
   return p
 }

@@ -1,6 +1,130 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-:root { color-scheme: light; }
-body { margin: 0; font-family: Inter, sans-serif; background: #f7f9fc; color: #191c1e; }
+/* Colour tokens (RGB triplets so Tailwind opacity like bg-primary/10 works). Light = the Ulink brand
+   palette; .dark = the same brand on a navy-black surface. Every Tailwind colour class reads these. */
+:root {
+  color-scheme: light;
+  --c-surface: 247 249 252;
+  --c-surface-dim: 216 218 221;
+  --c-surface-bright: 247 249 252;
+  --c-surface-container-lowest: 255 255 255;
+  --c-surface-container-low: 242 244 247;
+  --c-surface-container: 236 238 241;
+  --c-surface-container-high: 230 232 235;
+  --c-surface-container-highest: 224 227 230;
+  --c-on-surface: 25 28 30;
+  --c-on-surface-variant: 66 71 79;
+  --c-inverse-surface: 45 49 51;
+  --c-inverse-on-surface: 239 241 244;
+  --c-outline: 114 119 127;
+  --c-outline-variant: 194 199 208;
+  --c-surface-tint: 53 97 141;
+  --c-primary: 0 55 94;
+  --c-on-primary: 255 255 255;
+  --c-primary-container: 31 78 121;
+  --c-on-primary-container: 149 191 241;
+  --c-inverse-primary: 160 202 252;
+  --c-secondary: 31 104 106;
+  --c-on-secondary: 255 255 255;
+  --c-secondary-container: 168 236 237;
+  --c-on-secondary-container: 37 108 111;
+  --c-tertiary: 76 46 0;
+  --c-on-tertiary: 255 255 255;
+  --c-tertiary-container: 106 67 0;
+  --c-on-tertiary-container: 233 178 104;
+  --c-error: 186 26 26;
+  --c-on-error: 255 255 255;
+  --c-error-container: 255 218 214;
+  --c-on-error-container: 147 0 10;
+  --c-primary-fixed: 209 228 255;
+  --c-primary-fixed-dim: 160 202 252;
+  --c-on-primary-fixed: 0 29 53;
+  --c-on-primary-fixed-variant: 24 73 116;
+  --c-secondary-fixed: 171 238 240;
+  --c-secondary-fixed-dim: 143 210 212;
+  --c-on-secondary-fixed: 0 32 33;
+  --c-on-secondary-fixed-variant: 0 79 81;
+  --c-tertiary-fixed: 255 221 181;
+  --c-tertiary-fixed-dim: 245 188 114;
+  --c-on-tertiary-fixed: 42 24 0;
+  --c-on-tertiary-fixed-variant: 100 63 0;
+  --c-background: 247 249 252;
+  --c-on-background: 25 28 30;
+  --c-surface-variant: 224 227 230;
+  --c-status-ai: 31 78 121;
+  --c-status-approved: 45 138 78;
+  --c-status-pending: 217 119 6;
+  --c-status-rejected: 220 38 38;
+  --c-brand-accent: 237 85 0;
+  --c-text-main: 72 88 103;
+  --c-primary-dark: 0 55 94;
+  --c-white: 255 255 255;
+}
+.dark {
+  color-scheme: dark;
+  --c-surface: 15 23 32;
+  --c-background: 15 23 32;
+  --c-surface-bright: 26 37 50;
+  --c-surface-dim: 11 18 26;
+  --c-surface-container-lowest: 21 31 43;
+  --c-surface-container-low: 24 35 47;
+  --c-surface-container: 30 42 55;
+  --c-surface-container-high: 36 49 64;
+  --c-surface-container-highest: 43 57 74;
+  --c-surface-variant: 43 57 74;
+  --c-on-surface: 228 233 240;
+  --c-on-background: 228 233 240;
+  --c-on-surface-variant: 195 203 213;
+  --c-text-main: 179 191 203;
+  --c-outline: 139 150 163;
+  --c-outline-variant: 50 65 82;
+  --c-inverse-surface: 228 233 240;
+  --c-inverse-on-surface: 26 37 50;
+  --c-primary: 156 200 245;
+  --c-primary-dark: 199 222 247;
+  --c-on-primary: 4 34 59;
+  --c-primary-container: 31 78 121;
+  --c-on-primary-container: 209 228 255;
+  --c-surface-tint: 156 200 245;
+  --c-inverse-primary: 0 55 94;
+  --c-secondary: 128 211 213;
+  --c-on-secondary: 0 55 56;
+  --c-secondary-container: 31 79 81;
+  --c-on-secondary-container: 171 238 240;
+  --c-status-ai: 141 186 236;
+  --c-status-approved: 95 197 133;
+  --c-status-pending: 242 169 69;
+  --c-status-rejected: 244 122 111;
+  --c-brand-accent: 255 125 54;
+  --c-error: 255 180 171;
+  --c-error-container: 147 0 10;
+  --c-on-error: 105 0 5;
+  --c-on-error-container: 255 218 214;
+  --c-white: 21 31 43;
+}
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+  body { margin: 0; font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; background: rgb(var(--c-surface)); color: rgb(var(--c-on-surface)); font-feature-settings: 'cv11', 'ss01'; }
+  h1, h2, h3 { text-wrap: balance; }
+  table { font-variant-numeric: tabular-nums; }
+  ::selection { background: rgb(var(--c-primary) / 0.18); }
+  /* one visible keyboard-focus style everywhere (mouse clicks don't show it) */
+  :focus-visible { outline: 2px solid rgb(var(--c-primary)); outline-offset: 2px; border-radius: 6px; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(var(--c-primary) / 0.22); border-color: rgb(var(--c-primary) / 0.6); }
+  input, select, textarea { background-color: rgb(var(--c-surface-container-lowest)); color: rgb(var(--c-on-surface)); }
+  input::placeholder, textarea::placeholder { color: rgb(var(--c-outline)); }
+  input[type='checkbox'], input[type='radio'] { accent-color: rgb(var(--c-primary)); }
+  button:disabled { cursor: not-allowed; }
+  * { scrollbar-width: thin; scrollbar-color: rgb(var(--c-outline-variant)) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--c-outline-variant)); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+/* loading placeholder */
+@keyframes cf-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.cf-skeleton { background: linear-gradient(90deg, rgb(var(--c-surface-container)) 25%, rgb(var(--c-surface-container-high)) 50%, rgb(var(--c-surface-container)) 75%); background-size: 200% 100%; animation: cf-shimmer 1.4s ease-in-out infinite; border-radius: 6px; }
 .material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; line-height: 1; }

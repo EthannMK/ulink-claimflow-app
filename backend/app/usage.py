@@ -88,6 +88,110 @@ def _today() -> str:
     return _day(time.time(), settings.app_tz_offset_min)
 
 
+# ---- allowance periods -------------------------------------------------------
+# Works like the usage limits of AI platforms: a limit applies to the CURRENT period. A period
+# ends when the Super Admin resets the allowance, or automatically on the 1st of each month
+# (Myanmar time) for users set to "monthly". Ending a period never deletes anything: every AI
+# call stays in the usage log (AI Usage, Cloud costs) and the closed period is kept on the
+# user as a summary (last 12) so you can see what they used before the reset.
+PERIODS = ("none", "monthly")
+_KEEP_PERIODS = 12
+
+
+def _month() -> str:
+    return _today()[:7]
+
+
+def next_renewal(u: dict) -> str | None:
+    """'YYYY-MM-01' of the next automatic renewal, or None."""
+    if (u or {}).get("usage_period") != "monthly":
+        return None
+    y, m = map(int, _month().split("-"))
+    y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return f"{y:04d}-{m:02d}-01"
+
+
+def _close_period(u: dict, reason: str, by: str, reset_today: bool = True) -> dict:
+    """Archive the current period on the user record and start a new one (does not save)."""
+    hist = list(u.get("usage_periods") or [])
+    hist.append({"start": u.get("usage_period_start") or u.get("created_at") or None, "end": time.time(),
+                 "spent_usd": round(float(u.get("usage_spent_usd") or 0.0), 6),
+                 "cap_usd": u.get("usage_cap_usd"), "daily_cap_usd": u.get("daily_cap_usd"),
+                 "reason": reason, "by": by})
+    u["usage_periods"] = hist[-_KEEP_PERIODS:]
+    u["usage_spent_usd"] = 0.0
+    if reset_today:
+        u["usage_day_spent_usd"] = 0.0
+    u["usage_period_start"] = time.time()
+    u["usage_period_month"] = _month()
+    return u
+
+
+def roll_period(u: dict | None) -> dict | None:
+    """Monthly allowances renew on the 1st: applied the first time the user is looked at."""
+    if not u or u.get("usage_period") != "monthly":
+        return u
+    if u.get("usage_period_month") == _month():
+        return u
+    from app import store
+    if not u.get("usage_period_month"):           # just switched to monthly: start counting now
+        u["usage_period_month"] = _month()
+        u.setdefault("usage_period_start", time.time())
+        return store.update_user(u["id"], usage_period_month=u["usage_period_month"], usage_period_start=u["usage_period_start"]) or u
+    _close_period(u, "monthly renewal", "system", reset_today=False)
+    return store.update_user(u["id"], usage_spent_usd=0.0, usage_periods=u["usage_periods"],
+                             usage_period_start=u["usage_period_start"], usage_period_month=u["usage_period_month"]) or u
+
+
+_KEEP = object()
+
+
+def set_allowance(uid: str, by: str, *, total_usd=_KEEP, daily_usd=_KEEP, period: str | None = None,
+                  reset_total: bool = False, reset_today: bool = False, reason: str = "") -> dict:
+    """One place for the Super Admin to change a user's allowance: new limits (None = no limit,
+    _KEEP = unchanged), renewal (none / monthly) and an optional reset of what was used."""
+    from app import store
+    u = store.get_by_id(uid)
+    if not u:
+        raise KeyError(uid)
+    for v in (total_usd, daily_usd):
+        if v is not _KEEP and v is not None and (v < 0 or v > 1_000_000):
+            raise ValueError("Limits must be between 0 and 1,000,000 USD")
+    if period is not None and period not in PERIODS:
+        raise ValueError("Renewal must be 'none' or 'monthly'")
+    before = {"spent_usd": round(float(u.get("usage_spent_usd") or 0.0), 6), "today_usd": round(today_spent(u), 6),
+              "cap_usd": u.get("usage_cap_usd"), "daily_cap_usd": u.get("daily_cap_usd"), "period": u.get("usage_period") or "none"}
+    if reset_total:
+        _close_period(u, (reason or "reset by admin").strip()[:200], by, reset_today=reset_today)
+    elif reset_today:
+        u["usage_day_spent_usd"] = 0.0
+    if total_usd is not _KEEP:
+        u["usage_cap_usd"] = None if total_usd is None else round(float(total_usd), 6)
+    if daily_usd is not _KEEP:
+        u["daily_cap_usd"] = None if daily_usd is None else round(float(daily_usd), 6)
+    if period is not None:
+        u["usage_period"] = period
+        if period == "monthly":
+            u["usage_period_month"] = _month()
+            u.setdefault("usage_period_start", time.time())
+    fields = {k: u.get(k) for k in ("usage_spent_usd", "usage_day_spent_usd", "usage_cap_usd", "daily_cap_usd",
+                                    "usage_period", "usage_period_month", "usage_period_start", "usage_periods")}
+    store.update_user(uid, **{k: v for k, v in fields.items() if v is not None})
+    # update_user skips None values, so clear removed limits explicitly
+    store.update_user(uid, clear_usage_cap=u["usage_cap_usd"] is None, clear_daily_cap=u["daily_cap_usd"] is None)
+    return {"user": store.get_by_id(uid), "before": before}
+
+
+def period_info(u: dict) -> dict:
+    """What the user (and the Super Admin) are shown about the current allowance period."""
+    hist = list((u or {}).get("usage_periods") or [])
+    last = hist[-1] if hist else None
+    return {"period": (u or {}).get("usage_period") or "none", "period_start": (u or {}).get("usage_period_start"),
+            "renews_on": next_renewal(u or {}),
+            "last_reset": None if not last else {"at": last.get("end"), "reason": last.get("reason", ""), "by": last.get("by", ""),
+                                                 "used_tokens": to_tokens(last.get("spent_usd") or 0)}}
+
+
 def today_spent(u: dict) -> float:
     """What this user has spent today (local day, see APP_TZ_OFFSET_MIN) — all providers & models."""
     return float(u.get("usage_day_spent_usd") or 0.0) if u.get("usage_day") == _today() else 0.0
@@ -99,7 +203,7 @@ def check_cap(username: str) -> None:
     if not username:
         return
     from app import store
-    u = store.get_by_username(username)
+    u = roll_period(store.get_by_username(username))
     if not u:
         return
     cap = u.get("usage_cap_usd")
@@ -207,7 +311,7 @@ def record(username: str, provider: str, model: str, tokens_in: int, tokens_out:
     })
     if username and cost:
         from app import store
-        u = store.get_by_username(username)
+        u = roll_period(store.get_by_username(username))
         if u:
             new_spent = round(float(u.get("usage_spent_usd") or 0.0) + cost, 6)
             day = _today()
@@ -220,7 +324,7 @@ def my_usage(username: str, include_usd: bool = False) -> dict:
     """A user's own allowance. Everyone gets it in client tokens; only the Super Admin
     (include_usd=True) also gets the dollar amounts and real token counts."""
     from app import store
-    u = store.get_by_username(username) if username else None
+    u = roll_period(store.get_by_username(username)) if username else None
     spent = float((u or {}).get("usage_spent_usd") or 0.0)
     cap = (u or {}).get("usage_cap_usd")
     tday = today_spent(u) if u else 0.0
@@ -232,6 +336,7 @@ def my_usage(username: str, include_usd: bool = False) -> dict:
         "requests": len(entries),
         "used_tokens": to_tokens(spent), "cap_tokens": to_tokens(cap), "remaining_tokens": to_tokens(rem),
         "today_tokens": to_tokens(tday), "daily_cap_tokens": to_tokens(dcap), "daily_remaining_tokens": to_tokens(drem),
+        **period_info(u or {}),
     }
     if include_usd:
         out.update({
@@ -282,6 +387,7 @@ def limits_overview() -> list[dict]:
     from app import store
     out = []
     for u in store.list_users():
+        u = roll_period(u)
         spent, cap = float(u.get("usage_spent_usd") or 0.0), u.get("usage_cap_usd")
         tday, dcap = today_spent(u), u.get("daily_cap_usd")
         if cap is not None and spent >= float(cap):
@@ -303,6 +409,11 @@ def limits_overview() -> list[dict]:
             "status": status,
             "used_tokens": to_tokens(spent), "cap_tokens": to_tokens(cap), "today_tokens": to_tokens(tday),
             "daily_cap_tokens": to_tokens(dcap),
+            **period_info(u),
+            "history": [{"start": h.get("start"), "end": h.get("end"), "reason": h.get("reason", ""), "by": h.get("by", ""),
+                         "spent_usd": h.get("spent_usd"), "used_tokens": to_tokens(h.get("spent_usd") or 0),
+                         "cap_usd": h.get("cap_usd"), "cap_tokens": to_tokens(h.get("cap_usd"))}
+                        for h in reversed(u.get("usage_periods") or [])],
         })
     order = {"total_reached": 0, "daily_reached": 1, "near": 2, "ok": 3}
     return sorted(out, key=lambda r: (order[r["status"]], -r["spent_usd"]))

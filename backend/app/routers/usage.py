@@ -71,6 +71,52 @@ def usage_limits(user=Depends(require_role(Role.super_admin))):
     return {"items": usage.limits_overview()}
 
 
+class _Allowance(BaseModel):
+    total_usd: float | None = None        # new TOTAL limit (USD); use clear_total for "no limit"
+    daily_usd: float | None = None
+    clear_total: bool = False
+    clear_daily: bool = False
+    keep_total: bool = False              # leave the total limit as it is
+    keep_daily: bool = False
+    period: str | None = None             # "none" | "monthly"; None = unchanged
+    reset_total: bool = False             # start a new period: used-so-far back to 0 (history kept)
+    reset_today: bool = False             # today's usage back to 0
+    reason: str = ""
+
+
+@router.put("/limits/{uid}")
+def put_allowance(uid: str, body: _Allowance, user=Depends(require_role(Role.super_admin))):
+    """Change a user's AI allowance in one step: limits, monthly renewal and/or reset of usage.
+    Resetting never deletes the usage log; the closed period is kept on the user (last 12)."""
+    from app import audit
+    total = usage._KEEP if body.keep_total else (None if body.clear_total else body.total_usd)
+    daily = usage._KEEP if body.keep_daily else (None if body.clear_daily else body.daily_usd)
+    try:
+        res = usage.set_allowance(uid, user.get("name") or user.get("username", ""), total_usd=total, daily_usd=daily,
+                                  period=body.period, reset_total=body.reset_total, reset_today=body.reset_today,
+                                  reason=body.reason)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="User not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    u, b = res["user"], res["before"]
+    parts = []
+    if body.reset_total:
+        parts.append(f"usage reset to 0 (was {usage.to_tokens(b['spent_usd']):,} tokens)")
+    elif body.reset_today:
+        parts.append("today's usage reset to 0")
+    if not body.keep_total:
+        parts.append(f"total limit {usage.to_tokens(u.get('usage_cap_usd')) if u.get('usage_cap_usd') is not None else 'none'}")
+    if not body.keep_daily:
+        parts.append(f"daily limit {usage.to_tokens(u.get('daily_cap_usd')) if u.get('daily_cap_usd') is not None else 'none'}")
+    if body.period:
+        parts.append(f"renews {'monthly' if body.period == 'monthly' else 'never'}")
+    audit.record("ai_allowance", user.get("name") or user.get("username", ""),
+                 detail=f"{u['username']}: " + "; ".join(parts) + (f" — {body.reason.strip()[:200]}" if body.reason.strip() else ""), ref=uid)
+    row = next((r for r in usage.limits_overview() if r["id"] == uid), None)
+    return row or {}
+
+
 @router.get("/summary")
 def usage_summary(f: _F = Depends(), user=Depends(require_role(Role.super_admin))):
     return {"filters": f.v, **usage.summary(**f.v)}

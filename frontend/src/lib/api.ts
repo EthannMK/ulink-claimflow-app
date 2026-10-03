@@ -147,12 +147,17 @@ export async function updateAiSettings(providers: AiProvider[]): Promise<{ provi
 
 // ---- AI usage & costs ---------------------------------------------------------
 /** Own allowance. Everyone gets client tokens; the *_usd fields come back for the Super Admin only. */
-export interface MyUsage {
+export interface MyUsage extends AllowancePeriod {
   requests: number
   used_tokens: number; cap_tokens: number | null; remaining_tokens: number | null
   today_tokens: number; daily_cap_tokens: number | null; daily_remaining_tokens: number | null
   spent_usd?: number; cap_usd?: number | null; today_usd?: number; daily_cap_usd?: number | null
   real_tokens?: number; usd_per_1m_tokens?: number
+}
+/** The current allowance period: 'monthly' renews on the 1st; a reset by the admin also starts a new one. */
+export interface AllowancePeriod {
+  period: 'none' | 'monthly'; period_start: number | null; renews_on: string | null
+  last_reset: { at: number; reason: string; by: string; used_tokens: number | null } | null
 }
 export interface Billing { usd_per_1m_tokens: number; default: number; actual: { usd_per_1m_tokens: number | null; calls: number; tokens: number } }
 export async function getBilling(): Promise<Billing> {
@@ -163,12 +168,22 @@ export async function saveBilling(usd_per_1m_tokens: number): Promise<Billing> {
     method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ usd_per_1m_tokens }),
   }), 'Saving token rate')
 }
-export interface UserLimit {
+export interface UserLimit extends AllowancePeriod {
   id: string; username: string; name: string; role: string; active: boolean
   spent_usd: number; cap_usd: number | null; remaining_usd: number | null
   today_usd: number; daily_cap_usd: number | null; daily_remaining_usd: number | null
   used_tokens: number | null; cap_tokens: number | null; today_tokens: number | null; daily_cap_tokens: number | null
   status: 'ok' | 'near' | 'daily_reached' | 'total_reached'
+  history: { start: number | null; end: number; reason: string; by: string; spent_usd: number; used_tokens: number | null; cap_usd: number | null; cap_tokens: number | null }[]
+}
+export interface AllowanceChange {
+  total_usd?: number | null; daily_usd?: number | null; clear_total?: boolean; clear_daily?: boolean; keep_total?: boolean; keep_daily?: boolean
+  period?: 'none' | 'monthly'; reset_total?: boolean; reset_today?: boolean; reason?: string
+}
+export async function saveAllowance(userId: string, body: AllowanceChange): Promise<UserLimit> {
+  return jsonOrThrow(await fetch(`${apiBase()}/api/usage/limits/${userId}`, {
+    method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }), 'Saving the AI allowance')
 }
 export async function getUsageLimits(): Promise<UserLimit[]> {
   return (await jsonOrThrow<{ items: UserLimit[] }>(await fetch(`${apiBase()}/api/usage/limits`, { headers: authHeaders() }), 'Loading user limits')).items
@@ -216,7 +231,7 @@ export async function getMyHistory(limit = 50): Promise<MyUse[]> {
   return d.items
 }
 export async function getMyUsage(): Promise<MyUsage> {
-  if (!backendOn()) { await wait(80); return { requests: 0, used_tokens: 0, cap_tokens: null, remaining_tokens: null, today_tokens: 0, daily_cap_tokens: null, daily_remaining_tokens: null } }
+  if (!backendOn()) { await wait(80); return { requests: 0, used_tokens: 0, cap_tokens: null, remaining_tokens: null, today_tokens: 0, daily_cap_tokens: null, daily_remaining_tokens: null, period: "none", period_start: null, renews_on: null, last_reset: null } }
   return jsonOrThrow(await fetch(`${apiBase()}/api/usage/me`, { headers: authHeaders() }), 'Loading your usage')
 }
 export async function getUsageSummary(f: UsageFilters): Promise<UsageSummary> {

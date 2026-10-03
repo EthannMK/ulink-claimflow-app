@@ -53,7 +53,10 @@ function MyAllowance() {
       <div className="grid grid-cols-2 gap-6">
         <Meter label="Today" spent={data.today_tokens} cap={data.daily_cap_tokens} hint="Resets at midnight (Myanmar time)."
           usdLine={data.today_usd != null ? `Super Admin view: ${usd(data.today_usd, 4)}${data.daily_cap_usd != null ? ` of ${usd(data.daily_cap_usd)}` : ''}` : undefined} />
-        <Meter label="Total" spent={data.used_tokens} cap={data.cap_tokens} hint="Ask your administrator if you need more."
+        <Meter label={data.period === 'monthly' ? 'This month' : 'Total'} spent={data.used_tokens} cap={data.cap_tokens}
+          hint={data.period === 'monthly' && data.renews_on
+            ? `Renews on ${new Date(data.renews_on + 'T00:00:00').toLocaleDateString([], { day: 'numeric', month: 'long' })}.`
+            : data.last_reset ? `Counting since ${new Date(data.last_reset.at * 1000).toLocaleDateString([], { day: 'numeric', month: 'long' })}. Ask your administrator if you need more.` : 'Ask your administrator if you need more.'}
           usdLine={data.spent_usd != null ? `Super Admin view: ${usd(data.spent_usd, 4)}${data.cap_usd != null ? ` of ${usd(data.cap_usd)}` : ''} · real tokens ${num(data.real_tokens ?? 0)}` : undefined} />
       </div>
     </Card>
@@ -170,7 +173,8 @@ function UserLimits() {
                 <td>{cell(u.today_usd, u.daily_cap_usd, u.today_tokens, u.daily_cap_tokens)}</td>
                 <td>{cell(u.spent_usd, u.cap_usd, u.used_tokens, u.cap_tokens)}</td>
                 <td><Badge className={STATUS[u.status][1]}>{STATUS[u.status][0]}</Badge></td>
-                <td className="text-right"><button onClick={() => setEdit(edit === u.id ? null : u.id)} className="text-primary hover:underline">Edit limits</button></td>
+                <td className="text-right whitespace-nowrap"><button onClick={() => setEdit(edit === u.id ? null : u.id)} className="text-primary hover:underline">Manage allowance</button>
+                  {u.period === 'monthly' && <div className="text-[10px] text-outline">renews monthly</div>}</td>
               </tr>
               {edit === u.id && (
                 <tr className="bg-primary/[0.03]"><td colSpan={6} className="px-2 py-3">

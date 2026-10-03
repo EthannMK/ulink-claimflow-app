@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { PageErrorBoundary } from './PageErrorBoundary'
 import { useQuery } from '@tanstack/react-query'
@@ -9,11 +10,18 @@ import { ChatWidget } from './ChatWidget'
 export function Layout() {
   const sec = useQuery({ queryKey: ['me', 'security'], queryFn: getMySecurity, staleTime: 60_000 })
   const loc = useLocation()
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem('cf-nav') === 'collapsed' } catch { return false } })
+  const [mobileOpen, setMobileOpen] = useState(false)
+  useEffect(() => { setMobileOpen(false) }, [loc.pathname])
+  function toggleCollapsed() {
+    setCollapsed((v) => { try { localStorage.setItem('cf-nav', v ? 'open' : 'collapsed') } catch { /* ignore */ } return !v })
+  }
   return (
-    <div className="h-screen flex bg-surface">
-      <Sidebar />
+    <div className="h-screen flex bg-surface text-on-surface">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-primary focus:text-white focus:px-3 focus:py-2 focus:rounded-lg">Skip to content</a>
+      <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar />
+        <TopBar onMenu={() => setMobileOpen(true)} />
         {sec.data?.default_password && (
           <div className="flex items-center gap-2 bg-status-rejected/10 text-status-rejected px-6 py-2 text-sm">
             <Icon name="lock_reset" className="text-[18px]" />
@@ -21,7 +29,9 @@ export function Layout() {
             <Link to="/profile" className="font-semibold underline">Change password</Link>
           </div>
         )}
-        <main className="flex-1 overflow-y-auto p-6"><PageErrorBoundary resetKey={loc.pathname}><Outlet /></PageErrorBoundary></main>
+        <main id="main" className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1680px] px-4 py-5 md:px-6 md:py-6 lg:px-8"><PageErrorBoundary resetKey={loc.pathname}><Outlet /></PageErrorBoundary></div>
+        </main>
       </div>
       <ChatWidget />
     </div>

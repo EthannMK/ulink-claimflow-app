@@ -6,7 +6,7 @@ import { deleteTicket, assignTicket } from '../lib/jd1'
 import { AssignPicker } from '../components/AssignPicker'
 import { getUsername, getName } from '../lib/auth'
 import { canDeleteTickets } from '../components/DeleteTicketButton'
-import { Card, Badge, Icon, Button } from '../components/ui'
+import { Card, Badge, Icon, Button, PageTitle, EmptyState, SkeletonRows } from '../components/ui'
 import { channelIcon, categoryMeta, statusMeta, timeAgo } from '../lib/format'
 import type { Claim } from '../lib/types'
 
@@ -142,13 +142,8 @@ export function InboxPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-primary tracking-tight">Omnichannel Inbox</h1>
-          <p className="text-sm text-text-main mt-1">All channels in one place — AI categorizes and suggests an assignee.</p>
-        </div>
-        <Button onClick={() => nav('/new-claim')}><Icon name="add" className="text-[18px]" /> New Claim</Button>
-      </div>
+      <PageTitle title="Inbox" sub="Every claim and request from all channels, with AI-suggested category and assignee."
+        action={<Button onClick={() => nav('/new-claim')}><Icon name="add" className="text-[18px]" />New claim</Button>} />
 
       {/* tabs */}
       <div className="flex items-center gap-1 mb-3 bg-surface-container rounded-xl p-1 w-fit">
@@ -214,9 +209,9 @@ export function InboxPage() {
         </div>
       )}
 
-      <Card className="overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-container/70 text-on-surface-variant text-left text-xs uppercase tracking-wide">
+      <Card className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[960px]">
+          <thead className="sticky top-0 z-[1] bg-surface-container-low text-on-surface-variant text-left text-[11px] uppercase tracking-[0.06em] border-b border-outline-variant">
             <tr>
               {canDelete && (
                 <th className="px-4 py-3 font-semibold w-8">
@@ -237,10 +232,12 @@ export function InboxPage() {
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td className="px-4 py-6 text-outline" colSpan={canDelete ? 10 : 8}>Loading…</td></tr>}
+            {isLoading && <tr><td colSpan={canDelete ? 10 : 8}><SkeletonRows rows={6} cols={6} /></td></tr>}
             {!isLoading && items.length === 0 && (
-              <tr><td className="px-4 py-8 text-center text-outline" colSpan={canDelete ? 10 : 8}>
-                {all.length === 0 ? 'No tickets yet.' : <>No tickets match these filters. <button onClick={clearAll} className="text-primary hover:underline">Clear all filters</button></>}
+              <tr><td colSpan={canDelete ? 10 : 8}>
+                {all.length === 0
+                  ? <EmptyState icon="inbox" title="No tickets yet">Tickets appear here when a claim arrives from a channel or a JD1 scan creates one.</EmptyState>
+                  : <EmptyState icon="filter_alt_off" title="No tickets match these filters" action={<Button variant="outline" size="sm" onClick={clearAll}>Clear all filters</Button>}>Try a wider date range or fewer filters.</EmptyState>}
               </td></tr>
             )}
             {items.map((c) => (

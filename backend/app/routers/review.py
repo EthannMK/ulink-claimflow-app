@@ -18,6 +18,37 @@ _CACHE: dict[str, ReviewResult] = {}
 _MAX = 200
 
 
+# ---- results are also kept in Cloud Storage, so the same document is not read (and billed) again
+#      after the server restarts. Since the server now sleeps when idle (min instances 0), the
+#      in-memory cache alone was lost every time. The key includes the prompt and the AI settings,
+#      so editing a prompt or switching models reads the document again.
+def _fingerprint(prompt_id: str) -> str:
+    from app import prompts
+    try:
+        cfg = json.dumps([prompts.get(prompt_id), ai_provider.get_settings().get("providers"),
+                          ai_provider.get_feature_models()], sort_keys=True, default=str)
+    except Exception:
+        cfg = prompt_id
+    return hashlib.sha256(cfg.encode("utf-8")).hexdigest()[:16]
+
+
+def _saved_get(kind: str, key: str, model):
+    from app import storage
+    try:
+        hit = storage.get(f"cache/{kind}/{key}.json")
+        return model.model_validate_json(hit[2]) if hit else None
+    except Exception:
+        return None
+
+
+def _saved_put(kind: str, key: str, obj) -> None:
+    from app import storage
+    try:
+        storage.put(f"cache/{kind}/{key}.json", f"{key}.json", "application/json", obj.model_dump_json().encode("utf-8"))
+    except Exception:
+        pass
+
+
 def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
 
@@ -270,15 +301,21 @@ def _page_analysis(data: bytes, mime: str, start: int = 0, count: int = 0) -> Pa
 
 
 @router.post("/review/pages", response_model=PageAnalysis)
-async def review_pages(file: UploadFile = File(...), start: int = Form(0), count: int = Form(0), user=Depends(get_current_user)):
+async def review_pages(file: UploadFile = File(...), start: int = Form(0), count: int = Form(0), fresh: bool = Form(False),
+                       user=Depends(get_current_user)):
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
     mime = file.content_type or "application/pdf"
-    key = hashlib.sha256(data + f"::pages:{start}:{count}".encode()).hexdigest()
-    cached = _PAGE_CACHE.get(key)
-    if cached is not None:
-        return cached
+    key = hashlib.sha256(data + f"::pages:{start}:{count}:{_fingerprint('full_detection')}".encode()).hexdigest()
+    if not fresh:                     # "Re-run AI" sends fresh=true to read the pages again
+        cached = _PAGE_CACHE.get(key)
+        if cached is None:
+            cached = await run_in_threadpool(_saved_get, "pages", key, PageAnalysis)
+            if cached is not None:
+                _PAGE_CACHE[key] = cached
+        if cached is not None:
+            return cached
     # Run the blocking rasterize + AI call in a worker thread so concurrent page
     # ranges truly run in parallel (an async endpoint would serialize them).
     request_ctx.set_user(user.get("username", ""), "Full detection")
@@ -290,6 +327,7 @@ async def review_pages(file: UploadFile = File(...), start: int = Form(0), count
         if len(_PAGE_CACHE) >= _MAX:
             _PAGE_CACHE.pop(next(iter(_PAGE_CACHE)))
         _PAGE_CACHE[key] = res
+        await run_in_threadpool(_saved_put, "pages", key, res)
     return res
 
 
@@ -300,8 +338,12 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
         raise HTTPException(status_code=400, detail="Empty file")
     mime = file.content_type or "application/pdf"
 
-    key = hashlib.sha256(data + fields.encode("utf-8")).hexdigest()
+    key = hashlib.sha256(data + fields.encode("utf-8") + _fingerprint("required_fields").encode()).hexdigest()
     cached = _CACHE.get(key)
+    if cached is None and fields:
+        cached = await run_in_threadpool(_saved_get, "fields", key, ReviewResult)
+        if cached is not None:
+            _CACHE[key] = cached
     if cached is not None:
         return cached
 
@@ -351,4 +393,6 @@ async def review(file: UploadFile = File(...), fields: str = Form(""), user=Depe
         if len(_CACHE) >= _MAX:
             _CACHE.pop(next(iter(_CACHE)))
         _CACHE[key] = result
+        if req and any(f.value for f in result.fields):
+            await run_in_threadpool(_saved_put, "fields", key, result)
     return result
