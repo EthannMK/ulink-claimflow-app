@@ -64,6 +64,24 @@ export function Button({ children, variant = 'primary', size = 'md', className =
     </button>
   )
 }
+/** Underline tabs for switching between views of one page. */
+export function Tabs<T extends string>({ tabs, value, onChange, className = '' }: { tabs: { id: T; label: string; icon?: string; count?: number }[]; value: T; onChange: (id: T) => void; className?: string }) {
+  return (
+    <div role="tablist" className={`flex items-end gap-1 border-b border-outline-variant overflow-x-auto ${className}`}>
+      {tabs.map((t) => {
+        const on = t.id === value
+        return (
+          <button key={t.id} role="tab" aria-selected={on} onClick={() => onChange(t.id)}
+            className={`relative inline-flex items-center gap-1.5 px-3.5 h-10 text-sm whitespace-nowrap transition-colors ${on ? 'text-primary font-semibold' : 'text-text-main hover:text-on-surface'}`}>
+            {t.icon && <Icon name={t.icon} className="text-[18px]" />}{t.label}
+            {t.count != null && <span className={`ml-0.5 text-[11px] tabular-nums rounded-full px-1.5 ${on ? 'bg-primary/10 text-primary' : 'bg-surface-container text-outline'}`}>{t.count}</span>}
+            {on && <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-primary" />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 /** Shown where a list or panel has nothing yet — says what will appear and how to start. */
 export function EmptyState({ icon = 'inbox', title, children, action, className = '' }: { icon?: string; title: ReactNode; children?: ReactNode; action?: ReactNode; className?: string }) {
   return (

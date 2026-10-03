@@ -1,8 +1,9 @@
 import { useState, Fragment } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getMyUsage, getMyHistory, getBilling, saveBilling, getUsageSummary, getUsageRecent, getUsageOptions, downloadUsageCsv, getProviderAccount, getUsageLimits, listUsers, type UsageSummary, type UsageFilters, type UserLimit } from '../lib/api'
 import { getRole } from '../lib/auth'
-import { PageTitle, Card, Badge, Button, Icon } from '../components/ui'
+import { PageTitle, Card, Badge, Button, Icon, Tabs } from '../components/ui'
 import { LimitEditor } from '../components/LimitEditor'
 
 const usd = (n: number | null | undefined, dp = 2) => (n === null || n === undefined ? '—' : `$${Number(n).toFixed(dp)}`)
@@ -20,28 +21,44 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
   )
 }
 
-/** Allowance meter in client tokens. `usdLine` (Super Admin only) adds the real dollar amounts. */
-function Meter({ label, spent, cap, hint, usdLine }: { label: string; spent: number; cap: number | null; hint: string; usdLine?: string }) {
+/** Allowance meter in client tokens: what is left is the headline, used / limit underneath. */
+function Meter({ label, spent, cap, hint }: { label: string; spent: number; cap: number | null; hint: string }) {
   const pct = cap != null && cap > 0 ? Math.min(100, (spent / cap) * 100) : 0
   const tone = pct >= 100 ? 'bg-status-rejected' : pct >= 80 ? 'bg-status-pending' : 'bg-primary'
+  const left = cap != null ? Math.max(cap - spent, 0) : null
   return (
-    <div>
-      <div className="flex items-baseline justify-between text-xs mb-1">
-        <span className="font-semibold text-text-main">{label}</span>
-        <span className="text-text-main">{tok(spent)} tokens {cap != null ? <>of <b>{tok(cap)}</b> · <span className="text-outline">{tok(Math.max(cap - spent, 0))} left</span></> : <span className="text-outline">· no limit</span>}</span>
+    <div className="rounded-xl border border-outline-variant/70 bg-surface-container-low/60 p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-outline">{label}</div>
+      <div className="mt-1.5 flex items-baseline gap-2 flex-wrap">
+        <span className={`font-display text-[28px] leading-none font-bold tabular-nums ${pct >= 100 ? 'text-status-rejected' : 'text-on-surface'}`}>{tok(left ?? spent)}</span>
+        <span className="text-sm text-text-main">{left != null ? 'tokens left' : 'tokens used · no limit'}</span>
       </div>
-      {usdLine && <div className="text-[11px] text-outline text-right -mt-0.5 mb-1">{usdLine}</div>}
-      {cap != null && (
-        <div className="h-2 rounded-full bg-surface-container overflow-hidden" role="meter" aria-label={label} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+      {cap != null && (<>
+        <div className="mt-3 h-2 rounded-full bg-surface-container overflow-hidden" role="meter" aria-label={label} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
           <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
         </div>
-      )}
-      <div className="text-[11px] text-outline mt-1">{cap != null && pct >= 100 ? <span className="text-status-rejected">Limit reached — AI features are paused. {hint}</span> : hint}</div>
+        <div className="mt-1.5 text-xs text-text-main tabular-nums">{tok(spent)} of {tok(cap)} used · {Math.round(pct)}%</div>
+      </>)}
+      <div className="text-[11px] text-outline mt-1.5">{cap != null && pct >= 100 ? <span className="text-status-rejected">Limit reached — AI features are paused. {hint}</span> : hint}</div>
     </div>
   )
 }
 
-/** The signed-in user's own allowance — shown to every role. */
+/** The Super Admin's own AI use, as one line under the page title (they set the limits, so no allowance wording). */
+function MyUseLine() {
+  const { data } = useQuery({ queryKey: ['usage', 'me'], queryFn: getMyUsage, refetchInterval: 30_000 })
+  if (!data) return null
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="inline-flex items-center gap-1"><Icon name="person" className="text-[15px]" />Your own use</span>
+      <span>Today <b className="text-on-surface tabular-nums">{tok(data.today_tokens)}</b> tokens{data.today_usd != null ? ` · ${usd(data.today_usd, 4)}` : ''}</span>
+      <span>All time <b className="text-on-surface tabular-nums">{tok(data.used_tokens)}</b> tokens{data.spent_usd != null ? ` · ${usd(data.spent_usd, 4)}` : ''}</span>
+      <span>{data.requests} requests</span>
+    </span>
+  )
+}
+
+/** The signed-in user's own allowance — users and admins (the Super Admin gets MyUseLine instead). */
 function MyAllowance() {
   const { data, error } = useQuery({ queryKey: ['usage', 'me'], queryFn: getMyUsage, refetchInterval: 30_000 })
   if (error) return <Card className="p-4 text-sm text-status-rejected">{String((error as Error).message)}</Card>
@@ -50,14 +67,14 @@ function MyAllowance() {
     <Card className="p-5 mb-5">
       <div className="flex items-center gap-2 mb-4"><Icon name="account_balance_wallet" className="text-primary" /><span className="font-semibold text-primary">My AI allowance</span>
         <span className="ml-auto text-xs text-outline">{data.requests} AI requests · {tok(data.used_tokens)} tokens used in total</span></div>
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-2 gap-4">
         <Meter label="Today" spent={data.today_tokens} cap={data.daily_cap_tokens} hint="Resets at midnight (Myanmar time)."
-          usdLine={data.today_usd != null ? `Super Admin view: ${usd(data.today_usd, 4)}${data.daily_cap_usd != null ? ` of ${usd(data.daily_cap_usd)}` : ''}` : undefined} />
+        />
         <Meter label={data.period === 'monthly' ? 'This month' : 'Total'} spent={data.used_tokens} cap={data.cap_tokens}
           hint={data.period === 'monthly' && data.renews_on
             ? `Renews on ${new Date(data.renews_on + 'T00:00:00').toLocaleDateString([], { day: 'numeric', month: 'long' })}.`
             : data.last_reset ? `Counting since ${new Date(data.last_reset.at * 1000).toLocaleDateString([], { day: 'numeric', month: 'long' })}. Ask your administrator if you need more.` : 'Ask your administrator if you need more.'}
-          usdLine={data.spent_usd != null ? `Super Admin view: ${usd(data.spent_usd, 4)}${data.cap_usd != null ? ` of ${usd(data.cap_usd)}` : ''} · real tokens ${num(data.real_tokens ?? 0)}` : undefined} />
+        />
       </div>
     </Card>
   )
@@ -249,7 +266,11 @@ function Drill({ onClick, children, title }: { onClick: () => void; children: Re
   return <button onClick={onClick} title={title ?? 'Filter the whole dashboard to this'} className="text-left hover:underline hover:text-primary">{children}</button>
 }
 
+type AdminTab = 'overview' | 'users' | 'log' | 'billing'
 function AdminDashboard() {
+  const [params, setParams] = useSearchParams()
+  const tab = (['overview', 'users', 'log', 'billing'].includes(params.get('tab') || '') ? params.get('tab') : 'overview') as AdminTab
+  const setTab = (t: AdminTab) => setParams((p) => { const n = new URLSearchParams(p); if (t === 'overview') n.delete('tab'); else n.set('tab', t); return n }, { replace: true })
   const [f, setF] = useState<UsageFilters>(EMPTY)
   const [custom, setCustom] = useState(false)
   const [csvBusy, setCsvBusy] = useState(false)
@@ -275,18 +296,24 @@ function AdminDashboard() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="font-display text-lg font-bold text-primary">All users · AI usage &amp; costs</h2>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={csvBusy}><Icon name="download" className="text-[16px]" />{csvBusy ? 'Exporting…' : 'Export CSV'}</Button>
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
+        <Tabs<AdminTab> value={tab} onChange={setTab} className="flex-1 min-w-0" tabs={[
+          { id: 'overview', label: 'Overview', icon: 'insights' },
+          { id: 'users', label: 'Users & limits', icon: 'group' },
+          { id: 'log', label: 'Call log', icon: 'list_alt' },
+          { id: 'billing', label: 'Client billing', icon: 'currency_exchange' },
+        ]} />
+        <div className="flex items-center gap-2 pb-1">
+          <Button variant="outline" size="sm" onClick={exportCsv} loading={csvBusy}><Icon name="download" className="text-[16px]" />Export CSV</Button>
           <Button variant="outline" size="sm" onClick={refresh}><Icon name="refresh" className="text-[16px]" />Refresh</Button>
         </div>
       </div>
 
-      <TokenRate />
-      <UserLimits />
+      {tab === 'billing' && <TokenRate />}
+      {tab === 'users' && <UserLimits />}
 
-      {/* one filter bar drives EVERY panel below */}
+      {/* one filter bar drives every panel of Overview and the Call log */}
+      {(tab === 'overview' || tab === 'log') && (<>
       <Card className="p-3 mb-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-0.5">
@@ -313,8 +340,10 @@ function AdminDashboard() {
         <p className="text-[11px] text-outline mt-2">Showing <b>{periodLabel}</b>{filtered ? ' with filters applied' : ''}. Dates use your computer's timezone. Click any user, feature or model below to filter by it.</p>
       </Card>
       {summary.error && <p className="text-sm text-status-rejected mb-3">{String((summary.error as Error).message)}</p>}
+      </>)}
 
-      <div className="grid grid-cols-7 gap-3 mb-4">
+      {tab === 'overview' && (<>
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-4">
         <Tile label="Estimated cost" value={usd(s?.total_cost_usd, 4)} sub="App-tracked estimate" />
         <Tile label="AI requests" value={s ? String(s.requests) : '—'} sub={s ? `${s.requests - s.failed} succeeded` : undefined} />
         <Tile label="Tokens in / out" value={s ? tokIO(s.tokens_in, s.tokens_out) : '—'} sub={s ? `${num(s.total_tokens)} total` : undefined} />
@@ -415,9 +444,12 @@ function AdminDashboard() {
             {s && s.by_user.length === 0 && <tr><td colSpan={9} className="py-6 text-center text-outline">No AI calls in this view.</td></tr>}
           </tbody>
         </table>
-        <p className="text-[11px] text-outline mt-2">Set or change limits in Users &amp; Teams.</p>
+        <p className="text-[11px] text-outline mt-2">Change a user's limits under <b>Users &amp; limits</b>.</p>
       </Card>
 
+      </>)}
+
+      {tab === 'log' && (
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div><div className="font-semibold text-primary text-sm">Call log</div>
@@ -444,6 +476,7 @@ function AdminDashboard() {
           </table>
         </div>
       </Card>
+      )}
       <p className="text-[11px] text-outline mt-3">Costs: the backup AI service reports what it charged for each call; the main AI service is priced from its published price list (<code>backend/app/usage.py</code>), including the AI's thinking tokens.</p>
     </>
   )
@@ -453,8 +486,9 @@ export function AiUsagePage() {
   const isSuper = getRole() === 'super_admin'
   return (
     <div>
-      <PageTitle title="AI Usage" sub={isSuper ? 'Your own allowance, plus usage and costs across all users.' : 'How much of your AI allowance you have used.'} />
-      <MyAllowance />
+      <PageTitle title="AI Usage" sub={isSuper ? 'AI use and cost across every user, limits and client billing.' : 'How much of your AI allowance you have used, and what used it.'}
+        meta={isSuper ? <MyUseLine /> : undefined} />
+      {!isSuper && <MyAllowance />}
       {!isSuper && <MyHistory />}
       {isSuper && <AdminDashboard />}
     </div>

@@ -1,3 +1,4 @@
+import { getToken } from './lib/auth'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
@@ -25,8 +26,11 @@ import { AiUsagePage } from './pages/AiUsagePage'
 import { AiProvidersPage } from './pages/AiProvidersPage'
 import { AiPromptsPage } from './pages/AiPromptsPage'
 
+/** Signed in -> Inbox, otherwise the sign-in page. */
+function RootRedirect() { return <Navigate to={getToken() ? '/inbox' : '/login'} replace /> }
+
 export const router = createBrowserRouter([
-  { path: '/', element: <Navigate to="/login" replace /> },
+  { path: '/', element: <RootRedirect /> },
   { path: '/login', element: <LoginPage /> },
   {
     element: <Layout />,

@@ -11,9 +11,9 @@ export function Sidebar({ collapsed = false, onToggle, mobileOpen = false, onClo
   const main = [
     { to: '/inbox', label: 'Inbox', icon: 'inbox' },
     { to: '/new-claim', label: 'New Claim', icon: 'add_circle' },
-    { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { to: '/confirmation', label: 'Confirmation', icon: 'fact_check' },
-    { to: '/notifications', label: 'Notifications', icon: 'notifications' },
+    { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', preview: true },
+    { to: '/confirmation', label: 'Confirmation', icon: 'fact_check', preview: true },
+    { to: '/notifications', label: 'Notifications', icon: 'notifications', preview: true },
     { to: '/ai-usage', label: 'AI Usage', icon: 'monitoring' },
   ]
   const pipeline = [
@@ -24,13 +24,13 @@ export function Sidebar({ collapsed = false, onToggle, mobileOpen = false, onClo
     ...(isSuper ? [{ to: '/admin/users', label: 'Users & Teams', icon: 'group' }] : []),
     ...(isSuper ? [{ to: '/admin/ai-providers', label: 'AI Providers & Models', icon: 'model_training' }] : []),
     ...(isSuper ? [{ to: '/admin/ai-prompts', label: 'AI Prompts', icon: 'terminal' }] : []),
-    { to: '/admin/roles', label: 'Roles', icon: 'admin_panel_settings' },
-    { to: '/admin/channels', label: 'Channels', icon: 'hub' },
-    { to: '/admin/routing', label: 'Routing Rules', icon: 'alt_route' },
-    { to: '/admin/sla', label: 'SLA Policies', icon: 'timer' },
-    { to: '/admin/automations', label: 'Automations', icon: 'settings_suggest' },
-    { to: '/admin/reports', label: 'Reports', icon: 'analytics' },
-    { to: '/admin/audit', label: 'Audit Log', icon: 'history' },
+    { to: '/admin/roles', label: 'Roles', icon: 'admin_panel_settings', preview: true },
+    { to: '/admin/channels', label: 'Channels', icon: 'hub', preview: true },
+    { to: '/admin/routing', label: 'Routing Rules', icon: 'alt_route', preview: true },
+    { to: '/admin/sla', label: 'SLA Policies', icon: 'timer', preview: true },
+    { to: '/admin/automations', label: 'Automations', icon: 'settings_suggest', preview: true },
+    { to: '/admin/reports', label: 'Reports', icon: 'analytics', preview: true },
+    { to: '/admin/audit', label: 'Audit Log', icon: 'history', preview: true },
     { to: '/settings', label: 'Settings', icon: 'settings' },
   ]
   const groups = [{ items: main }, { title: 'Claim pipeline', items: pipeline }, ...(isAdmin ? [{ title: 'Admin', items: admin }] : [])]
@@ -53,12 +53,13 @@ export function Sidebar({ collapsed = false, onToggle, mobileOpen = false, onClo
                 : <div className="px-5 pt-2 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-outline">{g.title}</div>)}
               <div className={narrow ? 'px-2 grid gap-0.5' : 'px-3 grid gap-0.5'}>
                 {g.items.map((n: any) => (
-                  <NavLink key={n.to} to={n.to} title={narrow ? n.label : undefined}
+                  <NavLink key={n.to} to={n.to} title={narrow ? n.label + (n.preview ? ' (preview)' : '') : n.preview ? 'Concept screen — sample data, not connected yet' : undefined}
                     className={({ isActive }) => `group relative flex items-center gap-3 rounded-lg ${narrow ? 'justify-center h-10' : 'px-3 py-2'} text-[13.5px] transition-colors ${isActive ? 'text-primary font-semibold bg-primary/[0.08]' : 'text-text-main hover:bg-surface-container hover:text-on-surface'}`}>
                     {({ isActive }) => (<>
                       {isActive && <span className={`absolute ${narrow ? '-left-2' : '-left-3'} top-2 bottom-2 w-[3px] rounded-r bg-brand-accent`} />}
                       <span className={`material-symbols-outlined text-[20px] ${isActive ? '' : 'text-outline group-hover:text-on-surface-variant'}`} aria-hidden="true">{n.icon}</span>
                       {!narrow && <span className="truncate">{n.label}</span>}
+                      {!narrow && n.preview && <span className="ml-auto text-[9.5px] font-semibold uppercase tracking-wide rounded px-1.5 py-px bg-surface-container text-outline" title="Concept screen — sample data, not connected yet">Preview</span>}
                       {n.to === '/jd1' && jd1.status === 'running' && (narrow
                         ? <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary animate-pulse" title="A JD1 scan is running" />
                         : <span className="ml-auto text-[10px] font-semibold text-primary tabular-nums animate-pulse" title="A JD1 scan is running">{Math.round(jd1.pct)}%</span>)}
