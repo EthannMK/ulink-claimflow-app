@@ -483,7 +483,10 @@ function DocumentsTab({ item, note, decided, onPages, onDownloadNotes, pageFiles
   const [selId, setSelId] = useState(docs[0]?.id ?? '')
   const [file, setFile] = useState<File | null>(null)
   const [err, setErr] = useState('')
+  const [readNow, setReadNow] = useState<Set<string>>(new Set())   // documents JD2 asked the AI to read here
   const sel = docs.find((d) => d.id === selId)
+  const selHasNotes = !!sel && pageFiles.some((fn) => fn.file === sel.name && fn.pages.length > 0)
+  const unread = docs.filter((d) => !pageFiles.some((fn) => fn.file === d.name && fn.pages.length > 0))
   useEffect(() => {
     if (!sel) return
     let alive = true; setFile(null); setErr('')
@@ -510,7 +513,8 @@ function DocumentsTab({ item, note, decided, onPages, onDownloadNotes, pageFiles
               <div key={d.id} className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${d.id === selId ? 'border-primary bg-primary/5' : 'border-outline-variant'}`}>
                 <button onClick={() => setSelId(d.id)} className={`flex items-center gap-1 ${d.id === selId ? 'text-primary font-semibold' : 'text-text-main'}`} title={d.name}>
                   <Icon name="description" className="text-[15px]" />{d.name.length > 34 ? d.name.slice(0, 34) + '…' : d.name}
-                  <span className="text-outline font-normal">{d.size ? `· ${(d.size / 1024 / 1024).toFixed(1)} MB` : ''}{hasNotes ? ' · notes' : ''}</span>
+                  <span className="text-outline font-normal">{d.size ? `· ${(d.size / 1024 / 1024).toFixed(1)} MB` : ''}</span>
+                  {hasNotes ? <Icon name="check_circle" className="text-[14px] text-status-approved" /> : <span className="text-[10px] text-status-pending font-normal">not read</span>}
                 </button>
                 <button onClick={() => open(d, false)} title="Open in a new tab" className="text-primary ml-1"><Icon name="open_in_new" className="text-[15px]" /></button>
                 <button onClick={() => open(d, true)} title="Download" className="text-primary"><Icon name="download" className="text-[15px]" /></button>
@@ -528,9 +532,22 @@ function DocumentsTab({ item, note, decided, onPages, onDownloadNotes, pageFiles
       </Card>
       {err && <Card className="p-3 text-xs text-status-rejected">{err}</Card>}
       {sel && !file && !err && <Card className="p-8 text-center text-sm text-text-main"><Icon name="autorenew" className="text-[16px] animate-spin align-middle mr-1" />Opening {sel.name}…</Card>}
+      {unread.length > 0 && (
+        <Card className="p-3 text-xs flex items-center gap-2 bg-status-pending/5 border-status-pending/40">
+          <Icon name="info" className="text-[16px] text-status-pending" />
+          <span className="text-text-main flex-1">{unread.length === docs.length ? (docs.length === 1 ? 'This document' : `All ${docs.length} documents`) : `${unread.length} of ${docs.length} documents`} arrived without page-by-page notes from JD1. Select one and press <b>Read this document</b> to have the AI read it here.</span>
+        </Card>
+      )}
+      {sel && file && !selHasNotes && !decided && !readNow.has(sel.id) && (
+        <Card className="p-3 flex items-center gap-3 text-sm">
+          <Icon name="document_scanner" className="text-[18px] text-primary" />
+          <span className="flex-1 text-text-main">JD1 didn't read <b>{sel.name}</b> page by page. Read it now? This uses AI tokens, like full detection in JD1.</span>
+          <Button size="sm" onClick={() => setReadNow((s) => new Set(s).add(sel.id))}><Icon name="auto_awesome" className="text-[15px]" />Read this document</Button>
+        </Card>
+      )}
       {sel && file && (
         <Card className="p-4">
-          <DocReview key={sel.id} file={file} autoDetect={false} readOnly={decided}
+          <DocReview key={sel.id + (readNow.has(sel.id) ? ':read' : '')} file={file} autoDetect={readNow.has(sel.id)} readOnly={decided}
             initialPages={pageFiles.find((fn) => fn.file === sel.name)?.pages}
             savedLabel={decided ? 'Read-only' : 'Press “Save changes” to keep edits'}
             onSavePages={(pages) => onPages(sel.name, pages)} />
@@ -554,9 +571,17 @@ function RequiredFields({ file, fields, readOnly, onChange }: { file: string; fi
     if (g) g[1].push({ f, i }); else groups.push([sec, [{ f, i }]])
   })
   const filled = fields.filter((f) => f.value.trim()).length
+  // documents like invoices usually hold none of the claim-form fields — keep them out of the way
+  const [open, setOpen] = useState(filled > 0)
   return (
     <Section title={file} icon="checklist" right={<span className="text-xs text-outline">{filled} of {fields.length} filled</span>}>
-      <div className="grid lg:grid-cols-2 gap-x-8">
+      {!open && (
+        <div className="flex items-center gap-2 text-xs text-text-main">
+          <span>No claim-form fields were found in this document.</span>
+          <button onClick={() => setOpen(true)} className="text-primary hover:underline">{readOnly ? 'Show the fields' : 'Show the fields to fill them in'}</button>
+        </div>
+      )}
+      {open && <div className="grid lg:grid-cols-2 gap-x-8">
         {groups.map(([sec, list]) => (
           <div key={sec} className="mb-2">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-primary/70 pt-1 pb-0.5">{sec}</div>
@@ -572,7 +597,7 @@ function RequiredFields({ file, fields, readOnly, onChange }: { file: string; fi
             ))}
           </div>
         ))}
-      </div>
+      </div>}
     </Section>
   )
 }

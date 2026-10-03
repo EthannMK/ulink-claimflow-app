@@ -30,6 +30,69 @@ const fkey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`
 
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
 
+/** Where full detection stands for a file (for the JD1 file chips and the Send check). */
+export function detectState(file: File): { done: number; total: number; finished: boolean; running: boolean } {
+  const d = DETECT.get(fkey(file))
+  return d ? { done: d.done, total: d.total, finished: d.finished, running: !d.finished } : { done: 0, total: 0, finished: false, running: false }
+}
+
+async function pageCount(file: File): Promise<number> {
+  if (!isPdf(file)) return 1
+  try {
+    const pdfjs: any = await import('pdfjs-dist')
+    pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+    const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
+    const n = doc.numPages; doc.destroy?.(); return n
+  } catch { return 0 }
+}
+
+/** Read a document in the background — full detection of every page and, when a field map is
+ *  given, the required fields — without opening it on screen. Uses the same progress map and
+ *  request caches as the viewer, so opening the file meanwhile picks up the same run and
+ *  nothing is read (or billed) twice. */
+export async function readInBackground(file: File, opts: {
+  mapFields?: { label: string; hint?: string; section?: string }[]
+  wantPages?: boolean
+  onPages?: (pages: PageDetail[]) => void
+  onFields?: (fields: ReqField[]) => void
+}): Promise<void> {
+  const jobs: Promise<void>[] = []
+  if (opts.mapFields?.length && opts.onFields) {
+    const mapKey = JSON.stringify(opts.mapFields.map((f) => ({ label: f.label, hint: f.hint || '', section: f.section || '' })))
+    jobs.push(reviewDoc(file, mapKey).then((r) => {
+      if (!r.error && r.fields?.length) opts.onFields!(r.fields.map((f) => ({ name: f.name, value: f.value, section: f.section || '', page: f.page, ai_value: '' })))
+    }).catch(() => {}))
+  }
+  if (opts.wantPages !== false && opts.onPages) {
+    jobs.push((async () => {
+      const key = fkey(file)
+      let det = DETECT.get(key)
+      if (det && !det.finished) {                       // already being read (e.g. on screen) — wait for it
+        while (DETECT.get(key) === det && !det.finished) await new Promise((r) => setTimeout(r, 1500))
+        const d2 = DETECT.get(key)
+        if (d2?.finished && d2.pages.length) opts.onPages!(d2.pages)
+        return
+      }
+      if (det?.finished) { if (det.pages.length) opts.onPages!(det.pages); return }
+      const total = await pageCount(file)
+      if (DETECT.get(key)) return readInBackground(file, { onPages: opts.onPages })   // the viewer started meanwhile
+      det = { pages: [], doneRanges: new Set(), done: 0, total: Math.max(total, 0), finished: false }
+      DETECT.set(key, det)
+      const ranges: [number, number][] = total > 1 ? Array.from({ length: Math.ceil(total / 3) }, (_, i) => [1 + i * 3, Math.min(3, total - i * 3)] as [number, number])
+        : total === 1 ? [[1, 1]] : [[0, 0]]      // 0 pages known -> whole document in one read
+      let anyOk = false
+      await Promise.all(ranges.map(([s, c]) => reviewDocPagesRange(file, s, c).then((r) => {
+        refreshUsage()
+        const rk = `${s}:${c}`
+        if (!det!.doneRanges.has(rk)) { det!.doneRanges.add(rk); det!.done = Math.min(det!.done + Math.max(c, 1), det!.total || 1); det!.pages = mergePages(det!.pages, r.pages ?? []) }
+        if (r.pages?.length) { anyOk = true; opts.onPages!(det!.pages) }
+      }).catch(() => {})))
+      if (anyOk) det.finished = true; else DETECT.delete(key)
+    })())
+  }
+  await Promise.all(jobs)
+}
+
 function tableToTsv(t: PageTable): string {
   return [t.columns, ...t.rows].filter((r) => r.length).map((r) => r.map((c) => c.replace(/[\t\n]/g, ' ')).join('\t')).join('\n')
 }

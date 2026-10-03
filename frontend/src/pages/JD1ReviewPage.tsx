@@ -5,7 +5,7 @@ import { handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, 
 import type { PageDetail } from '../lib/review'
 import { backendOn, getName } from '../lib/auth'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
-import { DocReview } from '../components/DocReview'
+import { DocReview, readInBackground, detectState } from '../components/DocReview'
 import { JD1Progress } from '../components/JD1Progress'
 import { jd1Runner, useJD1Run } from '../lib/jd1Runner'
 import { useWorkspaceState, jd1Workspace } from '../lib/jd1Workspace'
@@ -38,6 +38,20 @@ const H_LABELS: Record<string, string> = {
 // AI confidence percentages are deliberately not shown (user decision) — officers check every value.
 function ConfBadge(_: { f: NoteField }) { return null }
 
+/** Two uploads with the same name (e.g. two phones' IMG_0001.jpg) would share page notes and
+ *  overwrite each other in JD2 — give each its own name: scan.pdf, scan (2).pdf … */
+function uniqueNames(list: File[]): File[] {
+  const seen = new Map<string, number>()
+  return list.map((f) => {
+    const n = (seen.get(f.name.toLowerCase()) ?? 0) + 1
+    seen.set(f.name.toLowerCase(), n)
+    if (n === 1) return f
+    const dot = f.name.lastIndexOf('.')
+    const name = dot > 0 ? `${f.name.slice(0, dot)} (${n})${f.name.slice(dot)}` : `${f.name} (${n})`
+    return new File([f], name, { type: f.type, lastModified: f.lastModified })
+  })
+}
+
 export function JD1ReviewPage() {
   const nav = useNavigate()
   const run = useJD1Run()          // the scan runs outside this page — see lib/jd1Runner.ts
@@ -67,6 +81,52 @@ export function JD1ReviewPage() {
   const [sendStep, setSendStep] = useState('')
   const sentRef = useRef(false)   // after a successful send, late saves from the viewer are ignored
   const filesRef = useRef(files); filesRef.current = files
+  // ---- every document is read for JD2, not only the one on screen ----------------------
+  // Once the note exists, each file's full detection (and required fields) is read in the
+  // background, one file at a time. Opening a file meanwhile joins the same read (nothing twice).
+  const [bgState, setBgState] = useState<Record<string, 'queued' | 'reading' | 'done' | 'failed'>>({})
+  const [, setTick] = useState(0)
+  const bgGen = useRef(0)
+  const filesKey = files.map((f) => `${f.name}:${f.size}:${f.lastModified}`).join('|')
+  const noteReady = !!note && run.status !== 'running'
+  useEffect(() => {
+    if (!noteReady || !files.length) return
+    const gen = ++bgGen.current
+    const ins = insurers.find((i) => i.id === reviewInsurerId)
+    const avail = ins ? formTypesOf(ins) : (['claim'] as FormType[])
+    const active = avail.includes(reviewForm) ? reviewForm : (avail[0] ?? 'claim')
+    const map = fieldsFor(ins, active).map((f) => ({ label: f.label, hint: f.aiHint, section: f.section }))
+    const todo = files.filter((f) => !(pagesByFile[f.name]?.length || note?.page_notes?.some((fn) => fn.file === f.name && fn.pages.length)))
+    const todoFields = new Set(files.filter((f) => !fieldsByFile[f.name]?.length && !note?.required_fields?.some((ff) => ff.file === f.name && ff.fields.length)).map((f) => f.name))
+    if (!todo.length && !todoFields.size) return
+    setBgState((m) => ({ ...m, ...Object.fromEntries(todo.map((f) => [f.name, m[f.name] === 'done' ? 'done' : 'queued'])) }))
+    ;(async () => {
+      for (const f of files) {
+        const needPages = todo.includes(f), needFields = todoFields.has(f.name)
+        if (!needPages && !needFields) continue
+        if (gen !== bgGen.current) return                       // new files or a new scan: stop
+        if (needPages) setBgState((m) => ({ ...m, [f.name]: 'reading' }))
+        await readInBackground(f, {
+          wantPages: needPages, mapFields: needFields ? map : undefined,
+          onPages: (pages) => { if (gen === bgGen.current) savePageNotes(f.name, pages) },
+          onFields: (list) => { if (gen === bgGen.current && !sentRef.current) setFieldsByFile((m) => (m[f.name]?.length ? m : { ...m, [f.name]: list })) },
+        })
+        if (gen !== bgGen.current) return
+        if (needPages) setBgState((m) => ({ ...m, [f.name]: detectState(f).finished ? 'done' : 'failed' }))
+      }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteReady, filesKey])
+  // refresh the per-file progress chips while anything is being read
+  const anyReading = Object.values(bgState).some((v) => v === 'reading' || v === 'queued')
+  useEffect(() => {
+    if (!anyReading) return
+    const t = setInterval(() => setTick((x) => x + 1), 1500)
+    return () => clearInterval(t)
+  }, [anyReading])
+  const docRead = (f: File) => !!(pagesByFile[f.name]?.length || note?.page_notes?.some((fn) => fn.file === f.name && fn.pages.length)) && !detectState(f).running
+  const unreadDocs = files.filter((f) => !docRead(f))
+
   // invoice amounts JD1 corrected (description -> amount): re-applied after a re-generate
   const [invEdits, setInvEdits] = useWorkspaceState<Record<string, string>>('invEdits', {})
   // note fields JD1 changed by hand ("section.key" -> value): kept when the note is re-generated
@@ -281,7 +341,7 @@ export function JD1ReviewPage() {
             <Icon name="upload_file" className="text-[20px] text-primary" />
             <span className="text-text-main">{files.length ? 'Change files' : 'Upload claim packet (PDFs & images)'}</span>
             <input type="file" multiple accept="image/*,application/pdf" className="hidden"
-              onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef(''); setPagesByFile({}); setFieldsByFile({}); setNoteEdits({}); setInvEdits({}); setDirty(false); localStorage.removeItem('jd1.note.edits') }} />
+              onChange={(e) => { setFiles(uniqueNames(Array.from(e.target.files ?? []))); bgGen.current++; setBgState({}); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef(''); setPagesByFile({}); setFieldsByFile({}); setNoteEdits({}); setInvEdits({}); setDirty(false); localStorage.removeItem('jd1.note.edits') }} />
           </label>
           {files.length > 0 && <span className="text-xs text-outline">{files.length} file(s)</span>}
           {ticketRef && <span className="text-xs text-primary flex items-center gap-1"><Icon name="confirmation_number" className="text-[14px]" />Ticket {ticketRef}</span>}
@@ -329,12 +389,24 @@ export function JD1ReviewPage() {
             </div>
           </div>
           <div className="flex gap-2 flex-wrap mb-3">
-            {files.map((f, i) => (
-              <button key={f.name + i} onClick={() => setReviewIdx(i)}
-                className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${reviewIdx === i ? 'border-primary text-primary bg-primary/5' : 'border-outline-variant text-text-main hover:bg-surface-container'}`}>
-                <Icon name="description" className="text-[14px]" />{f.name.length > 30 ? f.name.slice(0, 30) + '…' : f.name}
-              </button>
-            ))}
+            {files.map((f, i) => {
+              const d = detectState(f), read = docRead(f), st = bgState[f.name]
+              return (
+                <button key={f.name + i} onClick={() => setReviewIdx(i)} title={f.name}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${reviewIdx === i ? 'border-primary text-primary bg-primary/5' : 'border-outline-variant text-text-main hover:bg-surface-container'}`}>
+                  <Icon name="description" className="text-[14px]" />{f.name.length > 30 ? f.name.slice(0, 30) + '…' : f.name}
+                  {read ? <Icon name="check_circle" className="text-[14px] text-status-approved" />
+                    : d.running ? <span className="text-[10px] text-primary tabular-nums">{d.total ? `${d.done}/${d.total}` : 'reading'}</span>
+                    : st === 'failed' ? <Icon name="error" className="text-[14px] text-status-rejected" />
+                    : note ? <Icon name="schedule" className="text-[14px] text-outline" /> : null}
+                </button>
+              )
+            })}
+            {note && files.length > 1 && (
+              <span className="text-[11px] text-outline self-center">
+                {unreadDocs.length ? `Reading every document for JD2 · ${files.length - unreadDocs.length} of ${files.length} done` : `All ${files.length} documents read for JD2`}
+              </span>
+            )}
           </div>
           {files[reviewIdx] && (() => {
             const ins = insurers.find((i) => i.id === reviewInsurerId)
@@ -379,7 +451,10 @@ export function JD1ReviewPage() {
                   <button disabled={!note || sending} onClick={() => { setMenuOpen(false); sendToJD2() }}
                     className="w-full text-left px-3 py-2.5 text-sm hover:bg-surface-container flex items-start gap-2 disabled:opacity-40">
                     <Icon name="send" className="text-[16px] text-status-approved mt-0.5" />
-                    <span><span className="font-medium block">Send to JD2</span><span className="text-xs text-outline">Pass the validated note for adjudication</span></span>
+                    <span><span className="font-medium block">Send to JD2</span>
+                      <span className="text-xs text-outline">{unreadDocs.length
+                        ? `${unreadDocs.length} document${unreadDocs.length > 1 ? 's are' : ' is'} still being read — wait a moment so JD2 gets the page notes, or send now and read it in JD2`
+                        : 'Pass the validated note, page notes and required fields for every document'}</span></span>
                   </button>
                   <button disabled={!note || mailBusy} onClick={() => { setMenuOpen(false); makeDraftMail() }}
                     className="w-full text-left px-3 py-2.5 text-sm hover:bg-surface-container flex items-start gap-2 border-t border-outline-variant/60 disabled:opacity-40">
