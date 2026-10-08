@@ -65,6 +65,11 @@ async def handoff(body: HandoffRequest, user=Depends(get_current_user)):
     t = tickets._get(body.ticket_id) if body.ticket_id else None
     if t is None:
         t = tickets.new_ticket_for_note(note)
+    # documents already saved with the ticket are shared (not copied, not uploaded again)
+    for d in (t.documents or []):
+        if not any(s.name == d.name for s in item.attachments):
+            item.attachments.append(StoredDoc(id=d.id, name=d.name, mime=d.type or "application/octet-stream",
+                                              size=d.size or 0, key=d.key or f"claims/{t.id}/{d.id}"))
     t.jd2_item_id = item_id
     t.status = Status.ready_for_review
     t.documentsComplete = len(note.checklist_missing) == 0
@@ -83,11 +88,19 @@ async def upload_document(item_id: str, file: UploadFile = File(...), user=Depen
     if not item:
         raise HTTPException(status_code=404, detail="Not found")
     data = await file.read()
-    doc_id = uuid.uuid4().hex[:8]
     name = file.filename or "document"
-    jd2_store.put_blob(item_id, doc_id, name, file.content_type or "application/octet-stream", data)
-    item.attachments = [a for a in item.attachments if a.name != name] + [
-        StoredDoc(id=doc_id, name=name, mime=file.content_type or "application/octet-stream", size=len(data))]
+    mime = file.content_type or "application/octet-stream"
+    from app.routers import claims as tickets
+    t = tickets._get(item.ticket_id) if item.ticket_id else None
+    if t is not None:
+        # file it with the claim's other documents (one folder per claim, see app/filing.py)
+        t, doc = tickets.file_document(t, name, mime, data, user.get("name") or user.get("username", ""), "jd2")
+        att = StoredDoc(id=doc.id, name=name, mime=mime, size=len(data), key=doc.key)
+    else:
+        doc_id = uuid.uuid4().hex[:8]
+        jd2_store.put_blob(item_id, doc_id, name, mime, data)
+        att = StoredDoc(id=doc_id, name=name, mime=mime, size=len(data))
+    item.attachments = [a for a in item.attachments if a.name != name] + [att]
     return jd2_store.save(item)
 
 
@@ -119,11 +132,13 @@ async def delete_item(item_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Not found")
     # remove stored document files
     for att in (item.attachments or []):
-        storage.delete(f"jd2/{item_id}/{att.id}")
+        storage.delete(att.key or f"jd2/{item_id}/{att.id}")
     # remove any linked Inbox ticket(s)
     claims = Collection("claims")
     for c in claims.all():
         if c.get("jd2_item_id") == item_id:
+            if c.get("storage_folder"):
+                storage.delete(f"{c['storage_folder']}/_manifest.json")
             claims.delete(c.get("id"))
     jd2_store.delete(item_id)
     audit.record("delete_claim", user.get("name") or user.get("username", ""),
@@ -135,7 +150,9 @@ async def delete_item(item_id: str, user=Depends(get_current_user)):
 @router.get("/{item_id}/documents/{doc_id}")
 async def download_document(item_id: str, doc_id: str, user=Depends(get_current_user)):
     """Return the raw bytes of a JD1-uploaded document so JD2 can preview or download it."""
-    blob = jd2_store.get_blob(item_id, doc_id)
+    item = jd2_store.get(item_id)
+    att = next((a for a in (item.attachments if item else []) if a.id == doc_id), None)
+    blob = storage.get(att.key) if att and att.key else jd2_store.get_blob(item_id, doc_id)
     if not blob:
         raise HTTPException(status_code=404, detail="Document not found")
     name, mime, data = blob

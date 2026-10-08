@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, updateTicket,
+import { handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, updateTicket, uploadTicketDoc,
   type JD1Note, type NoteField, type Section, type InvoiceItem, type DraftMail, type ReqField } from '../lib/jd1'
 import type { PageDetail } from '../lib/review'
 import { backendOn, getName } from '../lib/auth'
@@ -124,6 +124,26 @@ export function JD1ReviewPage() {
     const t = setInterval(() => setTick((x) => x + 1), 1500)
     return () => clearInterval(t)
   }, [anyReading])
+  // ---- keep every uploaded file with its Inbox ticket (Cloud Storage) as soon as the ticket exists,
+  //      so documents are never lost if the claim isn't sent to JD2 the same day
+  const [savedDocs, setSavedDocs] = useState<Record<string, 'saving' | 'saved' | 'failed'>>({})
+  const savingFor = useRef('')
+  useEffect(() => {
+    if (!ticketId || !files.length) return
+    const key = `${ticketId}|${filesKey}`
+    if (savingFor.current === key) return
+    savingFor.current = key
+    ;(async () => {
+      for (const f of files) {
+        if (savingFor.current !== key) return
+        setSavedDocs((m) => ({ ...m, [f.name]: 'saving' }))
+        try { await uploadTicketDoc(ticketId, f); setSavedDocs((m) => ({ ...m, [f.name]: 'saved' })) }
+        catch { setSavedDocs((m) => ({ ...m, [f.name]: 'failed' })) }
+      }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketId, filesKey])
+  const savedCount = files.filter((f) => savedDocs[f.name] === 'saved').length
   const docRead = (f: File) => !!(pagesByFile[f.name]?.length || note?.page_notes?.some((fn) => fn.file === f.name && fn.pages.length)) && !detectState(f).running
   const unreadDocs = files.filter((f) => !docRead(f))
 
@@ -402,6 +422,13 @@ export function JD1ReviewPage() {
                 </button>
               )
             })}
+            {ticketId && (
+              <span className="text-[11px] text-outline self-center inline-flex items-center gap-1" title="The uploaded files are kept with the Inbox ticket">
+                <Icon name={savedCount === files.length ? 'cloud_done' : files.some((f) => savedDocs[f.name] === 'failed') ? 'cloud_off' : 'cloud_upload'}
+                  className={`text-[14px] ${savedCount === files.length ? 'text-status-approved' : files.some((f) => savedDocs[f.name] === 'failed') ? 'text-status-rejected' : 'text-primary'}`} />
+                {savedCount === files.length ? `Files saved with ticket ${ticketRef || ''}` : files.some((f) => savedDocs[f.name] === 'failed') ? 'Some files could not be saved — they will be sent with JD2' : `Saving files ${savedCount}/${files.length}…`}
+              </span>
+            )}
             {note && files.length > 1 && (
               <span className="text-[11px] text-outline self-center">
                 {unreadDocs.length ? `Reading every document for JD2 · ${files.length - unreadDocs.length} of ${files.length} done` : `All ${files.length} documents read for JD2`}
@@ -452,6 +479,9 @@ export function JD1ReviewPage() {
                     className="w-full text-left px-3 py-2.5 text-sm hover:bg-surface-container flex items-start gap-2 disabled:opacity-40">
                     <Icon name="send" className="text-[16px] text-status-approved mt-0.5" />
                     <span><span className="font-medium block">Send to JD2</span>
+                      {note && !note.header?.member_name?.value && (note.documents ?? []).every((d) => d.doc_type === 'Other') && (
+                        <span className="block text-xs text-status-rejected font-medium">These files don't look like a claim (no member or claim documents found) — check before sending.</span>
+                      )}
                       <span className="text-xs text-outline">{unreadDocs.length
                         ? `${unreadDocs.length} document${unreadDocs.length > 1 ? 's are' : ' is'} still being read — wait a moment so JD2 gets the page notes, or send now and read it in JD2`
                         : 'Pass the validated note, page notes and required fields for every document'}</span></span>

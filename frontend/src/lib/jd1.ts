@@ -134,9 +134,12 @@ export async function handoffToJD2(note: JD1Note, files: File[] = [], ticketId?:
     method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ note, ticket_id: ticketId || null }),
   }), 'Send to JD2')
   const failed: string[] = []
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i]
-    onProgress?.(`Uploading document ${i + 1} of ${files.length}: ${f.name}`)
+  // files already saved with the ticket come along on the server — only upload the rest
+  const have = new Set((item.attachments ?? []).map((a) => `${a.name}:${a.size}`))
+  const todo = files.filter((f) => !have.has(`${f.name}:${f.size}`))
+  for (let i = 0; i < todo.length; i++) {
+    const f = todo[i]
+    onProgress?.(`Uploading document ${i + 1} of ${todo.length}: ${f.name}`)
     if (f.size > MAX_UPLOAD_BYTES) { failed.push(`${f.name} (over 31 MB)`); continue }
     try {
       const fd = new FormData(); fd.append('file', f, f.name)
@@ -163,7 +166,30 @@ export async function fetchDocFile(itemId: string, doc: StoredDoc): Promise<File
 }
 
 // ---- tickets (Inbox) ----
-export interface Ticket { id: string; reference: string; status: string; category: string; insurer: string; memberName: string }
+export interface Ticket { id: string; reference: string; status: string; category: string; insurer: string; memberName: string; documents?: { id: string; name: string; size?: number | null }[] }
+
+/** Keep one uploaded file with its Inbox ticket (stored in Cloud Storage). Same name + size again = no-op. */
+export async function uploadTicketDoc(ticketId: string, file: File): Promise<Ticket> {
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error(`${file.name} is over 31 MB`)
+  const fd = new FormData(); fd.append('file', file, file.name)
+  return okJson<Ticket>(await fetch(`${apiBase()}/api/claims/${ticketId}/documents`, { method: 'POST', headers: authHeaders(), body: fd }), 'Saving the document')
+}
+/** Admin: CSV of every stored claim document (ticket ref, claim no, insurer, member, date, storage path). */
+export async function downloadDocumentIndex(filters: { insurer?: string; q?: string; date_from?: string; date_to?: string } = {}): Promise<void> {
+  const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][])
+  const r = await fetch(`${apiBase()}/api/documents/index.csv?${qs}`, { headers: authHeaders() })
+  if (!r.ok) throw new Error(`Export failed (${r.status})`)
+  const url = URL.createObjectURL(await r.blob())
+  const a = document.createElement('a'); a.href = url; a.download = `claim-documents-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30_000)
+}
+/** Open or download a document saved with a ticket. */
+export async function ticketDocUrl(ticketId: string, docId: string): Promise<{ url: string; revoke: () => void }> {
+  const r = await fetch(`${apiBase()}/api/claims/${ticketId}/documents/${docId}`, { headers: authHeaders() })
+  if (!r.ok) throw new Error(`Could not open the document (${r.status})`)
+  const url = URL.createObjectURL(await r.blob())
+  return { url, revoke: () => URL.revokeObjectURL(url) }
+}
 export async function createTicketFromJD1(note: JD1Note, channel = 'webform'): Promise<Ticket> {
   const r = await fetch(`${apiBase()}/api/claims/from-jd1`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ note, channel }) })
   if (!r.ok) throw new Error(`Ticket create failed (${r.status})`)

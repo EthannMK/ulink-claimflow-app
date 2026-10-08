@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { listClaims } from '../lib/api'
-import { deleteTicket, assignTicket } from '../lib/jd1'
+import { deleteTicket, assignTicket, downloadDocumentIndex } from '../lib/jd1'
 import { AssignPicker } from '../components/AssignPicker'
 import { getUsername, getName } from '../lib/auth'
 import { canDeleteTickets } from '../components/DeleteTicketButton'
@@ -42,6 +42,14 @@ function dateRange(f: Record<string, string>): [number, number] | null {
   }
 }
 
+/** The Received filter as YYYY-MM-DD dates for the server (local calendar days). */
+function dateRangeISO(f: Record<string, string>): { date_from?: string; date_to?: string } | null {
+  const r = dateRange(f)
+  if (!r) return null
+  const iso = (t: number) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  return { ...(isFinite(r[0]) ? { date_from: iso(r[0]) } : {}), ...(isFinite(r[1]) ? { date_to: iso(r[1] - 1) } : {}) }
+}
+
 function Sel({ value, onChange, options, label, className = '', def = options[0]?.[0] }: { value: string; onChange: (v: string) => void; options: [string, string][]; label: string; className?: string; def?: string }) {
   return (
     <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}
@@ -68,6 +76,7 @@ export function InboxPage() {
   const me = getUsername(), myName = getName()
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [flash, setFlash] = useState('')
+  const [exporting, setExporting] = useState(false)
   const canDelete = canDeleteTickets()   // Super Admin + Admin
   const all = data?.items ?? []
   const insurers = useMemo(() => Array.from(new Set(all.map((c) => c.insurer).filter((x) => x && x !== '—'))).sort(), [all])
@@ -143,7 +152,12 @@ export function InboxPage() {
   return (
     <div>
       <PageTitle title="Inbox" sub="Every claim and request from all channels, with AI-suggested category and assignee."
-        action={<Button onClick={() => nav('/new-claim')}><Icon name="add" className="text-[18px]" />New claim</Button>} />
+        action={<>
+          {canDelete && <Button variant="outline" loading={exporting} title="CSV of every stored document with ticket ID, claim number, insurer, member, date and storage path — uses the insurer and date filters below"
+            onClick={async () => { setExporting(true); try { await downloadDocumentIndex({ insurer: f.insurer, q: f.q, ...(dateRangeISO(f) ?? {}) }) } catch (e: any) { setFlash(String(e?.message ?? e)) } finally { setExporting(false) } }}>
+            <Icon name="download" className="text-[18px]" />Document index</Button>}
+          <Button onClick={() => nav('/new-claim')}><Icon name="add" className="text-[18px]" />New claim</Button>
+        </>} />
 
       {/* tabs */}
       <div className="flex items-center gap-1 mb-3 bg-surface-container rounded-xl p-1 w-fit">

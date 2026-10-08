@@ -354,6 +354,16 @@ def _flag_hits(section_c: JD1SectionC) -> list[str]:
             hits.append(label)
     return hits
 
+def _txt(f) -> str:
+    """Readable text of a note field: section B often holds a YES/NO check with the detail in
+    the remark, so use the remark instead of printing 'YES' in the summary."""
+    v = (f.value or "").strip()
+    if v.upper() in ("YES", "NO", "UNCLEAR", "N/A", "NA"):
+        r = (f.remark or "").strip()
+        return re.split(r"(?<=[.;])\s", r, maxsplit=1)[0][:90].rstrip(".;") if r else ""
+    return v
+
+
 def _compose_summary(note: JD1Note) -> str:
     h = note.header
     parts: list[str] = []
@@ -363,13 +373,13 @@ def _compose_summary(note: JD1Note) -> str:
     overview = f"{who} · {ins}"
     if h.claim_no.value:
         overview += f" · claim {h.claim_no.value}"
-    diag = note.section_b.diagnosis.value
+    diag = _txt(note.section_b.diagnosis)
     if diag:
         overview += f" · {diag}"
-    hosp = note.section_b.hospital_provider.value
+    hosp = _txt(note.section_b.hospital_provider)
     if hosp:
         overview += f" at {hosp}"
-    dates = note.section_b.admission_discharge_dates.value or h.treatment_date.value
+    dates = h.treatment_date.value or _txt(note.section_b.admission_discharge_dates)
     if dates:
         overview += f" ({dates})"
     total = h.total_claim_amount.value or note.section_b.claim_amount.value

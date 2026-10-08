@@ -5,7 +5,7 @@ import { getClaim } from '../lib/api'
 import { Card, Badge, Icon, Button } from '../components/ui'
 import { DeleteTicketButton } from '../components/DeleteTicketButton'
 import { AssignPicker } from '../components/AssignPicker'
-import { assignTicket } from '../lib/jd1'
+import { assignTicket, ticketDocUrl } from '../lib/jd1'
 import { categoryMeta, statusMeta } from '../lib/format'
 
 const steps = ['Received', 'Category detected', 'Documents scanned', 'Data extracted', 'Completeness checked', 'Policy benefits checked', 'Summary ready', 'Ready for review']
@@ -20,6 +20,17 @@ function SectionHead({ icon, title, tone = 'primary', extra }: { icon: string; t
 }
 export function ClaimWorkspacePage() {
   const { id } = useParams(); const nav = useNavigate()
+  const [docErr, setDocErr] = useState('')
+  async function openDoc(docId: string, name: string, download: boolean) {
+    if (!id) return
+    setDocErr('')
+    try {
+      const { url, revoke } = await ticketDocUrl(id, docId)
+      if (download) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove() }
+      else window.open(url, '_blank', 'noopener')
+      setTimeout(revoke, 60_000)
+    } catch (e: any) { setDocErr(String(e?.message ?? e)) }
+  }
   const [flash, setFlash] = useState('')
   const { data: c, isLoading, refetch } = useQuery({ queryKey: ['claim', id], queryFn: () => getClaim(id!) })
   const qc = useQueryClient()
@@ -59,11 +70,17 @@ export function ClaimWorkspacePage() {
         <Card className="col-span-3 p-4 h-fit">
           <SectionHead icon="folder" title="Documents" />
           {c.documents.length === 0 && <p className="text-xs text-outline">No documents yet.</p>}
+          {docErr && <p className="text-xs text-status-rejected mb-2">{docErr}</p>}
           <div className="space-y-2">
             {c.documents.map((d) => (
               <div key={d.id} className="flex items-center gap-2 p-2 rounded-lg bg-surface-container hover:bg-surface-container/70">
                 <div className="w-8 h-8 rounded-lg bg-white grid place-items-center shrink-0"><Icon name="description" className="text-[18px] text-primary" /></div>
-                <div className="min-w-0"><div className="text-sm truncate">{d.name}</div><div className="text-xs text-outline">{d.pages ?? 1} page(s)</div></div>
+                <div className="min-w-0 flex-1"><div className="text-sm truncate" title={d.name}>{d.name}</div>
+                  <div className="text-xs text-outline"><span className="font-mono">{d.id.includes('-D') ? d.id : ''}</span>{d.id.includes('-D') ? ' · ' : ''}{d.size ? `${(d.size / 1024 / 1024).toFixed(1)} MB` : `${d.pages ?? 1} page(s)`}{d.uploaded_by ? ` · ${d.uploaded_by}` : ''}</div></div>
+                {d.url?.startsWith('/api/') && (<>
+                  <button onClick={() => openDoc(d.id, d.name, false)} title="Open" aria-label={`Open ${d.name}`} className="text-primary"><Icon name="open_in_new" className="text-[16px]" /></button>
+                  <button onClick={() => openDoc(d.id, d.name, true)} title="Download" aria-label={`Download ${d.name}`} className="text-primary"><Icon name="download" className="text-[16px]" /></button>
+                </>)}
               </div>
             ))}
           </div>

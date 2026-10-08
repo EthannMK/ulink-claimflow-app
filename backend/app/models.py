@@ -79,6 +79,10 @@ class Status(str, Enum):
 
 class DocumentFile(BaseModel):
     id: str; name: str; type: str; url: str; pages: int | None = None
+    size: int | None = None; uploaded_at: datetime | None = None; uploaded_by: str | None = None
+    key: str | None = None        # storage path, see app/filing.py
+    sha256: str | None = None     # content fingerprint (same file twice is stored once)
+    source: str | None = None     # 'jd1' | 'jd2' — where it was uploaded
 
 class ExtractedField(BaseModel):
     key: str; value: str; confidence: float
@@ -91,6 +95,8 @@ class Claim(BaseModel):
     receivedAt: datetime; documentsComplete: bool = False
     amount: float | None = None; summary: str | None = None
     jd2_item_id: str | None = None    # set when the ticket is handed to JD2
+    claim_no: str | None = None       # the insurer's claim number from the JD1 note (finds re-scans of the same claim)
+    storage_folder: str | None = None # claims/<YYYY>/<MM>/<REF>__<insurer>__<member> — fixed once the first file is filed
     extracted: list[ExtractedField] = []; documents: list[DocumentFile] = []
 
 class ClaimList(BaseModel):
@@ -276,6 +282,7 @@ class StoredDoc(BaseModel):
     name: str
     mime: str = "application/octet-stream"
     size: int = 0
+    key: str | None = None   # storage key when the file is shared with the Inbox ticket (claims/<ticket>/<doc>)
 
 class JD2Item(BaseModel):
     id: str
