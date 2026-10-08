@@ -127,4 +127,15 @@
 /* loading placeholder */
 @keyframes cf-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 .cf-skeleton { background: linear-gradient(90deg, rgb(var(--c-surface-container)) 25%, rgb(var(--c-surface-container-high)) 50%, rgb(var(--c-surface-container)) 75%); background-size: 200% 100%; animation: cf-shimmer 1.4s ease-in-out infinite; border-radius: 6px; }
-.material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; line-height: 1; }
+/* Icons are a font: each icon is written as its name (e.g. "inbox") and the font draws it. On a slow
+   or blocked connection the browser would show those names as words and push the layout apart.
+   So every icon is a fixed 1em box that can never show text, and stays transparent until the icon
+   font has really loaded (main.tsx adds .icons-ready to <html>). */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; line-height: 1;
+  display: inline-block; width: 1em; height: 1em; overflow: hidden; flex-shrink: 0;
+  white-space: nowrap; word-wrap: normal; letter-spacing: normal; text-transform: none; direction: ltr;
+  font-feature-settings: 'liga'; -webkit-font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;
+  text-align: center; vertical-align: middle;
+}
+html:not(.icons-ready) .material-symbols-outlined { color: transparent !important; }
