@@ -183,6 +183,23 @@ export async function downloadDocumentIndex(filters: { insurer?: string; q?: str
   const a = document.createElement('a'); a.href = url; a.download = `claim-documents-${new Date().toISOString().slice(0, 10)}.csv`
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
+/** Keep JD1's work (note + page notes + required fields) with the ticket on the server. */
+export async function saveJD1Draft(ticketId: string, note: JD1Note): Promise<unknown> {
+  return okJson(await fetch(`${apiBase()}/api/claims/${ticketId}/jd1-draft`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(note) }), 'Saving JD1 work')
+}
+/** JD1's saved work for a ticket, or null when none was saved. */
+export async function getJD1Draft(ticketId: string): Promise<JD1Note | null> {
+  const r = await fetch(`${apiBase()}/api/claims/${ticketId}/jd1-draft`, { headers: authHeaders() })
+  if (r.status === 404) return null
+  return okJson<JD1Note>(r, 'Loading JD1 work')
+}
+/** A document saved with a ticket, as a File (to reopen the claim in JD1). */
+export async function fetchTicketFile(ticketId: string, doc: { id: string; name: string; type?: string }): Promise<File> {
+  const r = await fetch(`${apiBase()}/api/claims/${ticketId}/documents/${doc.id}`, { headers: authHeaders() })
+  if (!r.ok) throw new Error(`Could not load ${doc.name} (${r.status})`)
+  const blob = await r.blob()
+  return new File([blob], doc.name, { type: doc.type || blob.type })
+}
 /** Open or download a document saved with a ticket. */
 export async function ticketDocUrl(ticketId: string, docId: string): Promise<{ url: string; revoke: () => void }> {
   const r = await fetch(`${apiBase()}/api/claims/${ticketId}/documents/${docId}`, { headers: authHeaders() })

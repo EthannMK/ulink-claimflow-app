@@ -97,6 +97,10 @@ class Claim(BaseModel):
     jd2_item_id: str | None = None    # set when the ticket is handed to JD2
     claim_no: str | None = None       # the insurer's claim number from the JD1 note (finds re-scans of the same claim)
     storage_folder: str | None = None # claims/<YYYY>/<MM>/<REF>__<insurer>__<member> — fixed once the first file is filed
+    jd1_saved_at: datetime | None = None   # when JD1's work (note, page notes, required fields) was last saved with the ticket
+    jd1_saved_by: str | None = None
+    checklist_required: list[str] = []     # from the saved JD1 note — the ticket page shows them
+    checklist_missing: list[str] = []
     extracted: list[ExtractedField] = []; documents: list[DocumentFile] = []
 
 class ClaimList(BaseModel):

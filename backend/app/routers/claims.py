@@ -252,6 +252,7 @@ def delete_claim(claim_id: str, user=Depends(require_role(Role.super_admin, Role
         storage.delete(_doc_key(claim_id, d))
     if c.storage_folder:
         storage.delete(f"{c.storage_folder}/_manifest.json")
+        storage.delete(_draft_key(c))
     _claims.delete(claim_id)
     audit.record("delete_claim", user.get("name") or user.get("username", ""),
                  detail=f"Deleted Inbox ticket — {c.memberName or '—'} · {c.insurer or '—'} · {c.reference}",
@@ -291,3 +292,39 @@ def documents_index(insurer: str = "", q: str = "", date_from: str = "", date_to
                         doc.uploaded_at.isoformat() if doc.uploaded_at else "", doc.uploaded_by or "", doc.source or ""])
     return Response(buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="claim-documents.csv"'})
+
+
+def _draft_key(c: Claim) -> str:
+    return f"{c.storage_folder}/{c.reference}__jd1-note.json"
+
+
+@router.put("/claims/{claim_id}/jd1-draft", response_model=Claim)
+def save_jd1_draft(claim_id: str, note: JD1Note, user=Depends(get_current_user)):
+    """Keep JD1's work with the ticket (note + full detection + required fields), so anyone can
+    open the ticket later and continue in JD1 — not only in the browser where it was scanned."""
+    c = _get(claim_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if not (note.claim_type or note.ai_summary or note.page_notes or note.documents):
+        # an empty/wrongly-shaped body must never overwrite real saved work
+        raise HTTPException(status_code=422, detail="The JD1 note is empty — nothing to save")
+    if not c.storage_folder:
+        c.storage_folder = filing.folder_for(c.reference, c.insurer, c.memberName, c.receivedAt)
+    storage.put(_draft_key(c), "jd1-note.json", "application/json", note.model_dump_json().encode("utf-8"))
+    c.jd1_saved_at = datetime.now(timezone.utc)
+    c.jd1_saved_by = user.get("name") or user.get("username", "")
+    c.checklist_required = list(note.checklist_required or [])
+    c.checklist_missing = list(note.checklist_missing or [])
+    c.documentsComplete = len(c.checklist_missing) == 0
+    return _put(c)
+
+
+@router.get("/claims/{claim_id}/jd1-draft", response_model=JD1Note)
+def get_jd1_draft(claim_id: str, user=Depends(get_current_user)):
+    c = _get(claim_id)
+    if not c or not c.storage_folder or not c.jd1_saved_at:
+        raise HTTPException(status_code=404, detail="No saved JD1 work for this ticket")
+    blob = storage.get(_draft_key(c))
+    if not blob:
+        raise HTTPException(status_code=404, detail="No saved JD1 work for this ticket")
+    return JD1Note.model_validate_json(blob[2])

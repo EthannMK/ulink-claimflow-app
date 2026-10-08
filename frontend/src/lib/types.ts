@@ -13,6 +13,7 @@ export interface Claim {
   assignee?: string | null; suggestedAssignee?: string | null;
   receivedAt: string; documentsComplete: boolean; amount?: number | null; summary?: string | null;
   jd2_item_id?: string | null; assignee_username?: string | null;
+  claim_no?: string | null; jd1_saved_at?: string | null; jd1_saved_by?: string | null; checklist_required?: string[]; checklist_missing?: string[];
   extracted: ExtractedField[]; documents: DocumentFile[];
 }
 export interface ClaimList { items: Claim[]; page: number; total: number; }

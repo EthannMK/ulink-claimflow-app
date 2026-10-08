@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, updateTicket, uploadTicketDoc,
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { handoffToJD2, draftClientMail, reconcileInvoices, createTicketFromJD1, updateTicket, uploadTicketDoc, saveJD1Draft, getJD1Draft, fetchTicketFile,
   type JD1Note, type NoteField, type Section, type InvoiceItem, type DraftMail, type ReqField } from '../lib/jd1'
 import type { PageDetail } from '../lib/review'
 import { backendOn, getName } from '../lib/auth'
+import { getClaim } from '../lib/api'
 import { PageTitle, Card, Button, Badge, Icon } from '../components/ui'
 import { DocReview, readInBackground, detectState } from '../components/DocReview'
 import { JD1Progress } from '../components/JD1Progress'
@@ -147,6 +148,62 @@ export function JD1ReviewPage() {
   const docRead = (f: File) => !!(pagesByFile[f.name]?.length || note?.page_notes?.some((fn) => fn.file === f.name && fn.pages.length)) && !detectState(f).running
   const unreadDocs = files.filter((f) => !docRead(f))
 
+  // ---- JD1's work is also kept with the ticket on the server, so anyone can open the ticket
+  //      later ("Continue in JD1") and carry on — not only in the browser that scanned it
+  const [ticketSync, setTicketSync] = useState<'' | 'saving' | 'saved' | 'failed'>('')
+  async function syncToTicket(n: JD1Note | null = note, tid: string | null = ticketId) {
+    if (!n || !tid || sentRef.current) return
+    setTicketSync('saving')
+    try { await saveJD1Draft(tid, noteForJD2(n)); setTicketSync('saved') } catch { setTicketSync('failed') }
+  }
+  // every document read in the background -> save the complete work with the ticket once
+  const allRead = !!note && files.length > 0 && unreadDocs.length === 0
+  useEffect(() => { if (allRead && ticketId) syncToTicket() }, [allRead, ticketId])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [params, setParams] = useSearchParams()
+  const openTicket = params.get('ticket')
+  const [opening, setOpening] = useState('')
+  useEffect(() => {
+    if (!openTicket) return
+    if (openTicket === ticketId && files.length) { setParams({}, { replace: true }); return }   // already open here
+    if (note && dirty && ticketId !== openTicket && !window.confirm('You have unsaved JD1 work open. Open the other ticket anyway? Unsaved changes here will be lost.')) { setParams({}, { replace: true }); return }
+    let alive = true
+    ;(async () => {
+      setOpening('Opening the ticket…'); setFlash('')
+      try {
+        const t = await getClaim(openTicket)
+        if (!t) throw new Error('Ticket not found')
+        const draft = await getJD1Draft(openTicket)
+        const docs = t.documents ?? []
+        if (!draft && docs.length === 0) {
+          setFlash(`${t.reference} was scanned before files and JD1 work were saved on the server, so there is nothing to reopen. Upload the documents again and generate the note — it will update this ticket.`)
+          setTicketId(t.id); setTicketRef(t.reference); setNote(null); setFiles([])
+          return
+        }
+        const loaded: File[] = []
+        for (let i = 0; i < docs.length; i++) {
+          if (!alive) return
+          setOpening(`Loading document ${i + 1} of ${docs.length}: ${docs[i].name}`)
+          loaded.push(await fetchTicketFile(t.id, docs[i]))
+        }
+        if (!alive) return
+        bgGen.current++; setBgState({})
+        savingFor.current = `${t.id}|${loaded.map((f) => `${f.name}:${f.size}:${f.lastModified}`).join('|')}`   // already on the server
+        setSavedDocs(Object.fromEntries(loaded.map((f) => [f.name, 'saved' as const])))
+        setFiles(loaded); setReviewIdx(0)
+        setTicketId(t.id); setTicketRef(t.reference)
+        setNote(draft); setNoteEdits({}); setInvEdits({}); setDirty(false)
+        setPagesByFile(Object.fromEntries((draft?.page_notes || []).map((fn) => [fn.file, fn.pages])))
+        setFieldsByFile(Object.fromEntries((draft?.required_fields || []).map((ff) => [ff.file, ff.fields])))
+        setSavedAt(draft ? `opened from ${t.reference}` : '')
+        sentRef.current = false
+        if (!draft) setFlash(`Opened ${t.reference}'s documents. Generate the JD1 note to continue — it will update this ticket.`)
+      } catch (e: any) { if (alive) setFlash('Could not open the ticket: ' + (e?.message ?? 'unknown')) }
+      finally { if (alive) { setOpening(''); setParams({}, { replace: true }) } }
+    })()
+    return () => { alive = false }
+  }, [openTicket])   // eslint-disable-line react-hooks/exhaustive-deps
+
   // invoice amounts JD1 corrected (description -> amount): re-applied after a re-generate
   const [invEdits, setInvEdits] = useWorkspaceState<Record<string, string>>('invEdits', {})
   // note fields JD1 changed by hand ("section.key" -> value): kept when the note is re-generated
@@ -156,6 +213,7 @@ export function JD1ReviewPage() {
   useEffect(() => {
     if (jd1Runner.get().status === 'running' || !jd1Runner.get().consumed) return   // a scan result is on its way instead
     if (jd1Workspace.has('note')) return   // coming back to the page — keep what was on screen
+    if (new URLSearchParams(location.search).get('ticket')) return   // opening a ticket's saved work instead (below)
     try {
       const raw = localStorage.getItem('jd1.note.draft')
       if (raw) {
@@ -176,6 +234,7 @@ export function JD1ReviewPage() {
       localStorage.setItem('jd1.note.draft', JSON.stringify(full))
       localStorage.setItem('jd1.note.edits', JSON.stringify(noteEdits))
       setNote(full); setDirty(false); setSavedAt(new Date().toLocaleTimeString())
+      syncToTicket(full)
     }
     catch { setFlash('Could not save draft (storage full).') }
   }
@@ -276,8 +335,8 @@ export function JD1ReviewPage() {
       try {
         const complete = n.checklist_missing.length === 0
         const summary = (n.ai_summary || n.notes || '').split('\n')[0].slice(0, 200)
-        if (ticketId) { await updateTicket(ticketId, { documentsComplete: complete, summary }) }
-        else { const t = await createTicketFromJD1(n); setTicketId(t.id); setTicketRef(t.reference) }
+        if (ticketId) { await updateTicket(ticketId, { documentsComplete: complete, summary }); syncToTicket(kept, ticketId) }
+        else { const t = await createTicketFromJD1(n); setTicketId(t.id); setTicketRef(t.reference); syncToTicket(kept, t.id) }
       } catch { /* ignore ticket errors */ }
     })()
   }, [run.status, run.consumed])
@@ -374,6 +433,13 @@ export function JD1ReviewPage() {
           </div>
         )}
         {flash && <p className="text-xs text-status-rejected mt-2">{flash}</p>}
+        {opening && <p className="text-xs text-primary mt-2 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />{opening}</p>}
+        {ticketId && ticketSync && !opening && (
+          <p className={`text-xs mt-2 flex items-center gap-1 ${ticketSync === 'failed' ? 'text-status-rejected' : 'text-outline'}`}>
+            <Icon name={ticketSync === 'saved' ? 'cloud_done' : ticketSync === 'failed' ? 'cloud_off' : 'cloud_upload'} className="text-[14px]" />
+            {ticketSync === 'saved' ? `JD1 work saved with ticket ${ticketRef || ''} — it can be reopened from the ticket` : ticketSync === 'failed' ? 'Could not save JD1 work with the ticket — press Save draft to try again' : 'Saving JD1 work with the ticket…'}
+          </p>
+        )}
         {sendStep && <p className="text-xs text-primary mt-2 flex items-center gap-1"><Icon name="autorenew" className="text-[14px] animate-spin" />{sendStep}</p>}
         {!backendOn() && <p className="text-xs text-outline mt-2">Connect the backend to run the JD1 assistant.</p>}
       </Card>

@@ -3,6 +3,7 @@
     claims/<YYYY>/<MM>/<TICKET-REF>__<insurer>__<member>/
         <TICKET-REF>-D01__<original file name>
         <TICKET-REF>-D02__<original file name>
+        <TICKET-REF>__jd1-note.json   <- JD1's note, page notes and required fields (latest save)
         _manifest.json      <- everything about the claim and its files, for extraction
 
     e.g. claims/2026/10/UL-20261008-0007__aya-sompo-insurance__thi-ha-soe/UL-20261008-0007-D01__claim-form.pdf
@@ -93,6 +94,8 @@ def write_manifest(claim) -> None:
         "status": str(getattr(claim.status, "value", claim.status)), "amount": claim.amount,
         "received_at": claim.receivedAt.isoformat() if hasattr(claim.receivedAt, "isoformat") else str(claim.receivedAt),
         "jd2_item_id": claim.jd2_item_id, "updated_at": datetime.now(timezone.utc).isoformat(),
+        "jd1_note": f"{folder}/{claim.reference}__jd1-note.json" if getattr(claim, "jd1_saved_at", None) else None,
+        "checklist_missing": getattr(claim, "checklist_missing", []),
         "documents": [{"id": d.id, "original_name": d.name, "stored_as": (d.key or "").rsplit("/", 1)[-1], "path": d.key,
                        "mime": d.type, "size": d.size, "sha256": d.sha256, "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None,
                        "uploaded_by": d.uploaded_by, "source": d.source} for d in claim.documents],
