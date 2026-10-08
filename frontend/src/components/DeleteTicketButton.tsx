@@ -20,6 +20,7 @@ export function DeleteTicketButton({ id, reference }: { id: string; reference: s
     setBusy(true); setErr('')
     try {
       await deleteTicket(id)
+      qc.removeQueries({ queryKey: ['claim', id] })
       qc.invalidateQueries({ queryKey: ['claims'] })
       nav('/inbox')
     } catch (e: any) { setErr(e?.message ?? 'Delete failed'); setBusy(false) }

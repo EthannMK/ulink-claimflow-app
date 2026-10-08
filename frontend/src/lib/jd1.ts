@@ -207,6 +207,11 @@ export async function ticketDocUrl(ticketId: string, docId: string): Promise<{ u
   const url = URL.createObjectURL(await r.blob())
   return { url, revoke: () => URL.revokeObjectURL(url) }
 }
+/** Log a claim / request by hand (New Claim page). */
+export interface ManualTicket { insurer: string; member_name: string; category: string; channel: string; claim_no?: string; amount?: string; summary?: string; fields?: Record<string, string> }
+export async function createManualTicket(t: ManualTicket): Promise<Ticket> {
+  return okJson<Ticket>(await fetch(`${apiBase()}/api/claims`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(t) }), 'Creating the ticket')
+}
 export async function createTicketFromJD1(note: JD1Note, channel = 'webform'): Promise<Ticket> {
   const r = await fetch(`${apiBase()}/api/claims/from-jd1`, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ note, channel }) })
   if (!r.ok) throw new Error(`Ticket create failed (${r.status})`)

@@ -324,7 +324,7 @@ function ClaimView({ id }: { id: string }) {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <AssignPicker value={item.assignee_username} currentName={item.assignee} disabled={decided} onChange={reassign} />
-            {item.ticket_id && <Button variant="outline" size="sm" onClick={() => nav('/inbox')} title="See this claim's ticket in the Inbox"><Icon name="inbox" className="text-[16px]" />Inbox</Button>}
+            {item.ticket_id && <Button variant="outline" size="sm" onClick={() => nav(`/claim/${item.ticket_id}`)} title="Open this claim's Inbox ticket"><Icon name="confirmation_number" className="text-[16px]" />Ticket</Button>}
             {isSuper && <Button variant="ghost" size="sm" onClick={remove}><Icon name="delete" className="text-[16px] text-status-rejected" />Delete</Button>}
           </div>
         </div>

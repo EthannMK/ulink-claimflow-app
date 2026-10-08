@@ -56,14 +56,18 @@ def local_now() -> datetime:
 
 
 def new_reference(existing: set[str]) -> str:
-    """UL-YYYYMMDD-NNNN, the next free number for today (Myanmar date)."""
+    """UL-YYYYMMDD-NNNN for today (Myanmar date). Numbers come from a per-day counter that only
+    goes up, so numbers are never shared or re-used after a delete; `existing` is a safety check."""
+    from app.db import next_counter
     day = local_now().strftime("%Y%m%d")
     prefix = f"UL-{day}-"
     used = [int(r[len(prefix):]) for r in existing if r.startswith(prefix) and r[len(prefix):].isdigit()]
-    n = (max(used) if used else 0) + 1
-    while f"{prefix}{n:04d}" in existing:
-        n += 1
-    return f"{prefix}{n:04d}"
+    top = max(used) if used else 0
+    for _ in range(10000):
+        n = next_counter(f"ref-{day}")
+        if n > top and f"{prefix}{n:04d}" not in existing:
+            return f"{prefix}{n:04d}"
+    raise RuntimeError("could not allocate a ticket reference")
 
 
 def folder_for(ref: str, insurer: str, member: str, when: datetime | None = None) -> str:
@@ -104,3 +108,11 @@ def write_manifest(claim) -> None:
         storage.put(f"{folder}/_manifest.json", "_manifest.json", "application/json", json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8"))
     except Exception:
         pass
+
+
+def content_disposition(name: str, inline: bool = True) -> str:
+    """Content-Disposition that works for any file name (Burmese, quotes …): an ASCII fallback
+    plus the real name in RFC 5987 form."""
+    from urllib.parse import quote
+    kind = "inline" if inline else "attachment"
+    return f"{kind}; filename=\"{safe_name(name)}\"; filename*=UTF-8''{quote(name or 'document', safe='')}"

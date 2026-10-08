@@ -13,10 +13,11 @@ export async function listClaims(): Promise<ClaimList> {
   if (!r.ok) throw new Error(`Loading tickets failed (${r.status})`)
   return r.json()
 }
-export async function getClaim(id: string): Promise<Claim | undefined> {
-  if (!backendOn()) { await wait(100); return mockClaims.find((c) => c.id === id) }
+/** A ticket, or null when it doesn't exist (deleted). Other failures throw. */
+export async function getClaim(id: string): Promise<Claim | null> {
+  if (!backendOn()) { await wait(100); return mockClaims.find((c) => c.id === id) ?? null }
   const r = await fetch(`${apiBase()}/api/claims/${id}`, { headers: authHeaders() })
-  if (r.status === 404) return undefined
+  if (r.status === 404) return null
   if (!r.ok) throw new Error(`Loading the ticket failed (${r.status})`)
   return r.json()
 }

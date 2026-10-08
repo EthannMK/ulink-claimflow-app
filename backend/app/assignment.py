@@ -36,11 +36,20 @@ def resolve(user: dict, target: str) -> tuple[str | None, str | None]:
 
 def sync_ticket(jd2_item_id: str, ticket_id: str | None, **fields) -> None:
     """Copy fields onto the Inbox ticket(s) linked to this JD2 item."""
+    from app.models import Claim
+    from app import filing
     claims = Collection("claims")
     for c in claims.all():
-        if c.get("jd2_item_id") == jd2_item_id or (ticket_id and c.get("id") == ticket_id):
+        # only the ticket that currently points at this JD2 claim (an old, replaced JD2 item must not win)
+        if c.get("jd2_item_id") == jd2_item_id:
             c.update(fields)
             claims.put(c["id"], c)
+            try:
+                t = Claim.model_validate(c)
+                if t.storage_folder:
+                    filing.write_manifest(t)
+            except Exception:
+                pass
 
 
 def sync_jd2(jd2_item_id: str | None, **fields) -> None:

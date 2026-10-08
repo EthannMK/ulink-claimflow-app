@@ -19,7 +19,7 @@ export function setAvatar(dataUrl: string) {
   window.dispatchEvent(new Event('cf-avatar'))
 }
 export function setSession(t: string, r: string, n: string) { localStorage.setItem('cf_token', t); localStorage.setItem('cf_role', r); localStorage.setItem('cf_name', n) }
-export function clearSession() { ['cf_token', 'cf_role', 'cf_name'].forEach((k) => localStorage.removeItem(k)) }
+export function clearSession() { ['cf_token', 'cf_role', 'cf_name', 'jd1.note.draft', 'jd1.note.edits'].forEach((k) => localStorage.removeItem(k)) }
 export function authHeaders(): Record<string, string> { const t = getToken(); return t ? { Authorization: `Bearer ${t}` } : {} }
 
 export async function login(username: string, password: string): Promise<{ ok: boolean; error?: string }> {

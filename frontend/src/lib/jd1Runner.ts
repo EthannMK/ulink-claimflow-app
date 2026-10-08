@@ -26,11 +26,12 @@ export interface JD1RunState {
   error: string
   consumed: boolean      // the JD1 page has applied the result
   tokensUsed: number | null   // client tokens this scan used (shown when it finishes)
+  context: string        // which ticket + files the scan was started for (a result is only applied there)
 }
 
 const IDLE: JD1RunState = {
   status: 'idle', startedAt: 0, endedAt: 0, files: [], pct: 0, current: '', chars: 0, lastEventAt: 0,
-  aiSeconds: null, steps: [], note: null, error: '', consumed: true, tokensUsed: null,
+  aiSeconds: null, steps: [], note: null, error: '', consumed: true, tokensUsed: null, context: '',
 }
 let state: JD1RunState = IDLE
 let controller: AbortController | null = null
@@ -114,10 +115,10 @@ export const jd1Runner = {
   get: () => state,
   subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn) } },
   /** Start a scan (ignored while one is already running). */
-  start(files: File[], corrections = '') {
+  start(files: File[], corrections = '', context = '') {
     if (state.status === 'running' || !files.length) return
     controller = new AbortController()
-    state = { ...IDLE, status: 'running', startedAt: Date.now(), lastEventAt: Date.now(), files, consumed: false, current: 'Uploading files…' }
+    state = { ...IDLE, status: 'running', startedAt: Date.now(), lastEventAt: Date.now(), files, consumed: false, current: 'Uploading files…', context }
     listeners.forEach((l) => l())
     void run(files, controller.signal, corrections)
   },

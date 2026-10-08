@@ -11,7 +11,7 @@ export function Sidebar({ collapsed = false, onToggle, mobileOpen = false, onClo
   const main = [
     { to: '/inbox', label: 'Inbox', icon: 'inbox' },
     { to: '/new-claim', label: 'New Claim', icon: 'add_circle' },
-    { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', preview: true },
+    { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { to: '/confirmation', label: 'Confirmation', icon: 'fact_check', preview: true },
     { to: '/notifications', label: 'Notifications', icon: 'notifications', preview: true },
     { to: '/ai-usage', label: 'AI Usage', icon: 'monitoring' },

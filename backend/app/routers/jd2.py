@@ -39,6 +39,20 @@ async def handoff(body: HandoffRequest, user=Depends(get_current_user)):
     Cloud Run's 32 MB request limit, so "Send to JD2" failed."""
     from app.routers import claims as tickets
     note = body.note
+    # sent before (double click, re-send after a re-generate): update that JD2 claim, never make a second one
+    prev_t = tickets._get(body.ticket_id) if body.ticket_id else None
+    prev = jd2_store.get(prev_t.jd2_item_id) if prev_t and prev_t.jd2_item_id else None
+    if prev is not None and prev.ticket_id not in (None, prev_t.id):
+        prev = None          # (old bad data) that JD2 claim belongs to another ticket
+    if prev is not None:
+        if prev.status != JD2Status.pending:
+            raise HTTPException(status_code=409, detail=f"{prev_t.reference} was already decided in JD2 ({prev.status.value.replace('_', ' ')})")
+        prev.note = note
+        prev.member_name, prev.insurer = note.header.member_name.value, note.header.insurer.value
+        prev.claim_type, prev.claim_amount = note.claim_type, _amount_of(note)
+        audit.record("jd2_handoff", user.get("name") or user.get("username", ""),
+                     detail=f"Re-sent to JD2 (note updated) — {prev.member_name or '—'} · {prev_t.reference}", ref=prev.id)
+        return jd2_store.save(prev)
     item_id = uuid.uuid4().hex[:12]
     stored: list[StoredDoc] = []
     for att in body.attachments:
@@ -95,12 +109,13 @@ async def upload_document(item_id: str, file: UploadFile = File(...), user=Depen
     if t is not None:
         # file it with the claim's other documents (one folder per claim, see app/filing.py)
         t, doc = tickets.file_document(t, name, mime, data, user.get("name") or user.get("username", ""), "jd2")
+        name = doc.name    # may have been made unique ("image (2).jpg")
         att = StoredDoc(id=doc.id, name=name, mime=mime, size=len(data), key=doc.key)
     else:
         doc_id = uuid.uuid4().hex[:8]
         jd2_store.put_blob(item_id, doc_id, name, mime, data)
         att = StoredDoc(id=doc_id, name=name, mime=mime, size=len(data))
-    item.attachments = [a for a in item.attachments if a.name != name] + [att]
+    item.attachments = [a for a in item.attachments if a.id != att.id] + [att]
     return jd2_store.save(item)
 
 
@@ -133,13 +148,20 @@ async def delete_item(item_id: str, user=Depends(get_current_user)):
     # remove stored document files
     for att in (item.attachments or []):
         storage.delete(att.key or f"jd2/{item_id}/{att.id}")
-    # remove any linked Inbox ticket(s)
-    claims = Collection("claims")
-    for c in claims.all():
-        if c.get("jd2_item_id") == item_id:
-            if c.get("storage_folder"):
-                storage.delete(f"{c['storage_folder']}/_manifest.json")
-            claims.delete(c.get("id"))
+    # remove the linked Inbox ticket with all its files (documents added later, saved JD1 work, manifest)
+    from app.routers import claims as tickets
+    for d in Collection("claims").all():
+        if d.get("jd2_item_id") != item_id:
+            continue
+        t = tickets._get(d.get("id"))
+        if t is None:
+            continue
+        for doc in t.documents:
+            storage.delete(tickets._doc_key(t.id, doc))
+        if t.storage_folder:
+            storage.delete(f"{t.storage_folder}/_manifest.json")
+            storage.delete(tickets._draft_key(t))
+        tickets._claims.delete(t.id)
     jd2_store.delete(item_id)
     audit.record("delete_claim", user.get("name") or user.get("username", ""),
                  detail=f"Deleted JD2 claim — {item.member_name or '—'} · {item.insurer or '—'} · {item.claim_amount or '—'}",
@@ -156,8 +178,9 @@ async def download_document(item_id: str, doc_id: str, user=Depends(get_current_
     if not blob:
         raise HTTPException(status_code=404, detail="Document not found")
     name, mime, data = blob
+    from app import filing
     return Response(content=data, media_type=mime or "application/octet-stream",
-                    headers={"Content-Disposition": f'inline; filename="{name}"'})
+                    headers={"Content-Disposition": filing.content_disposition(att.name if att else name)})
 
 @router.get("/queue", response_model=JD2List)
 async def queue(user=Depends(get_current_user)):

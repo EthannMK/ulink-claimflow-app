@@ -126,7 +126,7 @@ export function InboxPage() {
   }, [base, tab, f.sort])
   const activeAdvanced = ADVANCED.filter((k) => f[k] !== DEFAULTS[k]).length
   const anyFilter = Object.keys(DEFAULTS).some((k) => k !== 'sort' && f[k] !== DEFAULTS[k])
-  const routeFor = (c: any) => c.jd2_item_id ? `/jd2/${c.jd2_item_id}` : c.category === 'log_request' ? `/log/${c.id}` : `/claim/${c.id}`
+  const routeFor = (c: any) => c.jd2_item_id ? `/jd2/${c.jd2_item_id}` : `/claim/${c.id}`
 
   function toggleSel(id: string) {
     setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -141,12 +141,14 @@ export function InboxPage() {
     catch (e: any) { setFlash('Delete failed: ' + (e?.message ?? 'unknown')) }
   }
   async function bulkDelete() {
-    if (sel.size === 0) return
-    if (!window.confirm(`Delete ${sel.size} ticket(s) permanently? This is recorded in the audit log.`)) return
-    try {
-      await Promise.all(Array.from(sel).map((x) => deleteTicket(x)))
-      setSel(new Set()); refetch()
-    } catch (e: any) { setFlash('Bulk delete failed: ' + (e?.message ?? 'unknown')) }
+    const ids = Array.from(sel).filter((x) => items.some((c) => c.id === x))   // only rows you can see
+    if (ids.length === 0) return
+    if (!window.confirm(`Delete ${ids.length} ticket(s) permanently? This is recorded in the audit log.`)) return
+    const res = await Promise.allSettled(ids.map((x) => deleteTicket(x)))
+    const failed = res.filter((r) => r.status === 'rejected') as PromiseRejectedResult[]
+    setSel(new Set()); refetch()
+    ids.forEach((x) => qc.removeQueries({ queryKey: ['claim', x] }))
+    setFlash(failed.length ? `${ids.length - failed.length} deleted, ${failed.length} could not be deleted: ${String(failed[0].reason?.message ?? failed[0].reason)}` : '')
   }
 
   return (

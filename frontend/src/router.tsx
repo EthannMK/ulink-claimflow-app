@@ -7,8 +7,6 @@ import { NewClaimPage } from './pages/NewClaimPage'
 import { JD1ReviewPage } from './pages/JD1ReviewPage'
 import { JD2AdjudicationPage } from './pages/JD2AdjudicationPage'
 import { ClaimWorkspacePage } from './pages/ClaimWorkspacePage'
-import { LogWorkspacePage } from './pages/LogWorkspacePage'
-import { AdjudicationPage } from './pages/AdjudicationPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProviderConfirmationPage } from './pages/ProviderConfirmationPage'
 import { NotificationsPage } from './pages/NotificationsPage'
@@ -41,8 +39,8 @@ export const router = createBrowserRouter([
       { path: '/jd2', element: <JD2AdjudicationPage /> },
       { path: '/jd2/:id', element: <JD2AdjudicationPage /> },
       { path: '/claim/:id', element: <ClaimWorkspacePage /> },
-      { path: '/log/:id', element: <LogWorkspacePage /> },
-      { path: '/adjudication/:id', element: <AdjudicationPage /> },
+      { path: '/log/:id', element: <ClaimWorkspacePage /> },   // old links: every ticket uses the ticket page
+      { path: '/adjudication/:id', element: <ClaimWorkspacePage /> },
       { path: '/confirmation', element: <ProviderConfirmationPage /> },
       { path: '/dashboard', element: <DashboardPage /> },
       { path: '/notifications', element: <NotificationsPage /> },

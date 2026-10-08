@@ -69,6 +69,37 @@ def is_firestore() -> bool:
 _MEM_STORES: dict[str, dict[str, dict]] = {}
 
 
+import threading
+_COUNTER_LOCK = threading.Lock()
+
+
+def next_counter(key: str) -> int:
+    """A number that only goes up (1, 2, 3 …) for `key`, safe across requests and — on
+    Firestore — across Cloud Run instances (transaction). Used for ticket numbers so a
+    deleted ticket's number is never given out again and two scans never get the same one."""
+    with _COUNTER_LOCK:
+        mem = _MEM_STORES.setdefault("_counters", {})
+        if is_firestore():
+            try:
+                from google.cloud import firestore
+                ref = _DB.collection("_counters").document(key)
+
+                @firestore.transactional
+                def _inc(tx):
+                    snap = ref.get(transaction=tx)
+                    n = int((snap.to_dict() or {}).get("n", 0)) + 1 if snap.exists else 1
+                    tx.set(ref, {"n": n})
+                    return n
+                n = _inc(_DB.transaction())
+                mem[key] = {"n": n}
+                return n
+            except Exception as e:
+                _log.warning("counter %s: Firestore transaction failed, using memory: %s", key, str(e)[:200])
+        n = int(mem.get(key, {}).get("n", 0)) + 1
+        mem[key] = {"n": n}
+        return n
+
+
 class Collection:
     """A dict-of-dicts keyed by document id, backed by Firestore or memory.
     Every Firestore call is guarded — on any error it uses the in-memory shadow,

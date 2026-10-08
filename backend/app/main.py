@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 import mimetypes
 # the PDF viewer's worker ships as .mjs — browsers only run it if it is served as JavaScript
 mimetypes.add_type("text/javascript", ".mjs")
-from app.routers import health, claims, auth, users, scan, jd1, jd2, assistant, extract, review, audit, ai_settings, access_settings, usage, teams, prompts, cloud_costs
+from app.routers import health, claims, auth, users, scan, jd1, jd2, assistant, extract, review, audit, ai_settings, access_settings, usage, teams, prompts, cloud_costs, dashboard
 
 import logging
 from app.config import settings
@@ -25,6 +25,7 @@ app.add_middleware(
     allow_methods=["*"], allow_headers=["*"], allow_credentials=True,
 )
 app.include_router(health.router)
+app.include_router(dashboard.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(scan.router)

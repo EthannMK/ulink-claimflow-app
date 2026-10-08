@@ -42,16 +42,31 @@ function ConfBadge(_: { f: NoteField }) { return null }
 /** Two uploads with the same name (e.g. two phones' IMG_0001.jpg) would share page notes and
  *  overwrite each other in JD2 — give each its own name: scan.pdf, scan (2).pdf … */
 function uniqueNames(list: File[]): File[] {
-  const seen = new Map<string, number>()
+  const used = new Set<string>()
   return list.map((f) => {
-    const n = (seen.get(f.name.toLowerCase()) ?? 0) + 1
-    seen.set(f.name.toLowerCase(), n)
-    if (n === 1) return f
-    const dot = f.name.lastIndexOf('.')
-    const name = dot > 0 ? `${f.name.slice(0, dot)} (${n})${f.name.slice(dot)}` : `${f.name} (${n})`
-    return new File([f], name, { type: f.type, lastModified: f.lastModified })
+    let name = f.name
+    if (used.has(name.toLowerCase())) {
+      const dot = f.name.lastIndexOf('.')
+      const stem = dot > 0 ? f.name.slice(0, dot) : f.name, ext = dot > 0 ? f.name.slice(dot) : ''
+      let i = 2
+      while (used.has(`${stem} (${i})${ext}`.toLowerCase())) i++
+      name = `${stem} (${i})${ext}`
+    }
+    used.add(name.toLowerCase())
+    return name === f.name ? f : new File([f], name, { type: f.type, lastModified: f.lastModified })
   })
 }
+
+/** The draft this browser saved last: { v: 2, ticketId, note, savedAt } (older drafts were a bare note). */
+interface LocalDraft { v: 2; ticketId: string | null; note: JD1Note | null; savedAt: number }
+function readLocalDraft(): LocalDraft | null {
+  try {
+    const raw = localStorage.getItem('jd1.note.draft'); if (!raw) return null
+    const d = JSON.parse(raw)
+    return d?.v === 2 ? d : { v: 2, ticketId: null, note: d, savedAt: 0 }
+  } catch { return null }
+}
+const dropLocalDraft = () => { localStorage.removeItem('jd1.note.draft'); localStorage.removeItem('jd1.note.edits') }
 
 export function JD1ReviewPage() {
   const nav = useNavigate()
@@ -89,6 +104,7 @@ export function JD1ReviewPage() {
   const [, setTick] = useState(0)
   const bgGen = useRef(0)
   const filesKey = files.map((f) => `${f.name}:${f.size}:${f.lastModified}`).join('|')
+  const workKey = `${ticketId ?? ''}#${filesKey}`   // "this ticket with these files"
   const noteReady = !!note && run.status !== 'running'
   useEffect(() => {
     if (!noteReady || !files.length) return
@@ -109,8 +125,8 @@ export function JD1ReviewPage() {
         if (needPages) setBgState((m) => ({ ...m, [f.name]: 'reading' }))
         await readInBackground(f, {
           wantPages: needPages, mapFields: needFields ? map : undefined,
-          onPages: (pages) => { if (gen === bgGen.current) savePageNotes(f.name, pages) },
-          onFields: (list) => { if (gen === bgGen.current && !sentRef.current) setFieldsByFile((m) => (m[f.name]?.length ? m : { ...m, [f.name]: list })) },
+          onPages: (pages) => { if (gen === bgGen.current) savePageNotes(f, pages) },
+          onFields: (list) => { if (gen === bgGen.current && !sentRef.current && filesRef.current.includes(f)) setFieldsByFile((m) => (m[f.name]?.length ? m : { ...m, [f.name]: list })) },
         })
         if (gen !== bgGen.current) return
         if (needPages) setBgState((m) => ({ ...m, [f.name]: detectState(f).finished ? 'done' : 'failed' }))
@@ -127,20 +143,23 @@ export function JD1ReviewPage() {
   }, [anyReading])
   // ---- keep every uploaded file with its Inbox ticket (Cloud Storage) as soon as the ticket exists,
   //      so documents are never lost if the claim isn't sent to JD2 the same day
-  const [savedDocs, setSavedDocs] = useState<Record<string, 'saving' | 'saved' | 'failed'>>({})
+  const [savedDocs, setSavedDocs] = useWorkspaceState<Record<string, 'saving' | 'saved' | 'failed'>>('savedDocs', {})
+  const [uploadedKey, setUploadedKey] = useWorkspaceState('uploadedKey', '')   // these files are already on the server
   const savingFor = useRef('')
   useEffect(() => {
     if (!ticketId || !files.length) return
     const key = `${ticketId}|${filesKey}`
-    if (savingFor.current === key) return
+    if (savingFor.current === key || uploadedKey === key) return
     savingFor.current = key
     ;(async () => {
+      let ok = true
       for (const f of files) {
         if (savingFor.current !== key) return
         setSavedDocs((m) => ({ ...m, [f.name]: 'saving' }))
         try { await uploadTicketDoc(ticketId, f); setSavedDocs((m) => ({ ...m, [f.name]: 'saved' })) }
-        catch { setSavedDocs((m) => ({ ...m, [f.name]: 'failed' })) }
+        catch { ok = false; setSavedDocs((m) => ({ ...m, [f.name]: 'failed' })) }
       }
+      if (ok && savingFor.current === key) setUploadedKey(key)
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketId, filesKey])
@@ -158,26 +177,43 @@ export function JD1ReviewPage() {
   }
   // every document read in the background -> save the complete work with the ticket once
   const allRead = !!note && files.length > 0 && unreadDocs.length === 0
-  useEffect(() => { if (allRead && ticketId) syncToTicket() }, [allRead, ticketId])   // eslint-disable-line react-hooks/exhaustive-deps
+  const [syncedKey, setSyncedKey] = useWorkspaceState('syncedKey', '')
+  useEffect(() => {
+    if (!allRead || !ticketId || syncedKey === workKey) return
+    setSyncedKey(workKey); syncToTicket()
+  }, [allRead, ticketId, workKey])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const [params, setParams] = useSearchParams()
   const openTicket = params.get('ticket')
   const [opening, setOpening] = useState('')
+  const restoring = useRef(false)   // the open below was started by restoring this browser's draft (not a click)
   useEffect(() => {
     if (!openTicket) return
     if (openTicket === ticketId && files.length) { setParams({}, { replace: true }); return }   // already open here
     if (note && dirty && ticketId !== openTicket && !window.confirm('You have unsaved JD1 work open. Open the other ticket anyway? Unsaved changes here will be lost.')) { setParams({}, { replace: true }); return }
+    if (running) { setFlash('A scan is still running — wait for it to finish (or cancel it) before opening another ticket.'); setParams({}, { replace: true }); return }
     let alive = true
+    const fromRestore = restoring.current; restoring.current = false
+    const local = readLocalDraft()
     ;(async () => {
       setOpening('Opening the ticket…'); setFlash('')
       try {
         const t = await getClaim(openTicket)
-        if (!t) throw new Error('Ticket not found')
-        const draft = await getJD1Draft(openTicket)
+        if (!t || t.jd2_item_id) {
+          if (local?.ticketId === openTicket) dropLocalDraft()   // that draft is finished (sent) or gone — forget it
+          if (fromRestore) return                                // just show an empty page
+          if (!t) throw new Error('Ticket not found')
+          alive = false; nav(`/jd2/${t.jd2_item_id}`, { replace: true }); return   // already with JD2 — continue there
+        }
+        const server = await getJD1Draft(openTicket)
+        // this browser's copy wins if it is newer than the server's (e.g. the last server save failed)
+        const newerHere = local?.ticketId === openTicket && local.note && local.savedAt > (t.jd1_saved_at ? Date.parse(t.jd1_saved_at) : 0)
+        const draft = newerHere ? local!.note : server
         const docs = t.documents ?? []
         if (!draft && docs.length === 0) {
+          resetWorkspace(); setFiles([])
+          setTicketId(t.id); setTicketRef(t.reference); setRescanFor(t.id)
           setFlash(`${t.reference} was scanned before files and JD1 work were saved on the server, so there is nothing to reopen. Upload the documents again and generate the note — it will update this ticket.`)
-          setTicketId(t.id); setTicketRef(t.reference); setNote(null); setFiles([])
           return
         }
         const loaded: File[] = []
@@ -187,16 +223,17 @@ export function JD1ReviewPage() {
           loaded.push(await fetchTicketFile(t.id, docs[i]))
         }
         if (!alive) return
-        bgGen.current++; setBgState({})
-        savingFor.current = `${t.id}|${loaded.map((f) => `${f.name}:${f.size}:${f.lastModified}`).join('|')}`   // already on the server
+        resetWorkspace()
+        const fk = loaded.map((f) => `${f.name}:${f.size}:${f.lastModified}`).join('|')
+        savingFor.current = `${t.id}|${fk}`; setUploadedKey(`${t.id}|${fk}`)   // already on the server
+        setSyncedKey(`${t.id}#${fk}`)                                          // already saved there too
         setSavedDocs(Object.fromEntries(loaded.map((f) => [f.name, 'saved' as const])))
-        setFiles(loaded); setReviewIdx(0)
-        setTicketId(t.id); setTicketRef(t.reference)
-        setNote(draft); setNoteEdits({}); setInvEdits({}); setDirty(false)
+        setFiles(loaded)
+        setTicketId(t.id); setTicketRef(t.reference); setRescanFor(t.id)
+        setNote(draft)
         setPagesByFile(Object.fromEntries((draft?.page_notes || []).map((fn) => [fn.file, fn.pages])))
         setFieldsByFile(Object.fromEntries((draft?.required_fields || []).map((ff) => [ff.file, ff.fields])))
         setSavedAt(draft ? `opened from ${t.reference}` : '')
-        sentRef.current = false
         if (!draft) setFlash(`Opened ${t.reference}'s documents. Generate the JD1 note to continue — it will update this ticket.`)
       } catch (e: any) { if (alive) setFlash('Could not open the ticket: ' + (e?.message ?? 'unknown')) }
       finally { if (alive) { setOpening(''); setParams({}, { replace: true }) } }
@@ -209,15 +246,46 @@ export function JD1ReviewPage() {
   // note fields JD1 changed by hand ("section.key" -> value): kept when the note is re-generated
   const [noteEdits, setNoteEdits] = useWorkspaceState<Record<string, string>>('noteEdits', {})
 
-  // restore a locally-saved draft note on first load (survives refresh / navigation)
+  // after a ticket was opened (or needs re-scanning), "Change files" keeps adding to that ticket
+  const [rescanFor, setRescanFor] = useWorkspaceState<string | null>('rescanFor', null)
+
+  /** Clear everything that belongs to one claim (files and ticket are set by the caller). */
+  function resetWorkspace() {
+    bgGen.current++; setBgState({}); sentRef.current = false
+    setNote(null); setReviewIdx(0); setPagesByFile({}); setFieldsByFile({}); setNoteEdits({}); setInvEdits({}); setInvDraft({})
+    setMail(null); setDirty(false); setSavedAt(''); setSavedDocs({}); setTicketSync(''); setFlash('')
+    savingFor.current = ''; setUploadedKey(''); setSyncedKey('')
+  }
+  /** Start a different claim: an empty JD1 page not linked to any ticket. */
+  function startNewClaim() {
+    if (running) return
+    if (dirty && !window.confirm('You have unsaved changes on this claim. Start a new claim anyway?')) return
+    resetWorkspace(); setFiles([]); setTicketId(null); setTicketRef(''); setRescanFor(null)
+    localStorage.removeItem('jd1.note.draft'); localStorage.removeItem('jd1.note.edits'); jd1Runner.clear()
+  }
+  function onPickFiles(list: File[]) {
+    const keep = !!ticketId && rescanFor === ticketId   // more/other documents for the ticket that is open
+    // (the ticket's server copies are named "image (2).jpg" the same way, so notes stay matched)
+    const named = keep ? uniqueNames([...files, ...list]).slice(files.length) : uniqueNames(list)
+    resetWorkspace(); setFiles(named); localStorage.removeItem('jd1.note.edits')
+    if (!keep) { setTicketId(null); setTicketRef(''); setRescanFor(null) }
+  }
+
+  // restore a locally-saved draft on first load — only on an empty page, and a ticket's draft
+  // is reopened from the server (never laid over other files or another ticket)
   useEffect(() => {
     if (jd1Runner.get().status === 'running' || !jd1Runner.get().consumed) return   // a scan result is on its way instead
-    if (jd1Workspace.has('note')) return   // coming back to the page — keep what was on screen
+    if (jd1Workspace.has('note') || files.length || ticketId) return   // coming back to the page — keep what was on screen
     if (new URLSearchParams(location.search).get('ticket')) return   // opening a ticket's saved work instead (below)
     try {
       const raw = localStorage.getItem('jd1.note.draft')
       if (raw) {
-        const n: JD1Note = JSON.parse(raw)
+        const saved = JSON.parse(raw)
+        if (saved?.v === 2) {
+          if (saved.ticketId) { restoring.current = true; setParams({ ticket: saved.ticketId }, { replace: true }); return }
+          if (!saved.note) return
+        }
+        const n: JD1Note = saved?.v === 2 ? saved.note : saved
         setNote(n); setSavedAt('restored'); setDirty(false)
         setPagesByFile(Object.fromEntries((n.page_notes || []).map((fn) => [fn.file, fn.pages])))
         setFieldsByFile(Object.fromEntries((n.required_fields || []).map((ff) => [ff.file, ff.fields])))
@@ -231,7 +299,7 @@ export function JD1ReviewPage() {
     if (!note) return
     try {
       const full = noteForJD2(note)
-      localStorage.setItem('jd1.note.draft', JSON.stringify(full))
+      localStorage.setItem('jd1.note.draft', JSON.stringify({ v: 2, ticketId, note: full, savedAt: Date.now() } satisfies LocalDraft))
       localStorage.setItem('jd1.note.edits', JSON.stringify(noteEdits))
       setNote(full); setDirty(false); setSavedAt(new Date().toLocaleTimeString())
       syncToTicket(full)
@@ -302,7 +370,7 @@ export function JD1ReviewPage() {
     if (!files.length || running) return
     setFlash('')
     if (!backendOn()) { setFlash('Backend is off — start the API and set VITE_USE_MOCKS=false to run the JD1 assistant.'); return }
-    jd1Runner.start(files, correctionsText())   // the current note stays until the new one arrives   // runs in the background; the effect below applies the result
+    jd1Runner.start(files, correctionsText(), JSON.stringify({ t: ticketId, f: filesKey }))   // the current note stays until the new one arrives   // runs in the background; the effect below applies the result
   }
 
   // apply a finished scan — also when it finished while you were on another page
@@ -312,6 +380,19 @@ export function JD1ReviewPage() {
     if (run.status !== 'done' || !run.note) return
     const n = run.note
     jd1Runner.consume()
+    let ctx: { t: string | null; f: string } | null = null
+    try { ctx = run.context ? JSON.parse(run.context) : null } catch { /* old format */ }
+    // you opened another claim (other files, or a different ticket) while it ran — a ticket that was
+    // only created meanwhile for these same files is fine
+    if (ctx && files.length && (ctx.f !== filesKey || (ctx.t && ticketId && ctx.t !== ticketId))) {
+      setFlash('A scan you started for other documents finished — it was not applied to this claim. Generate the note again if you need it.')
+      return
+    }
+    const failed = !n.ai_summary && !Object.values(n.header ?? {}).some((v: any) => typeof v === 'object' && v?.value)
+    if (failed) {   // the AI could not read the packet: keep what is on screen, don't touch the ticket
+      setFlash((n.notes || 'The AI could not read the documents.') + ' Nothing was changed — please try Generate again.')
+      return
+    }
     if (!files.length && run.files.length) setFiles(run.files)
     // keep everything JD1 corrected: hand-edited note fields, full detection, required fields
     const merged: any = structuredClone(n)
@@ -341,8 +422,10 @@ export function JD1ReviewPage() {
     })()
   }, [run.status, run.consumed])
 
-  function savePageNotes(fileName: string, pages: PageDetail[]) {
-    if (sentRef.current || !filesRef.current.some((f) => f.name === fileName)) return   // file was replaced meanwhile
+  function savePageNotes(file: File, pages: PageDetail[]) {
+    // the very same file must still be open — another ticket may have a file with the same name
+    if (sentRef.current || !filesRef.current.includes(file)) return
+    const fileName = file.name
     setPagesByFile((m) => ({ ...m, [fileName]: pages }))
     // functional update: never overwrite note edits typed after these pages arrived
     setNote((n) => n && { ...n, page_notes: [...(n.page_notes ?? []).filter((fn) => fn.file !== fileName), { file: fileName, pages }] })
@@ -418,10 +501,13 @@ export function JD1ReviewPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <label className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-dashed border-outline-variant cursor-pointer hover:bg-surface-container/50 text-sm">
             <Icon name="upload_file" className="text-[20px] text-primary" />
-            <span className="text-text-main">{files.length ? 'Change files' : 'Upload claim packet (PDFs & images)'}</span>
-            <input type="file" multiple accept="image/*,application/pdf" className="hidden"
-              onChange={(e) => { setFiles(uniqueNames(Array.from(e.target.files ?? []))); bgGen.current++; setBgState({}); setNote(null); setReviewIdx(0); setTicketId(null); setTicketRef(''); setPagesByFile({}); setFieldsByFile({}); setNoteEdits({}); setInvEdits({}); setDirty(false); localStorage.removeItem('jd1.note.edits') }} />
+            <span className="text-text-main">{files.length ? (ticketRef && rescanFor === ticketId ? `Change files (stays on ${ticketRef})` : 'Change files') : ticketRef && rescanFor === ticketId ? `Upload the documents for ${ticketRef}` : 'Upload claim packet (PDFs & images)'}</span>
+            <input type="file" multiple accept="image/*,application/pdf" className="hidden" disabled={running || !!opening}
+              onChange={(e) => { const l = Array.from(e.target.files ?? []); e.target.value = ''; if (l.length) onPickFiles(l) }} />
           </label>
+          {(ticketRef || files.length > 0) && !running && (
+            <Button variant="ghost" size="sm" onClick={startNewClaim} title="Clear this page and start a different claim"><Icon name="add" className="text-[16px]" />New claim</Button>
+          )}
           {files.length > 0 && <span className="text-xs text-outline">{files.length} file(s)</span>}
           {ticketRef && <span className="text-xs text-primary flex items-center gap-1"><Icon name="confirmation_number" className="text-[14px]" />Ticket {ticketRef}</span>}
           <div className="flex-1" />
@@ -505,13 +591,14 @@ export function JD1ReviewPage() {
             const ins = insurers.find((i) => i.id === reviewInsurerId)
             const avail = ins ? formTypesOf(ins) : (['claim'] as FormType[])
             const active = avail.includes(reviewForm) ? reviewForm : (avail[0] ?? 'claim')
+            const doc = files[reviewIdx]
             return <DocReview key={reviewIdx + active + files[reviewIdx].name} file={files[reviewIdx]}
               mapFields={fieldsFor(ins, active).map((f) => ({ id: f.id, label: f.label, hint: f.aiHint, section: f.section }))}
               initialPages={pagesByFile[files[reviewIdx].name] ?? note?.page_notes?.find((fn) => fn.file === files[reviewIdx].name)?.pages}
-              onSavePages={(pages) => savePageNotes(files[reviewIdx].name, pages)}
+              onSavePages={(pages) => savePageNotes(doc, pages)}
               initialFieldValues={Object.fromEntries((fieldsByFile[files[reviewIdx].name] ?? note?.required_fields?.find((ff) => ff.file === files[reviewIdx].name)?.fields ?? []).map((f) => [f.name, f.value]))}
               onUserEdit={() => setDirty(true)}
-              onSaveFields={(list) => { if (!sentRef.current) { const name = files[reviewIdx].name; setFieldsByFile((m) => ({ ...m, [name]: list })) } }} />
+              onSaveFields={(list) => { if (!sentRef.current && filesRef.current.includes(doc)) setFieldsByFile((m) => ({ ...m, [doc.name]: list })) }} />
           })()}
         </Card>
       )}

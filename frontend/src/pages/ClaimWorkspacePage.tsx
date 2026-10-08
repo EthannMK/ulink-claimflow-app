@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getClaim } from '../lib/api'
 import { Card, Badge, Icon, Button } from '../components/ui'
@@ -56,8 +56,9 @@ export function ClaimWorkspacePage() {
       setTimeout(revoke, 60_000)
     } catch (e: any) { setDocErr(String(e?.message ?? e)) }
   }
-  const [flash, setFlash] = useState('')
-  const { data: c, isLoading, refetch } = useQuery({ queryKey: ['claim', id], queryFn: () => getClaim(id!) })
+  const loc = useLocation() as { state?: { flash?: string } }
+  const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(loc.state?.flash ? { ok: false, text: loc.state.flash } : null)
+  const { data: c, isLoading, isError, error, refetch } = useQuery({ queryKey: ['claim', id], queryFn: () => getClaim(id!) })
   const { data: draft = null } = useQuery({
     queryKey: ['jd1-draft', id], enabled: !!id && backendOn(), retry: false,
     queryFn: () => getJD1Draft(id!).catch(() => null),
@@ -66,11 +67,12 @@ export function ClaimWorkspacePage() {
   const qc = useQueryClient()
   async function assign(username: string) {
     if (!c) return
-    try { await assignTicket(c.id, username); await refetch(); qc.invalidateQueries({ queryKey: ['claims'] }); setFlash(username ? 'Assigned. ✓' : 'Unassigned.') }
-    catch (e: any) { setFlash('Assign failed: ' + (e?.message ?? 'unknown')) }
+    try { await assignTicket(c.id, username); await refetch(); qc.invalidateQueries({ queryKey: ['claims'] }); setFlash({ ok: true, text: username ? 'Assigned.' : 'Unassigned.' }) }
+    catch (e: any) { setFlash({ ok: false, text: 'Assign failed: ' + (e?.message ?? 'unknown') }) }
   }
   if (isLoading) return <p className="text-outline">Loading…</p>
-  if (!c) return <p className="text-outline">Claim not found.</p>
+  if (isError) return <div className="text-sm"><p className="text-status-rejected mb-2">Could not load this ticket: {String((error as any)?.message ?? error)}</p><Button variant="outline" size="sm" onClick={() => refetch()}>Try again</Button></div>
+  if (!c) return <div className="text-sm"><p className="text-outline mb-2">This ticket doesn't exist (it may have been deleted).</p><Button variant="outline" size="sm" onClick={() => nav('/inbox')}>Back to inbox</Button></div>
   const progress = progressOf(c, draft)
   const nextIdx = progress.findIndex((p) => !p.done)
   const required = c.checklist_required?.length ? c.checklist_required : draft?.checklist_required ?? []
@@ -101,7 +103,7 @@ export function ClaimWorkspacePage() {
             : <Button onClick={() => nav(`/jd1?ticket=${c.id}`)} title="Open this ticket's documents and JD1 work in JD1"><Icon name="document_scanner" className="text-[16px]" />Continue in JD1</Button>}
         </div>
       </div>
-      {flash && <div className="mb-4 text-sm text-status-approved flex items-center gap-1"><Icon name="check_circle" className="text-[18px]" />{flash}</div>}
+      {flash && <div className={`mb-4 text-sm flex items-center gap-1 ${flash.ok ? 'text-status-approved' : 'text-status-rejected'}`}><Icon name={flash.ok ? 'check_circle' : 'error'} className="text-[18px]" />{flash.text}</div>}
 
       <div className="grid grid-cols-12 gap-4">
         <Card className="col-span-3 p-4 h-fit">
@@ -178,7 +180,7 @@ export function ClaimWorkspacePage() {
             <div className="flex flex-wrap items-center gap-2 mt-3">
               <Button size="sm" variant="outline" onClick={async () => {
                 const t = (document.getElementById('ticket-reply') as HTMLTextAreaElement | null)?.value ?? ''
-                try { await navigator.clipboard.writeText(t); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { setFlash('Could not copy — select the text and copy it.') }
+                try { await navigator.clipboard.writeText(t); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { setFlash({ ok: false, text: 'Could not copy — select the text and copy it.' }) }
               }}><Icon name={copied ? 'check' : 'content_copy'} className="text-[16px]" />{copied ? 'Copied' : 'Copy reply'}</Button>
               {c.jd2_item_id && <Button size="sm" variant="ghost" onClick={() => nav(`/jd2/${c.jd2_item_id}`)}>Open in JD2</Button>}
             </div>

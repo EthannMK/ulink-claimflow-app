@@ -1,10 +1,10 @@
 """Tickets (claims). A ticket is auto-created when JD1 generates a note, then flows
 through the Inbox by status. Firestore-backed with in-memory fallback (app/db.py)."""
-import re, uuid
+import re, uuid, threading
 from datetime import datetime, timezone
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
-from app.models import Claim, ClaimList, Channel, Category, Status, JD1Note, Role, DocumentFile
+from app.models import Claim, ClaimList, Channel, Category, Status, JD1Note, Role, DocumentFile, ExtractedField
 from app.security import get_current_user, require_role
 from app.db import Collection
 from app import jd2_store, storage, audit, filing
@@ -12,6 +12,8 @@ from app import jd2_store, storage, audit, filing
 router = APIRouter(prefix="/api")
 
 _claims = Collection("claims")
+_CREATE_LOCK = threading.Lock()   # two scans of the same claim at once must not make two tickets
+_DECIDED = (Status.approved, Status.partially_approved, Status.rejected, Status.closed)
 
 
 def _make_ref() -> str:
@@ -19,8 +21,14 @@ def _make_ref() -> str:
     return filing.new_reference({d.get("reference", "") for d in _claims.all()})
 
 def _amount(s: str) -> float | None:
-    digits = re.sub(r"[^\d]", "", s or "")
-    return float(digits) if digits else None
+    """'150,000.50 MMK' -> 150000.5 (thousands separators dropped, decimals kept)."""
+    m = re.search(r"\d[\d,]*(?:\.\d+)?", (s or "").replace(" ", ""))
+    if not m:
+        return None
+    try:
+        return float(m.group(0).replace(",", ""))
+    except ValueError:
+        return None
 
 def _get(claim_id: str) -> Claim | None:
     d = _claims.get(claim_id)
@@ -45,12 +53,20 @@ def file_document(c: Claim, name: str, mime: str, data: bytes, by: str, source: 
             return c, d
     if not c.storage_folder:
         c.storage_folder = filing.folder_for(c.reference, c.insurer, c.memberName, c.receivedAt)
+    taken = {d.name for d in c.documents}
+    if name in taken:   # a different file with the same name (phones send many "image.jpg")
+        stem, dot, ext = name.rpartition(".")
+        stem, ext = (stem, "." + ext) if dot else (name, "")
+        i = 2
+        while f"{stem} ({i}){ext}" in taken:
+            i += 1
+        name = f"{stem} ({i}){ext}"
     doc_id = filing.next_doc_id(c.reference, [d.id for d in c.documents])
     key = f"{c.storage_folder}/{doc_id}__{filing.safe_name(name)}"
     storage.put(key, name, mime, data)
     doc = DocumentFile(id=doc_id, name=name, type=mime, url=f"/api/claims/{c.id}/documents/{doc_id}", size=len(data),
                        uploaded_at=datetime.now(timezone.utc), uploaded_by=by, key=key, sha256=digest, source=source)
-    c.documents = [d for d in c.documents if d.name != name] + [doc]
+    c.documents = c.documents + [doc]
     return _put(c), doc
 
 
@@ -63,7 +79,6 @@ class TicketUpdate(BaseModel):
     assignee: str | None = None
     documentsComplete: bool | None = None
     summary: str | None = None
-    jd2_item_id: str | None = None
 
 
 @router.get("/claims", response_model=ClaimList)
@@ -114,7 +129,10 @@ def new_ticket_for_note(note: JD1Note, channel_name: str = "webform") -> Claim:
 
 
 def _norm_ref(s: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+    """Compare-friendly: case-folded, spaces/punctuation dropped. Letters, combining marks
+    (Burmese vowel signs, asat …) and digits are kept, so different Burmese names stay different."""
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFC", s or "").casefold() if unicodedata.category(ch)[0] in "LMN")
 
 
 def find_open_ticket(note: JD1Note) -> Claim | None:
@@ -129,9 +147,9 @@ def find_open_ticket(note: JD1Note) -> Claim | None:
             c = Claim.model_validate(d)
         except Exception:
             continue
-        if c.jd2_item_id or c.status in (Status.approved, Status.partially_approved, Status.rejected, Status.closed):
+        if c.jd2_item_id or c.status in _DECIDED:
             continue
-        same_no = no and len(no) >= 5 and (no == _norm_ref(c.claim_no or "") or no in _norm_ref(c.summary or ""))
+        same_no = no and len(no) >= 5 and no == _norm_ref(c.claim_no or "")
         same_member = member and member == _norm_ref(c.memberName) and amount is not None and c.amount == amount
         if same_no or same_member:
             return c
@@ -141,6 +159,11 @@ def find_open_ticket(note: JD1Note) -> Claim | None:
 @router.post("/claims/from-jd1", response_model=Claim)
 def create_from_jd1(body: TicketFromJD1, user=Depends(get_current_user)):
     """JD1 upload → auto-create a ticket in the Inbox (or reuse the open ticket of the same claim)."""
+    with _CREATE_LOCK:
+        return _create_from_jd1(body, user)
+
+
+def _create_from_jd1(body: TicketFromJD1, user) -> Claim:
     existing = find_open_ticket(body.note)
     if existing:
         n = body.note
@@ -155,6 +178,40 @@ def create_from_jd1(body: TicketFromJD1, user=Depends(get_current_user)):
         audit.record("ticket_reused", user.get("name") or user.get("username", ""), detail=f"Re-scan of {existing.reference} — same claim, ticket reused", ref=existing.id)
         return _put(existing)
     return new_ticket_for_note(body.note, body.channel)
+
+
+class ManualTicket(BaseModel):
+    """A claim or request logged by hand (New Claim page) — e.g. a phone call or walk-in."""
+    insurer: str = ""
+    member_name: str
+    category: Category = Category.new_claim
+    channel: Channel = Channel.email
+    claim_no: str = ""
+    amount: str = ""
+    summary: str = ""
+    fields: dict[str, str] = {}   # the insurer's form fields: label -> value
+
+
+@router.post("/claims", response_model=Claim)
+def create_manual(body: ManualTicket, user=Depends(get_current_user)):
+    member = body.member_name.strip()
+    if not member:
+        raise HTTPException(status_code=422, detail="Member name is required")
+    by = user.get("name") or user.get("username", "")
+    extracted = [ExtractedField(key=k.strip()[:80], value=str(v).strip()[:500], confidence=1.0)
+                 for k, v in body.fields.items() if k.strip() and str(v).strip()][:60]
+    with _CREATE_LOCK:
+        claim = Claim(
+            id=uuid.uuid4().hex[:12], reference=_make_ref(), channel=body.channel, category=body.category,
+            status=Status.new, insurer=body.insurer.strip() or "—", memberName=member,
+            receivedAt=datetime.now(timezone.utc), documentsComplete=False, amount=_amount(body.amount),
+            summary=(body.summary.strip() or f"Logged by hand by {by}")[:200], claim_no=body.claim_no.strip() or None,
+            extracted=extracted, documents=[],
+        )
+        claim.storage_folder = filing.folder_for(claim.reference, claim.insurer, claim.memberName, claim.receivedAt)
+        _put(claim)
+    audit.record("create_ticket", by, detail=f"Logged by hand — {member} · {claim.insurer} · {claim.reference}", ref=claim.id)
+    return claim
 
 
 MAX_DOC_BYTES = 31 * 1024 * 1024
@@ -188,7 +245,7 @@ def get_document(claim_id: str, doc_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Document not found")
     name, mime, data = blob
     return Response(content=data, media_type=mime or "application/octet-stream",
-                    headers={"Content-Disposition": f'inline; filename="{name}"'})
+                    headers={"Content-Disposition": filing.content_disposition(d.name or name)})
 
 
 @router.get("/assignees")
@@ -223,15 +280,18 @@ def update_claim(claim_id: str, body: TicketUpdate, user=Depends(get_current_use
     if not c:
         raise HTTPException(status_code=404, detail="Claim not found")
     if body.status is not None:
+        if body.status in _DECIDED and user.get("role") not in ("super_admin", "admin"):
+            raise HTTPException(status_code=403, detail="Decisions are made in JD2")
         c.status = body.status
     if body.assignee is not None:
-        c.assignee = body.assignee
+        from app import assignment
+        username, name = assignment.resolve(user, body.assignee)
+        c.assignee, c.assignee_username = name, username
+        assignment.sync_jd2(c.jd2_item_id, assignee=name, assignee_username=username)
     if body.documentsComplete is not None:
         c.documentsComplete = body.documentsComplete
     if body.summary is not None:
         c.summary = body.summary
-    if body.jd2_item_id is not None:
-        c.jd2_item_id = body.jd2_item_id
     return _put(c)
 
 @router.delete("/claims/{claim_id}")
@@ -242,12 +302,15 @@ def delete_claim(claim_id: str, user=Depends(require_role(Role.super_admin, Role
     c = _get(claim_id)
     if not c:
         raise HTTPException(status_code=404, detail="Claim not found")
-    if c.jd2_item_id:
-        jd2_item = jd2_store.get(c.jd2_item_id)
-        if jd2_item:
-            for att in (jd2_item.attachments or []):
-                storage.delete(att.key or f"jd2/{c.jd2_item_id}/{att.id}")
-            jd2_store.delete(c.jd2_item_id)
+    jd2_item = jd2_store.get(c.jd2_item_id) if c.jd2_item_id else None
+    if jd2_item and jd2_item.ticket_id not in (None, claim_id):
+        jd2_item = None          # that JD2 claim belongs to another ticket — never touch it
+    if jd2_item and user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="This claim is already in JD2 — only a super admin can delete it")
+    if jd2_item:
+        for att in (jd2_item.attachments or []):
+            storage.delete(att.key or f"jd2/{c.jd2_item_id}/{att.id}")
+        jd2_store.delete(c.jd2_item_id)
     for d in c.documents:
         storage.delete(_doc_key(claim_id, d))
     if c.storage_folder:
@@ -308,6 +371,15 @@ def save_jd1_draft(claim_id: str, note: JD1Note, user=Depends(get_current_user))
     if not (note.claim_type or note.ai_summary or note.page_notes or note.documents):
         # an empty/wrongly-shaped body must never overwrite real saved work
         raise HTTPException(status_code=422, detail="The JD1 note is empty — nothing to save")
+    if c.jd2_item_id and jd2_store.get(c.jd2_item_id):
+        raise HTTPException(status_code=409, detail="This claim is already in JD2 — edit it there")
+    h = note.header
+    c.insurer = h.insurer.value or c.insurer
+    c.memberName = h.member_name.value or c.memberName
+    c.claim_no = h.claim_no.value or c.claim_no
+    c.amount = _amount(h.total_claim_amount.value or note.section_b.claim_amount.value) or c.amount
+    if note.ai_summary:
+        c.summary = note.ai_summary.split("\n", 1)[0][:200]
     if not c.storage_folder:
         c.storage_folder = filing.folder_for(c.reference, c.insurer, c.memberName, c.receivedAt)
     storage.put(_draft_key(c), "jd1-note.json", "application/json", note.model_dump_json().encode("utf-8"))

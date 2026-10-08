@@ -287,6 +287,10 @@ def tally_tokens(t: list) -> int:
     return to_tokens(sum(t)) or 0
 
 
+import threading as _threading
+_SPEND_LOCK = _threading.Lock()   # parallel page batches add to the same user's total
+
+
 def record(username: str, provider: str, model: str, tokens_in: int, tokens_out: int,
            ok: bool, purpose: str = "", seconds: float = 0.0, cached_in: int = 0,
            billed_usd: float | None = None) -> float:
@@ -311,12 +315,13 @@ def record(username: str, provider: str, model: str, tokens_in: int, tokens_out:
     })
     if username and cost:
         from app import store
-        u = roll_period(store.get_by_username(username))
-        if u:
-            new_spent = round(float(u.get("usage_spent_usd") or 0.0) + cost, 6)
-            day = _today()
-            new_day = round((today_spent(u) if u.get("usage_day") == day else 0.0) + cost, 6)
-            store.update_user(u["id"], usage_spent_usd=new_spent, usage_day=day, usage_day_spent_usd=new_day)
+        with _SPEND_LOCK:
+            u = roll_period(store.get_by_username(username))
+            if u:
+                new_spent = round(float(u.get("usage_spent_usd") or 0.0) + cost, 6)
+                day = _today()
+                new_day = round((today_spent(u) if u.get("usage_day") == day else 0.0) + cost, 6)
+                store.update_user(u["id"], usage_spent_usd=new_spent, usage_day=day, usage_day_spent_usd=new_day)
     return cost
 
 
